@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casevault — Sovereign Case Management</title>
+<script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Source+Serif+4:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-0: #08090b;
+  --bg-1: #0e1015;
+  --bg-2: #141720;
+  --bg-3: #1a1e29;
+  --bg-4: #222735;
+  --border-0: #1e2230;
+  --border-1: #2a3040;
+  --border-2: #353d50;
+  --tx-0: #e6e9f0;
+  --tx-1: #a0a8b8;
+  --tx-2: #6b7385;
+  --tx-3: #454d5f;
+  --gold: #c9a352;
+  --gold-dim: rgba(201,163,82,0.10);
+  --gold-mid: rgba(201,163,82,0.22);
+  --green: #3dd68c;
+  --green-dim: rgba(61,214,140,0.10);
+  --red: #e85d5d;
+  --red-dim: rgba(232,93,93,0.10);
+  --blue: #5b9cf5;
+  --blue-dim: rgba(91,156,245,0.10);
+  --teal: #3ec9b0;
+  --teal-dim: rgba(62,201,176,0.10);
+  --orange: #e0943a;
+  --orange-dim: rgba(224,148,58,0.10);
+  --serif: 'Source Serif 4', Georgia, serif;
+  --sans: 'Manrope', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+  --r: 5px;
+  --r-lg: 8px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body,#root{height:100%;background:var(--bg-0);color:var(--tx-0);font-family:var(--sans);}
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border-1);border-radius:3px;}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideR{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.anim-up{animation:fadeUp .3s ease both}
+.anim-in{animation:fadeIn .25s ease both}
+.anim-sl{animation:slideR .28s ease both}
+
+input,textarea,select{
+  font-family:var(--sans);background:var(--bg-1);border:1px solid var(--border-1);
+  color:var(--tx-0);padding:10px 14px;border-radius:var(--r);font-size:13.5px;
+  outline:none;transition:border .2s,box-shadow .2s;width:100%;
+}
+input:focus,textarea:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
+input::placeholder,textarea::placeholder{color:var(--tx-3)}
+textarea{resize:vertical;min-height:72px;line-height:1.55}
+
+button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r);font-size:12.5px;font-weight:600;padding:8px 16px;transition:all .18s;letter-spacing:.01em;}
+.b-pri{background:var(--gold);color:var(--bg-0)}
+.b-pri:hover{background:#d4af5e;transform:translateY(-1px);box-shadow:0 4px 16px var(--gold-dim)}
+.b-pri:disabled{opacity:.5;transform:none;cursor:default}
+.b-gho{background:transparent;color:var(--tx-1);border:1px solid var(--border-1)}
+.b-gho:hover{background:var(--bg-3);color:var(--tx-0);border-color:var(--border-2)}
+.b-red{background:var(--red-dim);color:var(--red);border:1px solid rgba(232,93,93,.18)}
+.b-red:hover{background:rgba(232,93,93,.18)}
+.b-grn{background:var(--green-dim);color:var(--green);border:1px solid rgba(61,214,140,.18)}
+.b-sm{padding:6px 12px;font-size:11.5px}
+.b-xs{padding:4px 9px;font-size:11px}
+
+.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:14px;font-size:10.5px;font-weight:600;font-family:var(--mono);letter-spacing:.03em}
+.tag-gold{background:var(--gold-dim);color:var(--gold)}
+.tag-green{background:var(--green-dim);color:var(--green)}
+.tag-red{background:var(--red-dim);color:var(--red)}
+.tag-blue{background:var(--blue-dim);color:var(--blue)}
+.tag-teal{background:var(--teal-dim);color:var(--teal)}
+.tag-orange{background:var(--orange-dim);color:var(--orange)}
+
+.card{background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r-lg);padding:20px}
+.card-h{background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r-lg);padding:20px;transition:border-color .2s,transform .2s;cursor:pointer}
+.card-h:hover{border-color:var(--gold);transform:translateY(-2px)}
+
+.section-label{font-size:10.5px;font-family:var(--mono);color:var(--tx-2);letter-spacing:.07em;font-weight:500;margin-bottom:10px;display:block}
+
+.toggle-track{width:38px;height:20px;border-radius:10px;position:relative;cursor:pointer;transition:background .2s}
+.toggle-track.on{background:var(--green)}
+.toggle-track.off{background:var(--border-1)}
+.toggle-knob{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.toggle-track.on .toggle-knob{left:20px}
+.toggle-track.off .toggle-knob{left:2px}
+
+.grid-bg{
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(201,163,82,.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(91,156,245,.02) 0%, transparent 50%),
+    linear-gradient(var(--border-0) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-0) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo,createContext,useContext} = React;
+
+/* ═══════════════════ ICONS ═══════════════════ */
+const I = ({n,s=17,c})=>{
+const p = {width:s,height:s,viewBox:"0 0 24 24",fill:"none",stroke:c||"currentColor",strokeWidth:"2",strokeLinecap:"round",strokeLinejoin:"round"};
+const d={
+lock:<svg {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+unlock:<svg {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>,
+shield:<svg {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+shieldCheck:<svg {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>,
+users:<svg {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+user:<svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+briefcase:<svg {...p}><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>,
+plus:<svg {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+x:<svg {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+check:<svg {...p}><polyline points="20 6 9 17 4 12"/></svg>,
+search:<svg {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+share:<svg {...p}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
+key:<svg {...p}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
+eye:<svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+eyeOff:<svg {...p}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
+send:<svg {...p}><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>,
+trash:<svg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+file:<svg {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+folder:<svg {...p}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
+home:<svg {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+back:<svg {...p}><polyline points="15 18 9 12 15 6"/></svg>,
+chevR:<svg {...p}><polyline points="9 18 15 12 9 6"/></svg>,
+logout:<svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+settings:<svg {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+alert:<svg {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+clock:<svg {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+msg:<svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+zap:<svg {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+};
+return <span style={{display:'inline-flex',alignItems:'center',flexShrink:0}}>{d[n]}</span>;
+};
+
+/* ═══════════════════ PER-FIELD CRYPTO (Web Crypto AES-GCM) ═══════════════════ */
+const FieldCrypto = {
+  async generateKey() {
+    const key = await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt','decrypt']);
+    const raw = await crypto.subtle.exportKey('raw', key);
+    return btoa(String.fromCharCode(...new Uint8Array(raw)));
+  },
+  async encrypt(plaintext, keyB64) {
+    const keyBuf = Uint8Array.from(atob(keyB64), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey('raw', keyBuf, 'AES-GCM', false, ['encrypt']);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const enc = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(plaintext));
+    return {
+      ciphertext: btoa(String.fromCharCode(...new Uint8Array(enc))),
+      iv: btoa(String.fromCharCode(...iv)),
+    };
+  },
+  async decrypt(cipherB64, ivB64, keyB64) {
+    try {
+      const keyBuf = Uint8Array.from(atob(keyB64), c => c.charCodeAt(0));
+      const key = await crypto.subtle.importKey('raw', keyBuf, 'AES-GCM', false, ['decrypt']);
+      const iv = Uint8Array.from(atob(ivB64), c => c.charCodeAt(0));
+      const ct = Uint8Array.from(atob(cipherB64), c => c.charCodeAt(0));
+      const dec = await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, ct);
+      return new TextDecoder().decode(dec);
+    } catch { return null; }
+  }
+};
+
+/* ═══════════════════ STATE EVENT TYPES ═══════════════════ */
+const NS = 'io.casevault';
+const EVT = {
+  IDENTITY:    `${NS}.identity`,       // account type: client or provider
+  VAULT_DATA:  `${NS}.vault.data`,     // client vault — full data fields
+  VAULT_INDEX: `${NS}.vault.providers`,// client vault — index of bridge rooms
+  BRIDGE_META: `${NS}.bridge.meta`,    // bridge — who, when, permissions
+  BRIDGE_REFS: `${NS}.bridge.refs`,    // bridge — encrypted field refs + keys
+  BRIDGE_NOTE: `${NS}.bridge.note`,    // bridge — bidirectional notes (messages)
+  BRIDGE_REQ:  `${NS}.bridge.request`, // bridge — provider requests for info
+  ROSTER:      `${NS}.roster`,         // provider roster — case index
+};
+
+/* ═══════════════════ MATRIX SERVICE ═══════════════════ */
+class CasevaultService {
+  constructor() { this.client = null; this._baseUrl = null; this._token = null; this._userId = null; }
+
+  async login(homeserver, user, pass) {
+    const baseUrl = homeserver.startsWith('http') ? homeserver : `https://${homeserver}`;
+    this._baseUrl = baseUrl;
+    // Use SDK if available
+    if (typeof matrixcs !== 'undefined') {
+      this.client = matrixcs.createClient({ baseUrl });
+      const res = await this.client.login('m.login.password', { user, password: pass });
+      this.client = matrixcs.createClient({ baseUrl, accessToken: res.access_token, userId: res.user_id, deviceId: res.device_id });
+      try { await this.client.initCrypto(); } catch (e) { console.warn('Crypto:', e.message); }
+      await this.client.startClient({ initialSyncLimit: 30 });
+      await new Promise(r => { if (this.client.isInitialSyncComplete()) return r(); this.client.once('sync', s => { if (s === 'PREPARED') r(); }); });
+      this._userId = res.user_id;
+      this._token = res.access_token;
+      return { userId: res.user_id };
+    } else {
+      const resp = await this._api('POST', '/login', { type: 'm.login.password', user, password: pass }, true);
+      this._token = resp.access_token; this._userId = resp.user_id;
+      return { userId: resp.user_id };
+    }
+  }
+
+  get userId() { return this._userId; }
+  get hasCrypto() { return this.client && typeof this.client.isCryptoEnabled === 'function' && this.client.isCryptoEnabled(); }
+
+  async _api(method, path, body, noAuth) {
+    const url = `${this._baseUrl}/_matrix/client/v3${path}`;
+    const h = { 'Content-Type': 'application/json' };
+    if (!noAuth) h['Authorization'] = `Bearer ${this._token}`;
+    const opts = { method, headers: h };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.error || `API ${r.status}`); }
+    return r.json();
+  }
+
+  // Room creation helpers
+  async createRoom(name, topic, extraState = []) {
+    const initial_state = [
+      { type: 'm.room.encryption', state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' } },
+      ...extraState,
+    ];
+    if (this.client) {
+      const r = await this.client.createRoom({ name, topic, visibility: 'private', preset: 'private_chat', initial_state });
+      return r.room_id;
+    } else {
+      const r = await this._api('POST', '/createRoom', { name, topic, visibility: 'private', preset: 'private_chat', initial_state });
+      return r.room_id;
+    }
+  }
+
+  async getState(roomId, type, sk = '') {
+    if (this.client) {
+      const room = this.client.getRoom(roomId);
+      if (!room) return null;
+      const ev = room.currentState.getStateEvents(type, sk);
+      return ev ? ev.getContent() : null;
+    }
+    try { return await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`); } catch { return null; }
+  }
+
+  async setState(roomId, type, content, sk = '') {
+    if (this.client) {
+      await this.client.sendStateEvent(roomId, type, content, sk);
+    } else {
+      await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`, content);
+    }
+  }
+
+  async sendMessage(roomId, body, extra = {}) {
+    const content = { msgtype: 'm.text', body, ...extra, timestamp: Date.now() };
+    if (this.client) {
+      await this.client.sendMessage(roomId, content);
+    } else {
+      const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
+      await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txn}`, content);
+    }
+  }
+
+  async getMessages(roomId, limit = 40) {
+    if (this.client) {
+      const room = this.client.getRoom(roomId);
+      if (!room) return [];
+      return room.getLiveTimeline().getEvents()
+        .filter(ev => ev.getType() === 'm.room.message')
+        .map(ev => ({ id: ev.getId(), sender: ev.getSender(), content: ev.getContent(), ts: ev.getTs() }))
+        .reverse();
+    }
+    const d = await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=${limit}`);
+    return (d.chunk || []).filter(e => e.type === 'm.room.message')
+      .map(e => ({ id: e.event_id, sender: e.sender, content: e.content, ts: e.origin_server_ts }));
+  }
+
+  async invite(roomId, userId) {
+    if (this.client) { await this.client.invite(roomId, userId); }
+    else { await this._api('POST', `/rooms/${encodeURIComponent(roomId)}/invite`, { user_id: userId }); }
+  }
+
+  async kick(roomId, userId, reason = 'Removed') {
+    if (this.client) { await this.client.kick(roomId, userId, reason); }
+    else { await this._api('POST', `/rooms/${encodeURIComponent(roomId)}/kick`, { user_id: userId, reason }); }
+  }
+
+  async tombstone(roomId, newRoomId) {
+    await this.setState(roomId, 'm.room.tombstone', {
+      body: 'This room has been replaced', replacement_room: newRoomId,
+    });
+  }
+
+  async getJoinedRooms() {
+    if (this.client) return this.client.getRooms().map(r => r.roomId);
+    const d = await this._api('GET', '/joined_rooms');
+    return d.joined_rooms || [];
+  }
+
+  async getRoomMembers(roomId) {
+    if (this.client) {
+      const room = this.client.getRoom(roomId);
+      return room ? room.getJoinedMembers().map(m => ({ userId: m.userId, name: m.name })) : [];
+    }
+    try {
+      const d = await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/joined_members`);
+      return Object.keys(d.joined || {}).map(id => ({ userId: id, name: d.joined[id]?.display_name || id }));
+    } catch { return []; }
+  }
+
+  async logout() {
+    if (this.client) { this.client.stopClient(); try { await this.client.logout(); } catch {} }
+    this.client = null; this._token = null; this._userId = null;
+  }
+}
+
+const svc = new CasevaultService();
+
+/* ═══════════════════ VAULT FIELD DEFINITIONS ═══════════════════ */
+const VAULT_FIELDS = [
+  { key: 'full_name',   label: 'Full Name',      category: 'identity', sensitive: false },
+  { key: 'dob',         label: 'Date of Birth',   category: 'identity', sensitive: true },
+  { key: 'ssn',         label: 'SSN / Gov ID',    category: 'identity', sensitive: true },
+  { key: 'email',       label: 'Email',            category: 'contact',  sensitive: false },
+  { key: 'phone',       label: 'Phone',            category: 'contact',  sensitive: false },
+  { key: 'address',     label: 'Address',          category: 'contact',  sensitive: true },
+  { key: 'employer',    label: 'Employer',         category: 'financial',sensitive: false },
+  { key: 'income',      label: 'Annual Income',    category: 'financial',sensitive: true },
+  { key: 'case_notes',  label: 'Case Notes',       category: 'case',     sensitive: false },
+  { key: 'documents',   label: 'Documents',        category: 'case',     sensitive: true },
+  { key: 'history',     label: 'Case History',     category: 'case',     sensitive: false },
+  { key: 'medical',     label: 'Medical Info',     category: 'medical',  sensitive: true },
+];
+const FIELD_CATEGORIES = ['identity','contact','financial','case','medical'];
+const CAT_LABELS = { identity:'Identity', contact:'Contact', financial:'Financial', case:'Case', medical:'Medical' };
+const CAT_ICONS = { identity:'user', contact:'msg', financial:'briefcase', case:'folder', medical:'shieldCheck' };
+const CAT_COLORS = { identity:'blue', contact:'teal', financial:'gold', case:'orange', medical:'green' };
+
+/* ═══════════════════ SMALL COMPONENTS ═══════════════════ */
+const Spin = ({s=18}) => <div style={{width:s,height:s,border:'2px solid var(--border-1)',borderTopColor:'var(--gold)',borderRadius:'50%',animation:'spin .6s linear infinite'}} />;
+
+const Modal = ({open,onClose,title,w=480,children}) => {
+  if (!open) return null;
+  return <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,.75)',backdropFilter:'blur(6px)'}} onClick={onClose}>
+    <div className="anim-up" onClick={e=>e.stopPropagation()} style={{background:'var(--bg-2)',border:'1px solid var(--border-1)',borderRadius:'var(--r-lg)',width:'92%',maxWidth:w,maxHeight:'88vh',overflow:'auto',padding:28}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+        <h3 style={{fontSize:16,fontWeight:700}}>{title}</h3>
+        <button onClick={onClose} style={{background:'transparent',color:'var(--tx-2)',padding:4}}><I n="x" s={17}/></button>
+      </div>
+      {children}
+    </div>
+  </div>;
+};
+
+const Toggle = ({on, onChange, disabled}) => (
+  <div className={`toggle-track ${on?'on':'off'}`} onClick={disabled ? undefined : onChange} style={disabled?{opacity:.4,cursor:'default'}:{}}>
+    <div className="toggle-knob"/>
+  </div>
+);
+
+const Toast = ({msg, type='info', onClose}) => {
+  useEffect(()=>{const t=setTimeout(onClose,3500);return()=>clearTimeout(t)},[]);
+  const c = {info:'var(--blue)',success:'var(--green)',error:'var(--red)',warn:'var(--gold)'}[type];
+  return <div className="anim-up" style={{position:'fixed',bottom:20,right:20,zIndex:9999,background:'var(--bg-2)',border:`1px solid ${c}30`,borderLeft:`3px solid ${c}`,borderRadius:'var(--r)',padding:'11px 18px',fontSize:12.5,boxShadow:'0 8px 32px rgba(0,0,0,.5)',maxWidth:400}}>{msg}</div>;
+};
+
+/* ═══════════════════ LOGIN ═══════════════════ */
+const LoginScreen = ({onLogin}) => {
+  const [hs, setHs] = useState('matrix.org');
+  const [user, setUser] = useState('');
+  const [pass, setPass] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  const go = async (e) => {
+    e.preventDefault(); setLoading(true); setErr('');
+    try { const s = await svc.login(hs, user, pass); onLogin(s); }
+    catch (e) { setErr(e.message); }
+    setLoading(false);
+  };
+
+  return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div className="anim-up" style={{width:'100%',maxWidth:440,padding:20}}>
+      <div style={{background:'var(--bg-1)',border:'1px solid var(--border-0)',borderRadius:'var(--r-lg)',padding:'44px 40px',position:'relative',overflow:'hidden'}}>
+        <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:'linear-gradient(90deg, var(--gold), var(--teal), var(--blue))'}}/>
+
+        <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:10}}>
+          <div style={{width:44,height:44,borderRadius:'var(--r-lg)',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)'}}>
+            <I n="shield" s={24}/>
+          </div>
+          <div>
+            <h1 style={{fontSize:24,fontWeight:800,fontFamily:'var(--serif)',letterSpacing:'-0.02em'}}>Casevault</h1>
+            <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-2)',letterSpacing:'.08em'}}>SOVEREIGN CASE MANAGEMENT</span>
+          </div>
+        </div>
+
+        <p style={{color:'var(--tx-1)',fontSize:13,marginTop:18,marginBottom:30,lineHeight:1.65}}>
+          Client-owned data vaults on Matrix. Per-field encryption. Providers see only what clients share. Revocable at any time.
+        </p>
+
+        <form onSubmit={go}>
+          <div style={{marginBottom:14}}><span className="section-label">HOMESERVER</span><input value={hs} onChange={e=>setHs(e.target.value)} placeholder="matrix.org"/></div>
+          <div style={{marginBottom:14}}><span className="section-label">USERNAME</span><input value={user} onChange={e=>setUser(e.target.value)} placeholder="@you:matrix.org" autoComplete="username"/></div>
+          <div style={{marginBottom:24}}><span className="section-label">PASSWORD</span><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" autoComplete="current-password"/></div>
+          {err && <div style={{background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.2)',borderRadius:'var(--r)',padding:'9px 14px',fontSize:12.5,color:'var(--red)',marginBottom:16}}>{err}</div>}
+          <button type="submit" className="b-pri" disabled={loading} style={{width:'100%',padding:12,fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+            {loading?<Spin s={16}/>:<I n="lock" s={16}/>} {loading?'Connecting...':'Connect'}
+          </button>
+        </form>
+
+        <div style={{marginTop:20,display:'flex',alignItems:'center',gap:8,justifyContent:'center'}}>
+          <div style={{width:6,height:6,borderRadius:'50%',background: typeof matrixcs!=='undefined'?'var(--green)':'var(--gold)'}}/>
+          <span style={{fontFamily:'var(--mono)',fontSize:10.5,color:'var(--tx-3)'}}>
+            {typeof matrixcs!=='undefined'?'matrix-js-sdk + Megolm E2EE':'SDK loading — fallback ready'}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>;
+};
+
+/* ═══════════════════ ACCOUNT TYPE SELECTOR ═══════════════════ */
+const AccountTypeScreen = ({onSelect}) => (
+  <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div className="anim-up" style={{textAlign:'center',maxWidth:600,padding:20}}>
+      <h2 style={{fontFamily:'var(--serif)',fontSize:28,fontWeight:700,letterSpacing:'-0.02em',marginBottom:8}}>Choose your role</h2>
+      <p style={{color:'var(--tx-1)',fontSize:14,marginBottom:36}}>This determines your data access model</p>
+      <div style={{display:'flex',gap:20,justifyContent:'center',flexWrap:'wrap'}}>
+        {[
+          {type:'client', icon:'shield', title:'Client', desc:'Own your data vault. Share specific fields with chosen providers. Revoke access at any time.', color:'teal'},
+          {type:'provider', icon:'briefcase', title:'Provider', desc:'View only what clients share with you. Add case notes and status updates. Request additional information.', color:'gold'},
+        ].map(o => (
+          <div key={o.type} className="card-h" onClick={()=>onSelect(o.type)} style={{width:260,textAlign:'left',padding:28}}>
+            <div style={{width:48,height:48,borderRadius:'var(--r-lg)',background:`var(--${o.color}-dim)`,display:'flex',alignItems:'center',justifyContent:'center',color:`var(--${o.color})`,marginBottom:16}}>
+              <I n={o.icon} s={24}/>
+            </div>
+            <h3 style={{fontSize:18,fontWeight:700,marginBottom:8}}>{o.title}</h3>
+            <p style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6}}>{o.desc}</p>
+            <div style={{marginTop:16}}>
+              <span className={`tag tag-${o.color}`}>{o.type === 'client' ? 'DATA OWNER' : 'DATA CONSUMER'}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+/* ═══════════════════ CLIENT APP ═══════════════════ */
+const ClientApp = ({session, onLogout, showToast}) => {
+  const [vaultRoom, setVaultRoom] = useState(null);
+  const [vaultData, setVaultData] = useState({});
+  const [providers, setProviders] = useState([]); // [{bridgeRoomId, providerUserId, sharedFields:{fieldKey:true/false}, providerName}]
+  const [view, setView] = useState('vault'); // vault | providers | bridge:roomId
+  const [activeBridge, setActiveBridge] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editModal, setEditModal] = useState(false);
+  const [editData, setEditData] = useState({});
+  const [addProviderModal, setAddProviderModal] = useState(false);
+  const [newProviderId, setNewProviderId] = useState('');
+  const [bridgeMessages, setBridgeMessages] = useState([]);
+  const [msgText, setMsgText] = useState('');
+  const [hardRevokeTarget, setHardRevokeTarget] = useState(null);
+
+  // Init: find or create vault room
+  useEffect(() => { initVault(); }, []);
+
+  const initVault = async () => {
+    setLoading(true);
+    const rooms = await svc.getJoinedRooms();
+    let found = null;
+    for (const rid of rooms) {
+      const id = await svc.getState(rid, EVT.IDENTITY);
+      if (id && id.type === 'client' && id.owner === svc.userId) { found = rid; break; }
+    }
+    if (!found) {
+      found = await svc.createRoom('[Vault] My Data', 'Personal data vault', [
+        { type: EVT.IDENTITY, state_key: '', content: { type: 'client', owner: svc.userId, created: Date.now() } },
+        { type: EVT.VAULT_DATA, state_key: '', content: { fields: {} } },
+        { type: EVT.VAULT_INDEX, state_key: '', content: { providers: [] } },
+      ]);
+      showToast('Vault created — encrypted room ready', 'success');
+    }
+    setVaultRoom(found);
+    await loadVault(found);
+    setLoading(false);
+  };
+
+  const loadVault = async (rid) => {
+    const data = await svc.getState(rid, EVT.VAULT_DATA);
+    setVaultData(data?.fields || {});
+    const idx = await svc.getState(rid, EVT.VAULT_INDEX);
+    setProviders(idx?.providers || []);
+  };
+
+  const saveVaultData = async (fields) => {
+    await svc.setState(vaultRoom, EVT.VAULT_DATA, { fields });
+    setVaultData(fields);
+  };
+
+  const saveProviderIndex = async (provs) => {
+    await svc.setState(vaultRoom, EVT.VAULT_INDEX, { providers: provs });
+    setProviders(provs);
+  };
+
+  const handleEditSave = async () => {
+    const updated = { ...vaultData, ...editData };
+    await saveVaultData(updated);
+    setEditModal(false);
+    showToast('Vault updated', 'success');
+    // Sync changed fields to any bridges that share them
+    for (const prov of providers) {
+      const changedShared = Object.keys(editData).filter(k => prov.sharedFields?.[k]);
+      if (changedShared.length > 0) {
+        await syncFieldsToBridge(prov.bridgeRoomId, prov.sharedFields, updated);
+      }
+    }
+  };
+
+  // Create bridge room + share selected fields
+  const handleAddProvider = async () => {
+    if (!newProviderId.trim()) return;
+    try {
+      // Create bridge room
+      const bridgeId = await svc.createRoom(
+        `[Bridge] ${svc.userId} ↔ ${newProviderId}`,
+        'Casevault bridge — shared data room',
+        [
+          { type: EVT.BRIDGE_META, state_key: '', content: {
+            client: svc.userId, provider: newProviderId, created: Date.now(), status: 'active',
+          }},
+          { type: EVT.BRIDGE_REFS, state_key: '', content: { fields: {} } },
+        ]
+      );
+      // Invite provider
+      await svc.invite(bridgeId, newProviderId);
+      // Add to index
+      const newProv = { bridgeRoomId: bridgeId, providerUserId: newProviderId, sharedFields: {}, providerName: newProviderId };
+      const updated = [...providers, newProv];
+      await saveProviderIndex(updated);
+      setAddProviderModal(false);
+      setNewProviderId('');
+      showToast(`Bridge created — invite sent to ${newProviderId}`, 'success');
+    } catch (e) {
+      showToast('Failed: ' + e.message, 'error');
+    }
+  };
+
+  // Sync encrypted field refs to bridge room
+  const syncFieldsToBridge = async (bridgeRoomId, sharedFields, data) => {
+    const refs = {};
+    for (const [fieldKey, shared] of Object.entries(sharedFields)) {
+      if (shared && data[fieldKey]) {
+        const fieldKeyB64 = await FieldCrypto.generateKey();
+        const encrypted = await FieldCrypto.encrypt(data[fieldKey], fieldKeyB64);
+        refs[fieldKey] = { ...encrypted, key: fieldKeyB64 };
+      }
+      // If not shared, field is simply absent from refs — no key = no access
+    }
+    await svc.setState(bridgeRoomId, EVT.BRIDGE_REFS, { fields: refs, updated: Date.now() });
+  };
+
+  // Toggle a field on/off for a provider
+  const handleToggleField = async (provIndex, fieldKey) => {
+    const prov = providers[provIndex];
+    const newShared = { ...prov.sharedFields, [fieldKey]: !prov.sharedFields[fieldKey] };
+    const updatedProvs = [...providers];
+    updatedProvs[provIndex] = { ...prov, sharedFields: newShared };
+    await saveProviderIndex(updatedProvs);
+    // Re-encrypt and sync to bridge
+    await syncFieldsToBridge(prov.bridgeRoomId, newShared, vaultData);
+    showToast(newShared[fieldKey] ? `Shared ${VAULT_FIELDS.find(f=>f.key===fieldKey)?.label} — new encryption key issued` : `Revoked ${VAULT_FIELDS.find(f=>f.key===fieldKey)?.label} — key destroyed`, newShared[fieldKey] ? 'success' : 'warn');
+  };
+
+  // Hard revoke — destroy bridge, create new one with remaining shared fields
+  const handleHardRevoke = async (provIndex) => {
+    const prov = providers[provIndex];
+    try {
+      // Create new bridge room
+      const newBridgeId = await svc.createRoom(
+        `[Bridge] ${svc.userId} ↔ ${prov.providerUserId}`,
+        'Casevault bridge — replaced',
+        [
+          { type: EVT.BRIDGE_META, state_key: '', content: {
+            client: svc.userId, provider: prov.providerUserId, created: Date.now(), status: 'active', previous: prov.bridgeRoomId,
+          }},
+          { type: EVT.BRIDGE_REFS, state_key: '', content: { fields: {} } },
+        ]
+      );
+
+      // Sync still-shared fields with fresh keys to new room
+      const stillShared = Object.fromEntries(Object.entries(prov.sharedFields).filter(([,v]) => v));
+      if (Object.keys(stillShared).length > 0) {
+        await syncFieldsToBridge(newBridgeId, stillShared, vaultData);
+      }
+
+      // Invite provider to new room
+      await svc.invite(newBridgeId, prov.providerUserId);
+
+      // Tombstone old room
+      await svc.tombstone(prov.bridgeRoomId, newBridgeId);
+      // Kick provider from old room
+      try { await svc.kick(prov.bridgeRoomId, prov.providerUserId, 'Bridge rotated — data revoked'); } catch {}
+
+      // Update index
+      const updatedProvs = [...providers];
+      updatedProvs[provIndex] = { ...prov, bridgeRoomId: newBridgeId };
+      await saveProviderIndex(updatedProvs);
+
+      setHardRevokeTarget(null);
+      showToast('Hard revoke complete — old room tombstoned, all keys rotated, new bridge created', 'success');
+    } catch (e) {
+      showToast('Hard revoke failed: ' + e.message, 'error');
+    }
+  };
+
+  // Remove provider entirely
+  const handleRemoveProvider = async (provIndex) => {
+    const prov = providers[provIndex];
+    try {
+      try { await svc.kick(prov.bridgeRoomId, prov.providerUserId); } catch {}
+      await svc.setState(prov.bridgeRoomId, EVT.BRIDGE_REFS, { fields: {}, revoked: true, updated: Date.now() });
+      const updatedProvs = providers.filter((_,i) => i !== provIndex);
+      await saveProviderIndex(updatedProvs);
+      showToast('Provider removed, all keys destroyed', 'warn');
+    } catch (e) { showToast('Error: ' + e.message, 'error'); }
+  };
+
+  // Load bridge messages
+  const loadBridgeMessages = async (bridgeRoomId) => {
+    const msgs = await svc.getMessages(bridgeRoomId);
+    setBridgeMessages(msgs);
+  };
+
+  const handleSendBridgeMsg = async () => {
+    if (!msgText.trim() || !activeBridge) return;
+    await svc.sendMessage(activeBridge, msgText, { [`${NS}.type`]: 'note' });
+    setMsgText('');
+    setTimeout(() => loadBridgeMessages(activeBridge), 500);
+  };
+
+  const openBridge = (bridgeRoomId) => {
+    setActiveBridge(bridgeRoomId);
+    setView('bridge');
+    loadBridgeMessages(bridgeRoomId);
+  };
+
+  const activeProviderIdx = providers.findIndex(p => p.bridgeRoomId === activeBridge);
+  const activeProvider = activeProviderIdx >= 0 ? providers[activeProviderIdx] : null;
+
+  const filledFields = VAULT_FIELDS.filter(f => vaultData[f.key]);
+  const sharedCount = providers.reduce((s, p) => s + Object.values(p.sharedFields||{}).filter(Boolean).length, 0);
+
+  if (loading) return <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}><Spin s={28}/></div>;
+
+  return <div style={{display:'flex',height:'100%'}}>
+    {/* Sidebar */}
+    <div style={{width:260,minWidth:260,height:'100%',background:'var(--bg-1)',borderRight:'1px solid var(--border-0)',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'20px 16px 16px',borderBottom:'1px solid var(--border-0)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+          <div style={{width:30,height:30,borderRadius:'var(--r)',background:'var(--teal-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--teal)'}}><I n="shield" s={16}/></div>
+          <span style={{fontFamily:'var(--serif)',fontWeight:700,fontSize:16}}>Casevault</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10}}>
+          <div style={{width:20,height:20,borderRadius:'50%',background:'var(--bg-4)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700}}>
+            {(svc.userId||'?')[1]?.toUpperCase()}
+          </div>
+          <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{svc.userId}</span>
+          <span className="tag tag-teal" style={{marginLeft:'auto'}}>CLIENT</span>
+        </div>
+      </div>
+
+      <div style={{flex:1,overflow:'auto',padding:'8px 8px'}}>
+        {[
+          {id:'vault', icon:'folder', label:'My Vault'},
+          {id:'providers', icon:'users', label:'My Providers'},
+        ].map(item => (
+          <div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null)}}
+            style={{padding:'11px 12px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:2,
+              background:view===item.id&&!activeBridge?'var(--bg-4)':'transparent',
+              borderLeft:view===item.id&&!activeBridge?'2px solid var(--teal)':'2px solid transparent',
+              display:'flex',alignItems:'center',gap:10,transition:'all .15s',
+              color:view===item.id&&!activeBridge?'var(--tx-0)':'var(--tx-1)'}}
+            onMouseEnter={e=>{if(!(view===item.id&&!activeBridge))e.currentTarget.style.background='var(--bg-3)'}}
+            onMouseLeave={e=>{if(!(view===item.id&&!activeBridge))e.currentTarget.style.background='transparent'}}>
+            <I n={item.icon} s={15}/><span style={{fontSize:13,fontWeight:view===item.id?600:400}}>{item.label}</span>
+          </div>
+        ))}
+
+        {providers.length > 0 && <>
+          <div style={{padding:'16px 12px 6px'}}><span className="section-label">BRIDGES</span></div>
+          {providers.map((p,i) => (
+            <div key={p.bridgeRoomId} onClick={()=>openBridge(p.bridgeRoomId)}
+              className="anim-sl" style={{animationDelay:`${i*40}ms`,padding:'10px 12px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:2,
+                background:activeBridge===p.bridgeRoomId?'var(--bg-4)':'transparent',
+                borderLeft:activeBridge===p.bridgeRoomId?'2px solid var(--gold)':'2px solid transparent',
+                transition:'all .15s'}}
+              onMouseEnter={e=>{if(activeBridge!==p.bridgeRoomId)e.currentTarget.style.background='var(--bg-3)'}}
+              onMouseLeave={e=>{if(activeBridge!==p.bridgeRoomId)e.currentTarget.style.background='transparent'}}>
+              <span style={{fontSize:12.5,fontWeight:activeBridge===p.bridgeRoomId?600:400,color:activeBridge===p.bridgeRoomId?'var(--tx-0)':'var(--tx-1)',display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {p.providerName || p.providerUserId}
+              </span>
+              <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
+                {Object.values(p.sharedFields||{}).filter(Boolean).length} fields shared
+              </span>
+            </div>
+          ))}
+        </>}
+      </div>
+
+      <div style={{padding:'10px 12px',borderTop:'1px solid var(--border-0)',display:'flex',gap:6}}>
+        <button onClick={onLogout} className="b-gho b-sm" style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><I n="logout" s={13}/>Logout</button>
+      </div>
+    </div>
+
+    {/* Main content */}
+    <div style={{flex:1,overflow:'auto',padding:28}}>
+      {/* VAULT VIEW */}
+      {view === 'vault' && !activeBridge && (
+        <div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28}}>
+            <div>
+              <h2 style={{fontFamily:'var(--serif)',fontSize:24,fontWeight:700,letterSpacing:'-0.02em'}}>Your Vault</h2>
+              <p style={{color:'var(--tx-1)',fontSize:13,marginTop:4}}>All data encrypted in your private Matrix room. Only you can read this.</p>
+            </div>
+            <button onClick={()=>{setEditData({...vaultData});setEditModal(true)}} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}>
+              <I n="key" s={14}/>Edit Vault
+            </button>
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:12,marginBottom:28}}>
+            {[
+              {l:'Fields',v:filledFields.length+'/'+VAULT_FIELDS.length,c:'teal',i:'folder'},
+              {l:'Providers',v:providers.length,c:'gold',i:'users'},
+              {l:'Shared Fields',v:sharedCount,c:'blue',i:'share'},
+              {l:'Encryption',v:'AES-256-GCM',c:'green',i:'lock'},
+            ].map((s,i)=>(
+              <div key={i} className="card">
+                <span className="section-label">{s.l.toUpperCase()}</span>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
+                  <span style={{fontSize:20,fontWeight:700}}>{s.v}</span>
+                  <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={16}/></span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {FIELD_CATEGORIES.map(cat => {
+            const fields = VAULT_FIELDS.filter(f=>f.category===cat);
+            const color = CAT_COLORS[cat];
+            return <div key={cat} style={{marginBottom:20}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <span style={{color:`var(--${color})`}}><I n={CAT_ICONS[cat]} s={14}/></span>
+                <span className="section-label" style={{marginBottom:0}}>{CAT_LABELS[cat].toUpperCase()}</span>
+              </div>
+              <div className="card" style={{padding:0,overflow:'hidden'}}>
+                {fields.map((field, fi) => (
+                  <div key={field.key} style={{padding:'12px 18px',borderBottom:fi<fields.length-1?'1px solid var(--border-0)':'none',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span style={{fontSize:13,fontWeight:500}}>{field.label}</span>
+                      {field.sensitive && <span className="tag tag-red" style={{fontSize:9}}>SENSITIVE</span>}
+                    </div>
+                    <span style={{fontFamily:'var(--mono)',fontSize:12,color:vaultData[field.key]?'var(--tx-1)':'var(--tx-3)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {vaultData[field.key] ? (field.sensitive ? '••••••••' : vaultData[field.key]) : '—'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>;
+          })}
+        </div>
+      )}
+
+      {/* PROVIDERS VIEW */}
+      {view === 'providers' && !activeBridge && (
+        <div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28}}>
+            <div>
+              <h2 style={{fontFamily:'var(--serif)',fontSize:24,fontWeight:700,letterSpacing:'-0.02em'}}>My Providers</h2>
+              <p style={{color:'var(--tx-1)',fontSize:13,marginTop:4}}>Each provider gets a dedicated encrypted bridge room. You control what they see.</p>
+            </div>
+            <button onClick={()=>setAddProviderModal(true)} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}>
+              <I n="plus" s={14}/>Add Provider
+            </button>
+          </div>
+
+          {providers.length === 0 ? (
+            <div className="card" style={{textAlign:'center',padding:'50px 20px',borderStyle:'dashed'}}>
+              <I n="users" s={36}/><p style={{color:'var(--tx-2)',marginTop:12,fontSize:14}}>No providers yet</p>
+              <p style={{color:'var(--tx-3)',fontSize:12,marginTop:4}}>Add a provider to create an encrypted bridge room</p>
+            </div>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              {providers.map((prov, pi) => {
+                const shCount = Object.values(prov.sharedFields||{}).filter(Boolean).length;
+                return <div key={prov.bridgeRoomId} className="card" style={{padding:0,overflow:'hidden'}}>
+                  <div style={{padding:'18px 22px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid var(--border-0)'}}>
+                    <div>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:15,fontWeight:600}}>{prov.providerName || prov.providerUserId}</span>
+                        <span className="tag tag-green"><I n="lock" s={9}/>E2EE</span>
+                      </div>
+                      <span style={{fontFamily:'var(--mono)',fontSize:10.5,color:'var(--tx-3)'}}>Bridge: {prov.bridgeRoomId.slice(0,20)}…</span>
+                    </div>
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={()=>openBridge(prov.bridgeRoomId)} className="b-gho b-sm">Open Bridge</button>
+                      <button onClick={()=>setHardRevokeTarget(pi)} className="b-red b-sm" style={{display:'flex',alignItems:'center',gap:4}}><I n="zap" s={12}/>Hard Revoke</button>
+                      <button onClick={()=>handleRemoveProvider(pi)} className="b-gho b-sm" style={{color:'var(--red)'}}><I n="trash" s={13}/></button>
+                    </div>
+                  </div>
+
+                  {/* Per-field sharing toggles */}
+                  <div style={{padding:'14px 22px'}}>
+                    <span className="section-label">FIELD-LEVEL SHARING</span>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0'}}>
+                      {VAULT_FIELDS.map(field => {
+                        const isShared = prov.sharedFields?.[field.key] || false;
+                        const hasData = !!vaultData[field.key];
+                        return <div key={field.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border-0)',marginRight:20}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <span style={{fontSize:12.5,color:hasData?'var(--tx-0)':'var(--tx-3)'}}>{field.label}</span>
+                            {field.sensitive && <I n="alert" s={11} c="var(--red)"/>}
+                          </div>
+                          <Toggle on={isShared} onChange={()=>handleToggleField(pi, field.key)} disabled={!hasData}/>
+                        </div>;
+                      })}
+                    </div>
+                    <div style={{marginTop:12,display:'flex',alignItems:'center',gap:8}}>
+                      <I n="key" s={13} c="var(--tx-3)"/>
+                      <span style={{fontSize:11,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
+                        {shCount} of {VAULT_FIELDS.length} fields shared — each with unique AES-256-GCM key
+                      </span>
+                    </div>
+                  </div>
+                </div>;
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* BRIDGE VIEW */}
+      {view === 'bridge' && activeBridge && activeProvider && (
+        <div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+          <button onClick={()=>{setView('providers');setActiveBridge(null)}} className="b-gho b-sm" style={{marginBottom:16,display:'flex',alignItems:'center',gap:5}}><I n="back" s={14}/>Back to Providers</button>
+
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
+            <div>
+              <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Bridge: {activeProvider.providerName || activeProvider.providerUserId}</h2>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
+                <span className="tag tag-green"><I n="lock" s={9}/>Megolm + AES-GCM</span>
+                <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)'}}>{activeBridge}</span>
+              </div>
+            </div>
+            <button onClick={()=>setHardRevokeTarget(activeProviderIdx)} className="b-red b-sm" style={{display:'flex',alignItems:'center',gap:5}}>
+              <I n="zap" s={13}/>Hard Revoke
+            </button>
+          </div>
+
+          {/* What's shared */}
+          <div className="card" style={{marginBottom:20}}>
+            <span className="section-label">CURRENTLY SHARED</span>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:6}}>
+              {VAULT_FIELDS.filter(f => activeProvider.sharedFields?.[f.key]).map(f => (
+                <span key={f.key} className="tag tag-blue">{f.label}</span>
+              ))}
+              {Object.values(activeProvider.sharedFields||{}).filter(Boolean).length===0 &&
+                <span style={{fontSize:12,color:'var(--tx-3)'}}>No fields shared</span>}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="card" style={{marginBottom:0}}>
+            <span className="section-label">BRIDGE MESSAGES</span>
+            <div style={{maxHeight:300,overflow:'auto',marginBottom:14}}>
+              {bridgeMessages.length===0?
+                <p style={{color:'var(--tx-3)',fontSize:12.5,padding:'16px 0',textAlign:'center'}}>No messages yet</p>
+              : bridgeMessages.map((msg,i) => (
+                <div key={msg.id||i} style={{padding:'10px 0',borderBottom:'1px solid var(--border-0)'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                    <span style={{fontFamily:'var(--mono)',fontSize:10.5,color:msg.sender===svc.userId?'var(--teal)':'var(--gold)'}}>{msg.sender===svc.userId?'You':msg.sender}</span>
+                    <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)'}}>{msg.ts?new Date(msg.ts).toLocaleString():''}</span>
+                  </div>
+                  <p style={{fontSize:13,lineHeight:1.55,color:'var(--tx-1)'}}>{msg.content?.body}</p>
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <input value={msgText} onChange={e=>setMsgText(e.target.value)} placeholder="Message your provider (E2EE)..."
+                onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey)handleSendBridgeMsg()}} style={{flex:1}}/>
+              <button onClick={handleSendBridgeMsg} className="b-pri" style={{display:'flex',alignItems:'center',gap:5}}><I n="send" s={14}/></button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+
+    {/* EDIT VAULT MODAL */}
+    <Modal open={editModal} onClose={()=>setEditModal(false)} title="Edit Vault Data" w={560}>
+      <p style={{fontSize:12.5,color:'var(--tx-1)',marginBottom:20,lineHeight:1.6}}>This data is encrypted in your private vault room. Changes to shared fields will be re-encrypted with new keys for each provider.</p>
+      {FIELD_CATEGORIES.map(cat => (
+        <div key={cat} style={{marginBottom:18}}>
+          <span className="section-label">{CAT_LABELS[cat].toUpperCase()}</span>
+          {VAULT_FIELDS.filter(f=>f.category===cat).map(field => (
+            <div key={field.key} style={{marginBottom:10}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                <label style={{fontSize:12,color:'var(--tx-1)'}}>{field.label}</label>
+                {field.sensitive && <span className="tag tag-red" style={{fontSize:8}}>SENSITIVE</span>}
+              </div>
+              {field.key==='case_notes'||field.key==='history'||field.key==='medical'||field.key==='documents' ?
+                <textarea value={editData[field.key]||''} onChange={e=>setEditData({...editData,[field.key]:e.target.value})} placeholder={`Enter ${field.label.toLowerCase()}...`} style={{minHeight:60}}/> :
+                <input value={editData[field.key]||''} onChange={e=>setEditData({...editData,[field.key]:e.target.value})} placeholder={`Enter ${field.label.toLowerCase()}...`}/>
+              }
+            </div>
+          ))}
+        </div>
+      ))}
+      <button onClick={handleEditSave} className="b-pri" style={{width:'100%'}}>Save & Re-encrypt Shared Fields</button>
+    </Modal>
+
+    {/* ADD PROVIDER MODAL */}
+    <Modal open={addProviderModal} onClose={()=>setAddProviderModal(false)} title="Add Provider">
+      <p style={{fontSize:12.5,color:'var(--tx-1)',marginBottom:18,lineHeight:1.6}}>
+        This creates a new encrypted bridge room and invites the provider. No data is shared until you toggle fields on.
+      </p>
+      <div style={{marginBottom:18}}>
+        <span className="section-label">PROVIDER MATRIX ID</span>
+        <input value={newProviderId} onChange={e=>setNewProviderId(e.target.value)} placeholder="@provider:matrix.org"/>
+      </div>
+      <div style={{background:'var(--teal-dim)',border:'1px solid rgba(62,201,176,.15)',borderRadius:'var(--r)',padding:'12px 16px',marginBottom:18,display:'flex',gap:10,alignItems:'flex-start'}}>
+        <I n="shieldCheck" s={16} c="var(--teal)"/>
+        <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.55}}>The bridge room will use Megolm encryption. Each shared field gets a separate AES-256-GCM key that is destroyed on revocation.</span>
+      </div>
+      <button onClick={handleAddProvider} className="b-pri" style={{width:'100%'}}>Create Bridge Room</button>
+    </Modal>
+
+    {/* HARD REVOKE CONFIRM */}
+    <Modal open={hardRevokeTarget!==null} onClose={()=>setHardRevokeTarget(null)} title="⚡ Hard Revoke" w={440}>
+      <div style={{background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginBottom:18}}>
+        <p style={{fontSize:13,color:'var(--red)',fontWeight:600,marginBottom:6}}>This is a destructive operation</p>
+        <p style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
+          The current bridge room will be <strong>tombstoned</strong> and the provider <strong>kicked</strong>. A new bridge room will be created with <strong>fresh encryption keys</strong> for any fields you still want to share. The provider's old Megolm keys will no longer decrypt future data.
+        </p>
+      </div>
+      <p style={{fontSize:12,color:'var(--tx-2)',marginBottom:18,lineHeight:1.6}}>
+        <strong>Caveat:</strong> If the provider previously decrypted and cached data on their device, we cannot delete it from their local storage. This revocation prevents future access, not retroactive memory erasure.
+      </p>
+      <div style={{display:'flex',gap:10}}>
+        <button onClick={()=>setHardRevokeTarget(null)} className="b-gho" style={{flex:1}}>Cancel</button>
+        <button onClick={()=>handleHardRevoke(hardRevokeTarget)} className="b-red" style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+          <I n="zap" s={14}/>Execute Hard Revoke
+        </button>
+      </div>
+    </Modal>
+  </div>;
+};
+
+/* ═══════════════════ PROVIDER APP ═══════════════════ */
+const ProviderApp = ({session, onLogout, showToast}) => {
+  const [rosterRoom, setRosterRoom] = useState(null);
+  const [cases, setCases] = useState([]); // [{bridgeRoomId, clientUserId, sharedData:{}, meta:{}}]
+  const [activeCase, setActiveCase] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState([]);
+  const [msgText, setMsgText] = useState('');
+  const [requestText, setRequestText] = useState('');
+
+  useEffect(() => { initProvider(); }, []);
+
+  const initProvider = async () => {
+    setLoading(true);
+    // Find or create roster room
+    const rooms = await svc.getJoinedRooms();
+    let roster = null;
+    for (const rid of rooms) {
+      const id = await svc.getState(rid, EVT.IDENTITY);
+      if (id && id.type === 'provider' && id.owner === svc.userId) { roster = rid; break; }
+    }
+    if (!roster) {
+      roster = await svc.createRoom('[Roster] Provider Cases', 'Provider case index', [
+        { type: EVT.IDENTITY, state_key: '', content: { type: 'provider', owner: svc.userId, created: Date.now() } },
+        { type: EVT.ROSTER, state_key: '', content: { cases: [] } },
+      ]);
+    }
+    setRosterRoom(roster);
+
+    // Scan all joined rooms for bridge rooms where we're the provider
+    await loadCases(rooms);
+    setLoading(false);
+  };
+
+  const loadCases = async (roomIds) => {
+    const roomList = roomIds || await svc.getJoinedRooms();
+    const found = [];
+    for (const rid of roomList) {
+      const meta = await svc.getState(rid, EVT.BRIDGE_META);
+      if (meta && meta.provider === svc.userId && meta.status !== 'tombstoned') {
+        // Decrypt shared field refs
+        const refsData = await svc.getState(rid, EVT.BRIDGE_REFS);
+        const decrypted = {};
+        if (refsData?.fields) {
+          for (const [key, ref] of Object.entries(refsData.fields)) {
+            if (ref.key && ref.ciphertext && ref.iv) {
+              const plain = await FieldCrypto.decrypt(ref.ciphertext, ref.iv, ref.key);
+              if (plain !== null) decrypted[key] = plain;
+            }
+          }
+        }
+        found.push({ bridgeRoomId: rid, clientUserId: meta.client, meta, sharedData: decrypted });
+      }
+    }
+    setCases(found);
+  };
+
+  const loadMessages = async (bridgeRoomId) => {
+    const msgs = await svc.getMessages(bridgeRoomId);
+    setMessages(msgs);
+  };
+
+  const handleSendMsg = async () => {
+    if (!msgText.trim() || !activeCase) return;
+    await svc.sendMessage(activeCase, msgText, { [`${NS}.type`]: 'note' });
+    setMsgText('');
+    setTimeout(() => loadMessages(activeCase), 500);
+  };
+
+  const handleSendRequest = async () => {
+    if (!requestText.trim() || !activeCase) return;
+    await svc.sendMessage(activeCase, `📋 Information Request: ${requestText}`, { [`${NS}.type`]: 'request' });
+    setRequestText('');
+    showToast('Request sent to client', 'success');
+    setTimeout(() => loadMessages(activeCase), 500);
+  };
+
+  const openCase = (bridgeRoomId) => {
+    setActiveCase(bridgeRoomId);
+    loadMessages(bridgeRoomId);
+  };
+
+  const activeCaseData = cases.find(c => c.bridgeRoomId === activeCase);
+
+  if (loading) return <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}><Spin s={28}/></div>;
+
+  return <div style={{display:'flex',height:'100%'}}>
+    {/* Sidebar */}
+    <div style={{width:260,minWidth:260,height:'100%',background:'var(--bg-1)',borderRight:'1px solid var(--border-0)',display:'flex',flexDirection:'column'}}>
+      <div style={{padding:'20px 16px 16px',borderBottom:'1px solid var(--border-0)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
+          <div style={{width:30,height:30,borderRadius:'var(--r)',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)'}}><I n="briefcase" s={16}/></div>
+          <span style={{fontFamily:'var(--serif)',fontWeight:700,fontSize:16}}>Casevault</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:10}}>
+          <div style={{width:20,height:20,borderRadius:'50%',background:'var(--bg-4)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700}}>
+            {(svc.userId||'?')[1]?.toUpperCase()}
+          </div>
+          <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{svc.userId}</span>
+          <span className="tag tag-gold" style={{marginLeft:'auto'}}>PROVIDER</span>
+        </div>
+      </div>
+
+      <div style={{flex:1,overflow:'auto',padding:'8px 8px'}}>
+        <div style={{padding:'8px 12px 6px'}}><span className="section-label">CASES ({cases.length})</span></div>
+        {cases.length === 0 && <p style={{color:'var(--tx-3)',fontSize:12,padding:'16px 12px',textAlign:'center'}}>No clients have shared with you yet</p>}
+        {cases.map((c,i) => (
+          <div key={c.bridgeRoomId} onClick={()=>openCase(c.bridgeRoomId)} className="anim-sl"
+            style={{animationDelay:`${i*40}ms`,padding:'11px 12px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:2,
+              background:activeCase===c.bridgeRoomId?'var(--bg-4)':'transparent',
+              borderLeft:activeCase===c.bridgeRoomId?'2px solid var(--gold)':'2px solid transparent',transition:'all .15s'}}
+            onMouseEnter={e=>{if(activeCase!==c.bridgeRoomId)e.currentTarget.style.background='var(--bg-3)'}}
+            onMouseLeave={e=>{if(activeCase!==c.bridgeRoomId)e.currentTarget.style.background='transparent'}}>
+            <span style={{fontSize:13,fontWeight:activeCase===c.bridgeRoomId?600:400,display:'block',color:activeCase===c.bridgeRoomId?'var(--tx-0)':'var(--tx-1)'}}>
+              {c.sharedData.full_name || c.clientUserId}
+            </span>
+            <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{Object.keys(c.sharedData).length} fields visible</span>
+          </div>
+        ))}
+        <div style={{padding:'16px 12px'}}>
+          <button onClick={()=>loadCases()} className="b-gho b-sm" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
+            <I n="search" s={13}/>Refresh Cases
+          </button>
+        </div>
+      </div>
+
+      <div style={{padding:'10px 12px',borderTop:'1px solid var(--border-0)'}}>
+        <button onClick={onLogout} className="b-gho b-sm" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><I n="logout" s={13}/>Logout</button>
+      </div>
+    </div>
+
+    {/* Main */}
+    <div style={{flex:1,overflow:'auto',padding:28}}>
+      {!activeCase ? (
+        <div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+          <h2 style={{fontFamily:'var(--serif)',fontSize:24,fontWeight:700,letterSpacing:'-0.02em',marginBottom:6}}>Provider Dashboard</h2>
+          <p style={{color:'var(--tx-1)',fontSize:13,marginBottom:28}}>You can only see data that clients have explicitly shared with you. Each case is a separate encrypted bridge room.</p>
+
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))',gap:12,marginBottom:28}}>
+            {[
+              {l:'Active Cases',v:cases.length,c:'gold',i:'briefcase'},
+              {l:'Encryption',v:'Dual-layer',c:'green',i:'lock'},
+              {l:'Access Model',v:'Client-granted',c:'teal',i:'shield'},
+            ].map((s,i)=>(
+              <div key={i} className="card"><span className="section-label">{s.l.toUpperCase()}</span>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4}}>
+                  <span style={{fontSize:20,fontWeight:700}}>{s.v}</span>
+                  <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={16}/></span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {cases.length > 0 && <div>
+            <span className="section-label">ALL CASES</span>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))',gap:12,marginTop:8}}>
+              {cases.map((c,i)=>(
+                <div key={c.bridgeRoomId} className="card-h" onClick={()=>openCase(c.bridgeRoomId)}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                    <span style={{fontSize:15,fontWeight:600}}>{c.sharedData.full_name || 'Anonymous Client'}</span>
+                    <I n="chevR" s={14} c="var(--tx-3)"/>
+                  </div>
+                  {c.sharedData.email && <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:8}}>{c.sharedData.email}</span>}
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    <span className="tag tag-green"><I n="lock" s={9}/>E2EE</span>
+                    <span className="tag tag-blue">{Object.keys(c.sharedData).length} fields</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>}
+
+          <div style={{background:'var(--gold-dim)',border:'1px solid var(--gold-mid)',borderRadius:'var(--r)',padding:'16px 20px',marginTop:24,display:'flex',gap:12,alignItems:'flex-start'}}>
+            <I n="eye" s={18} c="var(--gold)"/>
+            <div>
+              <span style={{fontSize:13,fontWeight:600,display:'block',marginBottom:4}}>Read-Only Data Access</span>
+              <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>As a provider, you cannot modify client vault data. You can view shared fields, send messages, and request additional information. Clients can revoke your access at any time — including hard revoke, which destroys all encryption keys and rotates the bridge room.</span>
+            </div>
+          </div>
+        </div>
+      ) : activeCaseData ? (
+        <div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+          <button onClick={()=>setActiveCase(null)} className="b-gho b-sm" style={{marginBottom:16,display:'flex',alignItems:'center',gap:5}}><I n="back" s={14}/>All Cases</button>
+
+          <div style={{marginBottom:24}}>
+            <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>
+              {activeCaseData.sharedData.full_name || activeCaseData.clientUserId}
+            </h2>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6}}>
+              <span className="tag tag-green"><I n="lock" s={9}/>Megolm + AES-GCM</span>
+              <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)'}}>Client-owned bridge</span>
+            </div>
+          </div>
+
+          {/* Shared data by category */}
+          <div className="card" style={{marginBottom:20}}>
+            <span className="section-label">SHARED DATA — CLIENT CONTROLLED</span>
+            <div style={{marginTop:8}}>
+              {FIELD_CATEGORIES.map(cat => {
+                const fields = VAULT_FIELDS.filter(f => f.category === cat && activeCaseData.sharedData[f.key]);
+                if (fields.length === 0) return null;
+                return <div key={cat} style={{marginBottom:14}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                    <span style={{color:`var(--${CAT_COLORS[cat]})`}}><I n={CAT_ICONS[cat]} s={13}/></span>
+                    <span style={{fontSize:11,fontFamily:'var(--mono)',color:'var(--tx-2)',letterSpacing:'.05em'}}>{CAT_LABELS[cat].toUpperCase()}</span>
+                  </div>
+                  {fields.map(f => (
+                    <div key={f.key} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid var(--border-0)'}}>
+                      <span style={{fontSize:12.5,color:'var(--tx-1)'}}>{f.label}</span>
+                      <span style={{fontSize:13,fontFamily:f.sensitive?'var(--mono)':'var(--sans)',fontWeight:500,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {activeCaseData.sharedData[f.key]}
+                      </span>
+                    </div>
+                  ))}
+                </div>;
+              })}
+              {Object.keys(activeCaseData.sharedData).length === 0 && <p style={{color:'var(--tx-3)',fontSize:12.5,padding:'12px 0'}}>Client hasn't shared any fields yet</p>}
+            </div>
+            <div style={{marginTop:12,padding:'10px 14px',background:'var(--bg-3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:8}}>
+              <I n="eyeOff" s={14} c="var(--tx-3)"/>
+              <span style={{fontSize:11,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
+                {VAULT_FIELDS.length - Object.keys(activeCaseData.sharedData).length} fields exist but are not shared with you
+              </span>
+            </div>
+          </div>
+
+          {/* Request info */}
+          <div className="card" style={{marginBottom:20}}>
+            <span className="section-label">REQUEST INFORMATION</span>
+            <p style={{fontSize:12,color:'var(--tx-2)',marginBottom:10}}>Ask the client to share additional fields or documents</p>
+            <div style={{display:'flex',gap:8}}>
+              <input value={requestText} onChange={e=>setRequestText(e.target.value)} placeholder="e.g. Could you share your employment documents?"
+                onKeyDown={e=>{if(e.key==='Enter')handleSendRequest()}}/>
+              <button onClick={handleSendRequest} className="b-pri" style={{whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}><I n="send" s={13}/>Request</button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="card">
+            <span className="section-label">BRIDGE MESSAGES</span>
+            <div style={{maxHeight:280,overflow:'auto',marginBottom:14}}>
+              {messages.length===0?
+                <p style={{color:'var(--tx-3)',fontSize:12.5,padding:'16px 0',textAlign:'center'}}>No messages yet</p>
+              : messages.map((msg,i) => (
+                <div key={msg.id||i} style={{padding:'10px 0',borderBottom:'1px solid var(--border-0)'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                    <span style={{fontFamily:'var(--mono)',fontSize:10.5,color:msg.sender===svc.userId?'var(--gold)':'var(--teal)'}}>
+                      {msg.sender===svc.userId?'You (Provider)':'Client'}
+                    </span>
+                    <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)'}}>{msg.ts?new Date(msg.ts).toLocaleString():''}</span>
+                  </div>
+                  <p style={{fontSize:13,lineHeight:1.55,color:'var(--tx-1)'}}>{msg.content?.body}</p>
+                </div>
+              ))}
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <input value={msgText} onChange={e=>setMsgText(e.target.value)} placeholder="Message (E2EE)..."
+                onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey)handleSendMsg()}} style={{flex:1}}/>
+              <button onClick={handleSendMsg} className="b-pri" style={{display:'flex',alignItems:'center',gap:5}}><I n="send" s={14}/></button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  </div>;
+};
+
+/* ═══════════════════ MAIN APP ═══════════════════ */
+const App = () => {
+  const [session, setSession] = useState(null);
+  const [accountType, setAccountType] = useState(null); // 'client' | 'provider'
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, type='info') => setToast({msg, type, k:Date.now()});
+
+  const handleLogin = (s) => { setSession(s); };
+  const handleLogout = async () => { await svc.logout(); setSession(null); setAccountType(null); };
+  const handleAccountType = (type) => { setAccountType(type); };
+
+  if (!session) return <LoginScreen onLogin={handleLogin}/>;
+  if (!accountType) return <AccountTypeScreen onSelect={handleAccountType}/>;
+
+  return <>
+    {accountType === 'client' ?
+      <ClientApp session={session} onLogout={handleLogout} showToast={showToast}/> :
+      <ProviderApp session={session} onLogout={handleLogout} showToast={showToast}/>
+    }
+    {toast && <Toast key={toast.k} msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
+  </>;
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
