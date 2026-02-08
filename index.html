@@ -1849,15 +1849,14 @@ const LoginScreen = ({onLogin}) => {
 /* ═══════════════════ ACCOUNT TYPE SELECTOR ═══════════════════ */
 const AccountTypeScreen = ({onSelect}) => (
   <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
-    <div className="anim-up" style={{textAlign:'center',maxWidth:900,padding:20}}>
+    <div className="anim-up" style={{textAlign:'center',maxWidth:700,padding:20}}>
       <h2 style={{fontFamily:'var(--serif)',fontSize:28,fontWeight:700,letterSpacing:'-0.02em',marginBottom:8}}>Choose your role</h2>
       <p style={{color:'var(--tx-1)',fontSize:14,marginBottom:36}}>This determines your data access model and room topology</p>
       <div style={{display:'flex',gap:20,justifyContent:'center',flexWrap:'wrap'}}>
         {[
           {type:'client',icon:'shield',title:'Client',desc:'Own your data vault. Record observations. Share specific fields with chosen providers. Revoke access at any time.',color:'teal',tag:'DATA OWNER'},
-          {type:'provider',icon:'briefcase',title:'Provider',desc:'Join an existing organization or work independently. View only what clients share. Add case notes and assessments.',color:'gold',tag:'INDIVIDUAL'},
-          {type:'organization',icon:'users',title:'Organization',desc:'Create an org (direct service, coordinating body, clinical practice). Invite staff with roles. Manage cases across your team. Join networks.',color:'blue',tag:'ORG ADMIN'},
-        ].map(o=><div key={o.type} className="card-h" onClick={()=>onSelect(o.type)} style={{width:250,textAlign:'left',padding:28}}>
+          {type:'provider',icon:'briefcase',title:'Provider',desc:'Work independently or create an organization. View only what clients share. Add case notes and assessments. Create or join orgs and networks.',color:'gold',tag:'PROVIDER'},
+        ].map(o=><div key={o.type} className="card-h" onClick={()=>onSelect(o.type)} style={{width:280,textAlign:'left',padding:28}}>
           <div style={{width:48,height:48,borderRadius:'var(--r-lg)',background:`var(--${o.color}-dim)`,display:'flex',alignItems:'center',justifyContent:'center',color:`var(--${o.color})`,marginBottom:16}}><I n={o.icon} s={24}/></div>
           <h3 style={{fontSize:18,fontWeight:700,marginBottom:8}}>{o.title}</h3>
           <p style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6}}>{o.desc}</p>
@@ -2449,7 +2448,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [metrics, setMetrics] = useState([]);
   const [networkMembers, setNetworkMembers] = useState([]);
   const [activeCase, setActiveCase] = useState(null);
-  const [view, setView] = useState('dashboard'); // dashboard|case|metrics|schema|network|activity
+  const [view, setView] = useState('dashboard'); // dashboard|case|metrics|schema|network|activity|staff|org-settings
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState('');
@@ -2465,20 +2464,34 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [provObsNotes, setProvObsNotes] = useState('');
   const [provObservations, setProvObservations] = useState([]);
   const [initError, setInitError] = useState(null);
+  // Organization context — orgs are a feature within the provider experience
+  const [orgRoom, setOrgRoom] = useState(null);
+  const [orgMeta, setOrgMeta] = useState({});
+  const [staff, setStaff] = useState([]);
+  const [orgRole, setOrgRole] = useState(null); // null = no org, 'admin', 'case_manager', etc.
+  const [createOrgModal, setCreateOrgModal] = useState(false);
+  const [joinOrgModal, setJoinOrgModal] = useState(false);
+  const [joinOrgId, setJoinOrgId] = useState('');
+  const [setupData, setSetupData] = useState({name:'',type:'direct_service',service_area:'',languages:'en'});
+  const [inviteModal, setInviteModal] = useState(false);
+  const [inviteUserId, setInviteUserId] = useState('');
+  const [inviteRole, setInviteRole] = useState('case_manager');
 
   useEffect(() => { initProvider(); }, []);
 
   const rosterFrame = (room) => ({type:'roster',room:room||rosterRoom,role:'provider',epistemic:'MEANT'});
   const bridgeFrame = (room) => ({type:'bridge',room,role:'provider',epistemic:'MEANT'});
   const networkFrame = (room) => ({type:'network',room:room||networkRoom,role:'provider',epistemic:'MEANT'});
+  const orgFrame = (room) => ({type:'org',room:room||orgRoom,role:orgRole||'admin',epistemic:'MEANT'});
 
   const initProvider = async () => {
     setLoading(true);
     setInitError(null);
     try {
       // Single-pass scan: fetch all Khora state across rooms in one request
-      const scanned = await svc.scanRooms();
+      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER]);
       let roster=null, metricsR=null, schema=null, network=null;
+      let detectedOrg=null, detectedOrgRole=null;
       const bridgeData = [];
       for (const [rid, state] of Object.entries(scanned)) {
         const id = state[EVT.IDENTITY];
@@ -2486,6 +2499,16 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         if (id?.account_type==='metrics'&&id.owner===svc.userId) metricsR=rid;
         if (id?.account_type==='schema'&&id.owner===svc.userId) schema=rid;
         if (id?.account_type==='network') network=rid;
+        // Detect org rooms — owned or joined as staff
+        if (id?.account_type==='organization') {
+          if (id.owner===svc.userId) {
+            detectedOrg=rid; detectedOrgRole='admin';
+          } else {
+            const orgRoster = state[EVT.ORG_ROSTER];
+            const entry = orgRoster?.staff?.find(s=>s.userId===svc.userId);
+            if (entry) { detectedOrg=rid; detectedOrgRole=entry.role; }
+          }
+        }
         const meta = state[EVT.BRIDGE_META];
         if (meta && meta.provider===svc.userId && meta.status!=='tombstoned') {
           bridgeData.push({rid, meta, refs: state[EVT.BRIDGE_REFS]});
@@ -2520,6 +2543,13 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       }
       setRosterRoom(roster); setMetricsRoom(metricsR); setSchemaRoom(schema);
       if (network) { setNetworkRoom(network); await loadNetworkMembers(network); }
+      // Load org context if detected during scan
+      if (detectedOrg) {
+        setOrgRoom(detectedOrg); setOrgRole(detectedOrgRole);
+        const orgState = scanned[detectedOrg];
+        if (orgState?.[EVT.ORG_METADATA]) setOrgMeta(orgState[EVT.ORG_METADATA]);
+        if (orgState?.[EVT.ORG_ROSTER]?.staff) setStaff(orgState[EVT.ORG_ROSTER].staff);
+      }
       // Process bridge data collected during scan (no second pass needed)
       await loadCasesFromScan(bridgeData, metricsR);
       await loadMetrics(metricsR);
@@ -2644,19 +2674,20 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Error: '+e.message,'error'); }
   };
 
-  // Create a network
+  // Create a network — requires an org
   const handleCreateNetwork = async () => {
     if (!networkName.trim()) return;
+    if (!orgRoom) { showToast('Create or join an organization before creating a network','warn'); return; }
     try {
       const nRoom = await svc.createRoom(`[Khora Network] ${networkName}`, 'Network governance room', [
         {type:EVT.IDENTITY,state_key:'',content:{account_type:'network',name:networkName,owner:svc.userId,created:Date.now()}},
-        {type:EVT.NET_MEMBERS,state_key:'',content:{organizations:[{id:svc.userId,joined:Date.now(),role:'admin'}],
-          governance:{schema_changes_require:'admin_approval',admins:[svc.userId]}}},
+        {type:EVT.NET_MEMBERS,state_key:'',content:{organizations:[{id:orgRoom,name:orgMeta.name||'',joined:Date.now(),role:'admin'}],
+          governance:{schema_changes_require:'admin_approval',admins:[orgRoom]}}},
       ]);
       // Seed network schema
       for (const p of DEFAULT_PROMPTS) await svc.setState(nRoom, EVT.SCHEMA_PROMPT, {...p, propagation:'standard', network:networkName}, `net:${p.key}`);
       for (const d of DEFAULT_DEFINITIONS) await svc.setState(nRoom, EVT.SCHEMA_DEF, {...d, propagation:'required', network:networkName}, `net:${d.key}`);
-      await emitOp(nRoom, 'INS', {entity:'network',field:networkName}, {created_by:svc.userId}, networkFrame(nRoom));
+      await emitOp(nRoom, 'INS', {entity:'network',field:networkName}, {created_by:svc.userId,org:orgMeta.name}, networkFrame(nRoom));
       setNetworkRoom(nRoom);
       await loadNetworkMembers(nRoom);
       setNetworkModal(false); setNetworkName('');
@@ -2664,11 +2695,11 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Error: '+e.message,'error'); }
   };
 
-  // Join existing network by room ID
+  // Join existing network by room ID — requires an org
   const handleJoinNetwork = async () => {
     if (!joinNetworkId.trim()) return;
+    if (!orgRoom) { showToast('Create or join an organization before joining a network','warn'); return; }
     try {
-      // Try to join the room
       if (svc.client) { await svc.client.joinRoom(joinNetworkId); }
       else { await svc._api('POST', `/join/${encodeURIComponent(joinNetworkId)}`, {}); }
       setNetworkRoom(joinNetworkId);
@@ -2677,6 +2708,96 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       showToast('Joined network','success');
     } catch(e) { showToast('Failed to join: '+e.message,'error'); }
   };
+
+  // ─── Organization management ───
+  const handleCreateOrg = async () => {
+    if (!setupData.name.trim()) return;
+    try {
+      const org = await svc.createRoom(`[Khora Org] ${setupData.name}`, `Organization: ${setupData.name}`, [
+        {type:EVT.IDENTITY,state_key:'',content:{account_type:'organization',owner:svc.userId,created:Date.now()}},
+        {type:EVT.ORG_METADATA,state_key:'',content:{
+          name:setupData.name, type:setupData.type, service_area:setupData.service_area,
+          languages:setupData.languages.split(',').map(s=>s.trim()), created:Date.now()}},
+        {type:EVT.ORG_ROSTER,state_key:'',content:{staff:[
+          {userId:svc.userId,role:'admin',joined:Date.now()}
+        ]}},
+        {type:EVT.ROSTER_ASSIGN,state_key:'',content:{}},
+      ]);
+      await emitOp(org, 'DES', {entity:'organization',designation:setupData.name},
+        {type:setupData.type,service_area:setupData.service_area}, orgFrame(org));
+      await emitOp(org, 'INS', {entity:'staff',field:svc.userId},
+        {role:'admin',initiated_by:'org_creation'}, orgFrame(org));
+      setOrgRoom(org); setOrgRole('admin');
+      setOrgMeta({name:setupData.name,type:setupData.type,service_area:setupData.service_area});
+      setStaff([{userId:svc.userId,role:'admin',joined:Date.now()}]);
+      setCreateOrgModal(false);
+      setSetupData({name:'',type:'direct_service',service_area:'',languages:'en'});
+      showToast(`Organization "${setupData.name}" created`,'success');
+      // Create supporting rooms for org
+      const orgMetricsR = await svc.createRoom('[Khora Metrics]','Org anonymized metrics',[
+        {type:EVT.IDENTITY,state_key:'',content:{account_type:'metrics',owner:svc.userId,created:Date.now()}},
+      ]);
+      const orgSchema = await svc.createRoom('[Khora Schema]','Org schema definitions',[
+        {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
+      ]);
+      for (const p of DEFAULT_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_PROMPT, p, p.key);
+      for (const pp of DEFAULT_PROVIDER_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_PROMPT, pp, pp.key);
+      for (const d of DEFAULT_DEFINITIONS) await svc.setState(orgSchema, EVT.SCHEMA_DEF, d, d.key);
+      for (const a of DEFAULT_AUTHORITIES) await svc.setState(orgSchema, EVT.SCHEMA_AUTHORITY, a, a.id);
+      await svc.setState(orgSchema, EVT.SCHEMA_TRANSFORM, {id:'transform_default',transforms:DEFAULT_TRANSFORMS}, 'default');
+    } catch(e) { showToast('Error creating org: '+e.message,'error'); }
+  };
+
+  const handleJoinOrg = async () => {
+    if (!joinOrgId.trim()) return;
+    try {
+      if (svc.client) { await svc.client.joinRoom(joinOrgId); }
+      else { await svc._api('POST', `/join/${encodeURIComponent(joinOrgId)}`, {}); }
+      // Load the org metadata
+      const meta = await svc.getState(joinOrgId, EVT.ORG_METADATA);
+      const roster = await svc.getState(joinOrgId, EVT.ORG_ROSTER);
+      const entry = roster?.staff?.find(s=>s.userId===svc.userId);
+      setOrgRoom(joinOrgId); setOrgRole(entry?.role||'read_only');
+      if (meta) setOrgMeta(meta);
+      if (roster?.staff) setStaff(roster.staff);
+      setJoinOrgModal(false); setJoinOrgId('');
+      showToast(`Joined organization${meta?.name?' "'+meta.name+'"':''}`,'success');
+    } catch(e) { showToast('Failed to join org: '+e.message,'error'); }
+  };
+
+  const handleInviteStaff = async () => {
+    if (!inviteUserId.trim()||!orgRoom) return;
+    try {
+      await svc.invite(orgRoom, inviteUserId);
+      const newStaff = [...staff, {userId:inviteUserId,role:inviteRole,joined:Date.now()}];
+      await svc.setState(orgRoom, EVT.ORG_ROSTER, {staff:newStaff});
+      await emitOp(orgRoom, 'CON', {source:orgRoom,destination:inviteUserId,relationship:'staff'},
+        {role:inviteRole,invited_by:svc.userId}, orgFrame());
+      setStaff(newStaff);
+      setInviteModal(false); setInviteUserId('');
+      showToast(`Invited ${inviteUserId} as ${ORG_ROLE_LABELS[inviteRole]}`,'success');
+    } catch(e) { showToast('Invite failed: '+e.message,'error'); }
+  };
+
+  const handleRemoveStaff = async (userId) => {
+    if (userId===svc.userId) { showToast('Cannot remove yourself','error'); return; }
+    try {
+      await svc.kick(orgRoom, userId, 'Removed from organization');
+      const newStaff = staff.filter(s=>s.userId!==userId);
+      await svc.setState(orgRoom, EVT.ORG_ROSTER, {staff:newStaff});
+      await emitOp(orgRoom, 'NUL', {entity:'staff',field:userId},
+        {reason:'removed',removed_by:svc.userId}, orgFrame());
+      setStaff(newStaff);
+      showToast(`Removed ${userId}`,'warn');
+    } catch(e) { showToast('Error: '+e.message,'error'); }
+  };
+
+  // Determine network role based on org membership
+  const networkRole = useMemo(() => {
+    if (!networkRoom || !orgRoom) return null;
+    const myOrg = networkMembers.find(m => m.id === orgRoom || m.id === svc.userId);
+    return myOrg?.role || 'member';
+  }, [networkRoom, orgRoom, networkMembers]);
 
   const openCase = (bid) => { setView('case'); setActiveCase(bid); loadMessages(bid); loadProviderObservations(bid); };
   const activeCaseData = cases.find(c=>c.bridgeRoomId===activeCase);
@@ -2709,7 +2830,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
 
   return <div style={{display:'flex',height:'100%'}}>
     {/* Sidebar */}
-    <div style={{width:250,minWidth:250,height:'100%',background:'var(--bg-1)',borderRight:'1px solid var(--border-0)',display:'flex',flexDirection:'column'}}>
+    <div style={{width:260,minWidth:260,height:'100%',background:'var(--bg-1)',borderRight:'1px solid var(--border-0)',display:'flex',flexDirection:'column'}}>
       <div style={{padding:'18px 14px 14px',borderBottom:'1px solid var(--border-0)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
           <div style={{width:28,height:28,borderRadius:'var(--r)',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)'}}><I n="briefcase" s={15}/></div>
@@ -2721,8 +2842,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         </div>
       </div>
       <div style={{flex:1,overflow:'auto',padding:'6px 6px'}}>
+        {/* Personal nav */}
         {[{id:'dashboard',icon:'briefcase',label:'Dashboard'},{id:'metrics',icon:'bar',label:'Metrics'},
-          {id:'schema',icon:'grid',label:'Schema'},{id:'network',icon:'globe',label:'Network'},
+          {id:'schema',icon:'grid',label:'Schema'},
           {id:'activity',icon:'zap',label:'Activity Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
@@ -2734,6 +2856,39 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           onMouseLeave={e=>{if(!(view===item.id&&!activeCase))e.currentTarget.style.background='transparent'}}>
           <I n={item.icon} s={14}/><span style={{fontSize:12.5,fontWeight:view===item.id?600:400}}>{item.label}</span>
         </div>)}
+
+        {/* Organization section */}
+        <div style={{padding:'14px 10px 4px'}}><span className="section-label">ORGANIZATION</span></div>
+        {orgRoom ? <>
+          <div style={{padding:'6px 10px',marginBottom:4}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <div style={{width:20,height:20,borderRadius:'var(--r)',background:'var(--blue-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blue)'}}><I n="users" s={11}/></div>
+              <span style={{fontSize:11.5,fontWeight:600,color:'var(--tx-0)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{orgMeta.name||'Organization'}</span>
+            </div>
+            {orgMeta.type&&<span className="tag tag-teal" style={{fontSize:8,marginTop:4,marginLeft:26}}>{ORG_TYPE_LABELS[orgMeta.type]||orgMeta.type}</span>}
+          </div>
+          {[
+            {id:'org-settings',icon:'settings',label:'Org Settings',reqRole:'admin'},
+            {id:'staff',icon:'users',label:'Staff'},
+            {id:'network',icon:'globe',label:'Network'},
+          ].filter(item=>!item.reqRole||orgRole===item.reqRole).map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null)}}
+            style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
+              background:view===item.id&&!activeCase?'var(--bg-4)':'transparent',
+              borderLeft:view===item.id&&!activeCase?'2px solid var(--blue)':'2px solid transparent',
+              display:'flex',alignItems:'center',gap:8,transition:'all .15s',
+              color:view===item.id&&!activeCase?'var(--tx-0)':'var(--tx-1)'}}
+            onMouseEnter={e=>{if(!(view===item.id&&!activeCase))e.currentTarget.style.background='var(--bg-3)'}}
+            onMouseLeave={e=>{if(!(view===item.id&&!activeCase))e.currentTarget.style.background='transparent'}}>
+            <I n={item.icon} s={14}/><span style={{fontSize:12.5,fontWeight:view===item.id?600:400}}>{item.label}</span>
+          </div>)}
+        </> : <div style={{padding:'4px 10px',display:'flex',flexDirection:'column',gap:4}}>
+          <button onClick={()=>setCreateOrgModal(true)} className="b-gho b-sm" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+            <I n="plus" s={12}/>Create Organization</button>
+          <button onClick={()=>setJoinOrgModal(true)} className="b-gho b-xs" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+            <I n="users" s={10}/>Join Organization</button>
+        </div>}
+
+        {/* Cases section */}
         <div style={{padding:'14px 10px 4px'}}><span className="section-label">CASES ({cases.length})</span></div>
         {cases.length===0&&<p style={{color:'var(--tx-3)',fontSize:11.5,padding:'12px 10px',textAlign:'center'}}>No clients shared with you yet</p>}
         {cases.map((c,i)=><div key={c.bridgeRoomId} onClick={()=>openCase(c.bridgeRoomId)}
@@ -2763,8 +2918,20 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       {view==='dashboard'&&!activeCase&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
         <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:4}}>Provider Dashboard</h2>
         <p style={{color:'var(--tx-1)',fontSize:12.5,marginBottom:24}}>You can only see data clients have explicitly shared. Each case is a separate encrypted bridge room.</p>
+
+        {/* Org context banner */}
+        {orgRoom&&<div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'12px 16px',marginBottom:20,display:'flex',alignItems:'center',gap:12}}>
+          <div style={{width:32,height:32,borderRadius:'var(--r)',background:'var(--bg-3)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blue)'}}><I n="users" s={16}/></div>
+          <div style={{flex:1}}>
+            <span style={{fontSize:13,fontWeight:600,display:'block'}}>{orgMeta.name||'Organization'}</span>
+            <span style={{fontSize:10.5,color:'var(--tx-2)'}}>{ORG_TYPE_LABELS[orgMeta.type]||orgMeta.type} · {staff.length} staff · {orgRole}</span>
+          </div>
+          <button onClick={()=>setView('org-settings')} className="b-gho b-xs"><I n="settings" s={11}/></button>
+        </div>}
+
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10,marginBottom:24}}>
-          {[{l:'Active Cases',v:cases.length,c:'gold',i:'briefcase'},{l:'Encryption',v:'Dual-layer',c:'green',i:'lock'},
+          {[{l:'Active Cases',v:cases.length,c:'gold',i:'briefcase'},
+            {l:orgRoom?'Staff':'Organization',v:orgRoom?`${staff.length} members`:'Not set up',c:orgRoom?'blue':'teal',i:orgRoom?'users':'plus'},
             {l:'Access Model',v:'Client-granted',c:'teal',i:'shield'},{l:'Metric Events',v:metrics.length,c:'orange',i:'bar'}
           ].map((s,i)=><div key={i} className="card" style={{padding:14}}><span className="section-label">{s.l.toUpperCase()}</span>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
@@ -2785,7 +2952,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           </div></>}
         <div style={{background:'var(--gold-dim)',border:'1px solid var(--gold-mid)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
           <I n="eye" s={16} c="var(--gold)"/>
-          <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>As a provider, you cannot modify client vault data. Clients can revoke your access at any time — including hard revoke, which destroys all keys.</span>
+          <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>As a provider, you cannot modify client vault data. Clients can revoke your access at any time.{!orgRoom&&' Create or join an organization to manage staff, cases across your team, and participate in networks.'}</span>
         </div>
       </div>}
 
@@ -2933,14 +3100,81 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       {/* SCHEMA WORKBENCH */}
       {view==='schema'&&<SchemaWorkbench isOrg={false}/>}
 
-      {/* NETWORK VIEW (Addendum E) */}
+      {/* ORG SETTINGS VIEW (admin only) */}
+      {view==='org-settings'&&orgRoom&&orgRole==='admin'&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+        <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:4}}>Organization Settings</h2>
+        <p style={{color:'var(--tx-1)',fontSize:12.5,marginBottom:24}}>Manage your organization metadata and configuration.</p>
+        <div className="card" style={{marginBottom:16}}>
+          <span className="section-label">ORGANIZATION DETAILS</span>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginTop:8}}>
+            {[{l:'Name',v:orgMeta.name||'—'},{l:'Type',v:ORG_TYPE_LABELS[orgMeta.type]||orgMeta.type||'—'},
+              {l:'Service Area',v:orgMeta.service_area||'—'},{l:'Languages',v:(orgMeta.languages||[]).join(', ')||'—'},
+              {l:'Staff',v:`${staff.length} members`},{l:'Room',v:orgRoom?.slice(0,24)+'…'}
+            ].map((s,i)=><div key={i}><span className="section-label">{s.l.toUpperCase()}</span>
+              <span style={{fontSize:13,fontWeight:500,display:'block'}}>{s.v}</span></div>)}
+          </div>
+        </div>
+        <div className="card">
+          <span className="section-label">ORG ROOM ID</span>
+          <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--tx-1)',background:'var(--bg-3)',padding:'8px 12px',borderRadius:'var(--r)',wordBreak:'break-all',marginTop:4}}>{orgRoom}</div>
+          <p style={{fontSize:11,color:'var(--tx-2)',marginTop:8}}>Share this room ID with providers who want to join your organization.</p>
+        </div>
+      </div>}
+
+      {/* STAFF ROSTER VIEW */}
+      {view==='staff'&&orgRoom&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
+          <div><h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Staff Roster</h2>
+            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Manage staff membership and roles. Each role determines case access level.</p></div>
+          {orgRole==='admin'&&<button onClick={()=>setInviteModal(true)} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}><I n="plus" s={14}/>Invite Staff</button>}
+        </div>
+        <div className="card" style={{marginBottom:16}}>
+          <span className="section-label">ROLE DEFINITIONS</span>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:6}}>
+            {ORG_ROLES.map(r=><div key={r} style={{padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+              <span className="tag tag-blue" style={{fontSize:9,marginBottom:4}}>{ORG_ROLE_LABELS[r]}</span>
+              <p style={{fontSize:10.5,color:'var(--tx-2)',marginTop:2}}>
+                {r==='admin'?'Full access. Manage staff, see all cases, configure schema.':
+                 r==='case_manager'?'Assigned cases only. Full read/write on assigned bridges.':
+                 r==='field_worker'?'Assigned cases. Record encounters. Limited to own observations.':
+                 r==='intake_coordinator'?'Create new bridges. Run intake assessments. Route to case managers.':
+                 'View aggregate dashboards only. No PII access.'}
+              </p>
+            </div>)}
+          </div>
+        </div>
+        <div className="card">
+          <span className="section-label">CURRENT STAFF ({staff.length})</span>
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>
+            {staff.map(s=><div key={s.userId} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid var(--border-0)'}}>
+              <div>
+                <span style={{fontSize:13,fontWeight:500,display:'block'}}>{s.userId}</span>
+                <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>Joined {s.joined?new Date(s.joined).toLocaleDateString():'—'}</span>
+              </div>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                <span className={`tag ${s.role==='admin'?'tag-gold':'tag-blue'}`} style={{fontSize:9}}>{ORG_ROLE_LABELS[s.role]}</span>
+                {orgRole==='admin'&&s.userId!==svc.userId&&<button onClick={()=>handleRemoveStaff(s.userId)} className="b-gho b-xs" style={{color:'var(--red)'}}><I n="trash" s={11}/></button>}
+              </div>
+            </div>)}
+          </div>
+        </div>
+      </div>}
+
+      {/* NETWORK VIEW (Addendum E) — org-to-org relationships */}
       {view==='network'&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
         <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:4}}>Network</h2>
-        <p style={{color:'var(--tx-1)',fontSize:12.5,marginBottom:20}}>Shared definitions that propagate. A coalition, network, or partnership. Organizations join voluntarily; the network defines shared vocabulary.</p>
+        <p style={{color:'var(--tx-1)',fontSize:12.5,marginBottom:20}}>Networks are org-to-org relationships. Organizations join voluntarily; the network defines shared vocabulary that propagates.</p>
 
-        {!networkRoom?<div>
+        {!orgRoom?<div>
+          <div className="card" style={{textAlign:'center',padding:'30px',borderStyle:'dashed'}}>
+            <I n="users" s={32}/><p style={{color:'var(--tx-2)',marginTop:8,marginBottom:8}}>Create or join an organization to participate in networks</p>
+            <p style={{fontSize:11,color:'var(--tx-3)'}}>Networks are org-to-org relationships. An independent provider who wants to join a network first needs to create an organization.</p>
+          </div>
+        </div>
+        :!networkRoom?<div>
           <div className="card" style={{textAlign:'center',padding:'30px',borderStyle:'dashed',marginBottom:16}}>
             <I n="globe" s={32}/><p style={{color:'var(--tx-2)',marginTop:8}}>Not part of a network yet</p>
+            <p style={{fontSize:11,color:'var(--tx-3)',marginTop:4}}>Your org "{orgMeta.name}" can create or join a network.</p>
           </div>
           <div style={{display:'flex',gap:10}}>
             <button onClick={()=>setNetworkModal(true)} className="b-pri" style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
@@ -2954,17 +3188,62 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <span className="tag tag-green"><I n="globe" s={10}/>NETWORK</span>
-                <span style={{fontSize:15,fontWeight:700}}>Connected</span></div>
+                <span style={{fontSize:15,fontWeight:700}}>Connected</span>
+                <span className={`tag ${networkRole==='admin'?'tag-gold':'tag-blue'}`} style={{fontSize:9}}>{networkRole==='admin'?'ADMIN':'MEMBER'}</span>
+              </div>
               <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)'}}>{networkRoom.slice(0,24)}…</span>
             </div>
+
+            {/* Network Admin controls */}
+            {networkRole==='admin'&&<div style={{marginBottom:16}}>
+              <span className="section-label">NETWORK ADMINISTRATION</span>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:6}}>
+                <div style={{padding:'10px 14px',background:'var(--gold-dim)',borderRadius:'var(--r)',border:'1px solid var(--gold-mid)'}}>
+                  <span style={{fontSize:11,fontWeight:600,color:'var(--gold)',display:'block',marginBottom:2}}>Invite Organization</span>
+                  <span style={{fontSize:10,color:'var(--tx-2)'}}>Invite orgs by room ID or token</span>
+                </div>
+                <div style={{padding:'10px 14px',background:'var(--purple-dim)',borderRadius:'var(--r)',border:'1px solid rgba(167,139,250,.15)'}}>
+                  <span style={{fontSize:11,fontWeight:600,color:'var(--purple)',display:'block',marginBottom:2}}>Schema Proposals</span>
+                  <span style={{fontSize:10,color:'var(--tx-2)'}}>Review pending schema changes</span>
+                </div>
+                <div style={{padding:'10px 14px',background:'var(--blue-dim)',borderRadius:'var(--r)',border:'1px solid rgba(91,156,245,.15)'}}>
+                  <span style={{fontSize:11,fontWeight:600,color:'var(--blue)',display:'block',marginBottom:2}}>Authority Catalog</span>
+                  <span style={{fontSize:10,color:'var(--tx-2)'}}>Shared external authorities</span>
+                </div>
+                <div style={{padding:'10px 14px',background:'var(--teal-dim)',borderRadius:'var(--r)',border:'1px solid rgba(62,201,176,.15)'}}>
+                  <span style={{fontSize:11,fontWeight:600,color:'var(--teal)',display:'block',marginBottom:2}}>Metrics Aggregation</span>
+                  <span style={{fontSize:10,color:'var(--tx-2)'}}>Configure cross-org aggregation</span>
+                </div>
+              </div>
+            </div>}
+
             <span className="section-label">MEMBER ORGANIZATIONS ({networkMembers.length})</span>
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              {networkMembers.map((m,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
-                <span style={{fontSize:12,fontFamily:'var(--mono)'}}>{m.id}</span>
-                <span className={`tag ${m.role==='admin'?'tag-gold':'tag-blue'}`} style={{fontSize:9}}>{m.role}</span>
+              {networkMembers.map((m,i)=><div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--border-0)'}}>
+                <div>
+                  <span style={{fontSize:12,fontWeight:500}}>{m.name||m.id}</span>
+                  {m.name&&<span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)',display:'block'}}>{m.id}</span>}
+                </div>
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <span className={`tag ${m.role==='admin'?'tag-gold':'tag-blue'}`} style={{fontSize:9}}>{m.role}</span>
+                  {networkRole==='admin'&&m.role!=='admin'&&<button className="b-gho b-xs" style={{color:'var(--red)'}}><I n="trash" s={10}/></button>}
+                </div>
               </div>)}
             </div>
           </div>
+
+          {/* Network schema catalog */}
+          <div className="card" style={{marginBottom:16}}>
+            <span className="section-label">NETWORK SCHEMA CATALOG</span>
+            <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:10}}>Shared definitions that propagate to all member organizations.</p>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              {DEFAULT_PROMPTS.map(p=><span key={p.key} style={{fontSize:9.5,padding:'3px 8px',background:'var(--bg-3)',borderRadius:10,color:'var(--tx-1)'}}>
+                {p.key} <span style={{color:'var(--gold)',fontSize:8}}>standard</span></span>)}
+              {DEFAULT_DEFINITIONS.map(d=><span key={d.key} style={{fontSize:9.5,padding:'3px 8px',background:'var(--red-dim)',borderRadius:10,color:'var(--tx-1)'}}>
+                {d.key} <span style={{color:'var(--red)',fontSize:8}}>required</span></span>)}
+            </div>
+          </div>
+
           <div className="card" style={{marginBottom:16}}>
             <span className="section-label">PROPAGATION MODEL</span>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:6}}>
@@ -2978,7 +3257,14 @@ const ProviderApp = ({session, onLogout, showToast}) => {
               </div>)}
             </div>
           </div>
-          <div style={{background:'var(--green-dim)',border:'1px solid rgba(61,214,140,.15)',borderRadius:'var(--r)',padding:'12px 16px',fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
+
+          {/* Member-specific actions */}
+          {networkRole!=='admin'&&<div style={{display:'flex',gap:8}}>
+            <button className="b-gho" style={{display:'flex',alignItems:'center',gap:6}}><I n="plus" s={13}/>Propose Schema Change</button>
+            <button className="b-red b-sm" style={{marginLeft:'auto'}}>Leave Network</button>
+          </div>}
+
+          <div style={{background:'var(--green-dim)',border:'1px solid rgba(61,214,140,.15)',borderRadius:'var(--r)',padding:'12px 16px',fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6,marginTop:16}}>
             <strong style={{color:'var(--green)'}}>Polycentric governance:</strong> Shared prompts propagate Network → Org → Provider → Client. Observations vary locally; interpretations feeding into shared metrics use network-level definitions for consistency.
           </div>
         </div>}
@@ -2996,20 +3282,72 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       <button onClick={handleDiscoverClient} className="b-pri" style={{width:'100%'}}>Search for Bridge</button>
     </Modal>
 
+    {/* CREATE ORGANIZATION MODAL */}
+    <Modal open={createOrgModal} onClose={()=>setCreateOrgModal(false)} title="Create Organization" w={520}>
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Create an organization to manage staff, cases across your team, and participate in networks. You'll be the admin.</p>
+      <div style={{marginBottom:14}}>
+        <span className="section-label">ORGANIZATION NAME</span>
+        <input value={setupData.name} onChange={e=>setSetupData({...setupData,name:e.target.value})} placeholder="e.g. Metro Services Organization"/>
+      </div>
+      <div style={{marginBottom:14}}>
+        <span className="section-label">ORGANIZATION TYPE</span>
+        <select value={setupData.type} onChange={e=>setSetupData({...setupData,type:e.target.value})}>
+          {ORG_TYPES.map(t=><option key={t} value={t}>{ORG_TYPE_LABELS[t]}</option>)}
+        </select>
+      </div>
+      <div style={{marginBottom:14}}>
+        <span className="section-label">SERVICE AREA</span>
+        <input value={setupData.service_area} onChange={e=>setSetupData({...setupData,service_area:e.target.value})} placeholder="e.g. Davidson County, TN"/>
+      </div>
+      <div style={{marginBottom:20}}>
+        <span className="section-label">LANGUAGES (comma-separated)</span>
+        <input value={setupData.languages} onChange={e=>setSetupData({...setupData,languages:e.target.value})} placeholder="en, es"/>
+      </div>
+      <div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:16,fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
+        This creates an encrypted Matrix room for your organization. You'll be the admin. Staff can be invited with specific roles. Your provider account gains org context — you can manage staff, cases, and networks from your dashboard.
+      </div>
+      <button onClick={handleCreateOrg} className="b-pri" disabled={!setupData.name.trim()} style={{width:'100%',padding:12,fontSize:14}}>
+        <I n="users" s={16}/> Create Organization
+      </button>
+    </Modal>
+
+    {/* JOIN ORGANIZATION MODAL */}
+    <Modal open={joinOrgModal} onClose={()=>setJoinOrgModal(false)} title="Join Organization">
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Enter the Matrix room ID of an existing Khora organization to join it. The org admin must have invited you.</p>
+      <div style={{marginBottom:14}}><span className="section-label">ORGANIZATION ROOM ID</span>
+        <input value={joinOrgId} onChange={e=>setJoinOrgId(e.target.value)} placeholder="!roomid:matrix.org"/></div>
+      <button onClick={handleJoinOrg} className="b-pri" style={{width:'100%'}}>Join Organization</button>
+    </Modal>
+
+    {/* INVITE STAFF MODAL */}
+    <Modal open={inviteModal} onClose={()=>setInviteModal(false)} title="Invite Staff Member">
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Invite a provider to your organization. They'll receive access to cases based on their assigned role.</p>
+      <div style={{marginBottom:14}}><span className="section-label">MATRIX ID</span>
+        <input value={inviteUserId} onChange={e=>setInviteUserId(e.target.value)} placeholder="@staff:matrix.org"/></div>
+      <div style={{marginBottom:14}}><span className="section-label">ROLE</span>
+        <select value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
+          {ORG_ROLES.map(r=><option key={r} value={r}>{ORG_ROLE_LABELS[r]}</option>)}
+        </select></div>
+      <div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:14,fontSize:11.5,color:'var(--tx-1)'}}>
+        Role determines which cases and data the staff member can access. Admins see everything; read-only users see only aggregate dashboards.
+      </div>
+      <button onClick={handleInviteStaff} className="b-pri" style={{width:'100%'}}>Send Invite</button>
+    </Modal>
+
     {/* CREATE NETWORK MODAL */}
     <Modal open={networkModal} onClose={()=>setNetworkModal(false)} title="Create Network">
-      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Create a new governance network (coalition, network, or partnership). You'll be the admin. Other providers can join.</p>
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Create a new governance network for your organization. Other organizations can join. Networks define shared vocabulary and schema propagation.</p>
       <div style={{marginBottom:14}}><span className="section-label">NETWORK NAME</span>
         <input value={networkName} onChange={e=>setNetworkName(e.target.value)} placeholder="e.g. Metro Partnership"/></div>
       <div style={{background:'var(--green-dim)',border:'1px solid rgba(61,214,140,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:14,fontSize:11.5,color:'var(--tx-1)'}}>
-        The network room will contain shared schema definitions that propagate to all member organizations.
+        The network room will contain shared schema definitions that propagate to all member organizations. Your org "{orgMeta.name}" will be the network admin.
       </div>
       <button onClick={handleCreateNetwork} className="b-pri" style={{width:'100%'}}>Create Network</button>
     </Modal>
 
     {/* JOIN NETWORK MODAL */}
     <Modal open={joinNetworkModal} onClose={()=>setJoinNetworkModal(false)} title="Join Network">
-      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Enter the Matrix room ID of an existing Khora network to join it.</p>
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Enter the Matrix room ID of an existing Khora network to join as "{orgMeta.name||'your organization'}".</p>
       <div style={{marginBottom:14}}><span className="section-label">NETWORK ROOM ID</span>
         <input value={joinNetworkId} onChange={e=>setJoinNetworkId(e.target.value)} placeholder="!roomid:matrix.org"/></div>
       <button onClick={handleJoinNetwork} className="b-pri" style={{width:'100%'}}>Join Network</button>
@@ -3057,562 +3395,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   </div>;
 };
 
-/* ═══════════════════ ORGANIZATION APP ═══════════════════ */
-const OrgApp = ({session, onLogout, showToast}) => {
-  const [orgRoom, setOrgRoom] = useState(null);
-  const [metricsRoom, setMetricsRoom] = useState(null);
-  const [schemaRoom, setSchemaRoom] = useState(null);
-  const [networkRoom, setNetworkRoom] = useState(null);
-  const [orgMeta, setOrgMeta] = useState({});
-  const [staff, setStaff] = useState([]);
-  const [cases, setCases] = useState([]);
-  const [view, setView] = useState('dashboard');
-  const [loading, setLoading] = useState(true);
-  const [setupStep, setSetupStep] = useState(null); // null = done, 'name'|'type'|'area'
-  const [setupData, setSetupData] = useState({name:'',type:'direct_service',service_area:'',languages:'en'});
-  const [inviteModal, setInviteModal] = useState(false);
-  const [inviteUserId, setInviteUserId] = useState('');
-  const [inviteRole, setInviteRole] = useState('case_manager');
-  const [activeCase, setActiveCase] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [msgText, setMsgText] = useState('');
-  const [provObsModal, setProvObsModal] = useState(null);
-  const [provObsValue, setProvObsValue] = useState('');
-  const [provObsNotes, setProvObsNotes] = useState('');
-  const [provObservations, setProvObservations] = useState([]);
-  const [initError, setInitError] = useState(null);
 
-  useEffect(() => { initOrg(); }, []);
-
-  const orgFrame = (room) => ({type:'org',room:room||orgRoom,role:'admin',epistemic:'MEANT'});
-  const bridgeFrame = (room) => ({type:'bridge',room,role:'provider',epistemic:'MEANT'});
-
-  const initOrg = async () => {
-    setLoading(true);
-    setInitError(null);
-    try {
-      // Single-pass scan with org-specific state types included
-      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER]);
-      let org=null, metricsR=null, schema=null, network=null;
-      const bridgeData = [];
-      for (const [rid, state] of Object.entries(scanned)) {
-        const id = state[EVT.IDENTITY];
-        if (id?.account_type==='organization'&&id.owner===svc.userId) org=rid;
-        if (id?.account_type==='metrics'&&id.owner===svc.userId) metricsR=rid;
-        if (id?.account_type==='schema'&&id.owner===svc.userId) schema=rid;
-        if (id?.account_type==='network') network=rid;
-        const meta = state[EVT.BRIDGE_META];
-        if (meta && meta.status!=='tombstoned') {
-          bridgeData.push({rid, meta, refs: state[EVT.BRIDGE_REFS]});
-        }
-      }
-      if (!org) {
-        setSetupStep('name');
-        setLoading(false);
-        return;
-      }
-      if (!metricsR) {
-        metricsR = await svc.createRoom('[Khora Metrics]','Anonymized metrics',[
-          {type:EVT.IDENTITY,state_key:'',content:{account_type:'metrics',owner:svc.userId,created:Date.now()}},
-        ]);
-      }
-      if (!schema) {
-        schema = await svc.createRoom('[Khora Schema]','Schema definitions',[
-          {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
-        ]);
-        const allSeeds = [
-          ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
-          ...DEFAULT_PROVIDER_PROMPTS.map(pp => () => svc.setState(schema, EVT.SCHEMA_PROMPT, pp, pp.key)),
-          ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(schema, EVT.SCHEMA_DEF, d, d.key)),
-          ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(schema, EVT.SCHEMA_AUTHORITY, a, a.id)),
-          [() => svc.setState(schema, EVT.SCHEMA_TRANSFORM, {id:'transform_default',transforms:DEFAULT_TRANSFORMS}, 'default')],
-        ].flat();
-        for (let i = 0; i < allSeeds.length; i++) {
-          await allSeeds[i]();
-          if (i % 3 === 2) await new Promise(r => setTimeout(r, 200));
-        }
-      }
-      setOrgRoom(org); setMetricsRoom(metricsR); setSchemaRoom(schema);
-      if (network) setNetworkRoom(network);
-      // Use org state from scan instead of extra getState calls
-      const orgState = scanned[org] || {};
-      const meta = orgState[EVT.ORG_METADATA];
-      if (meta) setOrgMeta(meta);
-      const roster = orgState[EVT.ORG_ROSTER];
-      if (roster?.staff) setStaff(roster.staff);
-      // Filter bridge data for org staff
-      const orgStaff = roster?.staff || [];
-      const orgCases = bridgeData.filter(({meta: m}) =>
-        m.provider===svc.userId || orgStaff.some(s=>s.userId===m.provider));
-      await loadCasesFromScan(orgCases);
-    } catch (e) {
-      console.error('Org init failed:', e);
-      setInitError(e.message || 'Failed to initialize organization workspace.');
-    }
-    setLoading(false);
-  };
-
-  const handleCreateOrg = async () => {
-    if (!setupData.name.trim()) return;
-    try {
-      const org = await svc.createRoom(`[Khora Org] ${setupData.name}`, `Organization: ${setupData.name}`, [
-        {type:EVT.IDENTITY,state_key:'',content:{account_type:'organization',owner:svc.userId,created:Date.now()}},
-        {type:EVT.ORG_METADATA,state_key:'',content:{
-          name:setupData.name, type:setupData.type, service_area:setupData.service_area,
-          languages:setupData.languages.split(',').map(s=>s.trim()), created:Date.now()}},
-        {type:EVT.ORG_ROSTER,state_key:'',content:{staff:[
-          {userId:svc.userId,role:'admin',joined:Date.now()}
-        ]}},
-        {type:EVT.ROSTER_ASSIGN,state_key:'',content:{}},
-      ]);
-      await emitOp(org, 'DES', {entity:'organization',designation:setupData.name},
-        {type:setupData.type,service_area:setupData.service_area}, orgFrame(org));
-      await emitOp(org, 'INS', {entity:'staff',field:svc.userId},
-        {role:'admin',initiated_by:'org_creation'}, orgFrame(org));
-      setOrgRoom(org);
-      setOrgMeta({name:setupData.name,type:setupData.type,service_area:setupData.service_area});
-      setStaff([{userId:svc.userId,role:'admin',joined:Date.now()}]);
-      setSetupStep(null);
-      showToast(`Organization "${setupData.name}" created`,'success');
-      // Create supporting rooms
-      const metricsR = await svc.createRoom('[Khora Metrics]','Anonymized metrics',[
-        {type:EVT.IDENTITY,state_key:'',content:{account_type:'metrics',owner:svc.userId,created:Date.now()}},
-      ]);
-      const schema = await svc.createRoom('[Khora Schema]','Schema definitions',[
-        {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
-      ]);
-      for (const p of DEFAULT_PROMPTS) await svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key);
-      for (const pp of DEFAULT_PROVIDER_PROMPTS) await svc.setState(schema, EVT.SCHEMA_PROMPT, pp, pp.key);
-      for (const d of DEFAULT_DEFINITIONS) await svc.setState(schema, EVT.SCHEMA_DEF, d, d.key);
-      for (const a of DEFAULT_AUTHORITIES) await svc.setState(schema, EVT.SCHEMA_AUTHORITY, a, a.id);
-      await svc.setState(schema, EVT.SCHEMA_TRANSFORM, {id:'transform_default',transforms:DEFAULT_TRANSFORMS}, 'default');
-      setMetricsRoom(metricsR); setSchemaRoom(schema);
-    } catch(e) { showToast('Error creating org: '+e.message,'error'); }
-  };
-
-  const handleInviteStaff = async () => {
-    if (!inviteUserId.trim()||!orgRoom) return;
-    try {
-      await svc.invite(orgRoom, inviteUserId);
-      const newStaff = [...staff, {userId:inviteUserId,role:inviteRole,joined:Date.now()}];
-      await svc.setState(orgRoom, EVT.ORG_ROSTER, {staff:newStaff});
-      await emitOp(orgRoom, 'CON', {source:orgRoom,destination:inviteUserId,relationship:'staff'},
-        {role:inviteRole,invited_by:svc.userId}, orgFrame());
-      setStaff(newStaff);
-      setInviteModal(false); setInviteUserId('');
-      showToast(`Invited ${inviteUserId} as ${ORG_ROLE_LABELS[inviteRole]}`,'success');
-    } catch(e) { showToast('Invite failed: '+e.message,'error'); }
-  };
-
-  const handleRemoveStaff = async (userId) => {
-    if (userId===svc.userId) { showToast('Cannot remove yourself','error'); return; }
-    try {
-      await svc.kick(orgRoom, userId, 'Removed from organization');
-      const newStaff = staff.filter(s=>s.userId!==userId);
-      await svc.setState(orgRoom, EVT.ORG_ROSTER, {staff:newStaff});
-      await emitOp(orgRoom, 'NUL', {entity:'staff',field:userId},
-        {reason:'removed',removed_by:svc.userId}, orgFrame());
-      setStaff(newStaff);
-      showToast(`Removed ${userId}`,'warn');
-    } catch(e) { showToast('Error: '+e.message,'error'); }
-  };
-
-  const loadCasesFromScan = async (bridgeData) => {
-    const found = [];
-    for (const {rid, meta, refs} of bridgeData) {
-      const decrypted = {};
-      if (refs?.fields) {
-        for (const [key,ref] of Object.entries(refs.fields)) {
-          try {
-            if (ref.key&&ref.ciphertext&&ref.iv) {
-              const plain = await FieldCrypto.decrypt(ref.ciphertext, ref.iv, ref.key);
-              if (plain!==null) decrypted[key]=plain;
-            }
-          } catch { /* skip undecryptable field */ }
-        }
-      }
-      found.push({bridgeRoomId:rid, clientUserId:meta.client, meta, sharedData:decrypted});
-    }
-    setCases(found);
-  };
-
-  const loadCases = async () => {
-    const scanned = await svc.scanRooms();
-    const bridgeData = [];
-    for (const [rid, state] of Object.entries(scanned)) {
-      const meta = state[EVT.BRIDGE_META];
-      if (meta && meta.status!=='tombstoned') {
-        const isOrgBridge = meta.provider===svc.userId || staff.some(s=>s.userId===meta.provider);
-        if (isOrgBridge) {
-          bridgeData.push({rid, meta, refs: state[EVT.BRIDGE_REFS]});
-        }
-      }
-    }
-    await loadCasesFromScan(bridgeData);
-  };
-
-  const loadMessages = async (bid) => { setMessages(await svc.getMessages(bid)); };
-  const handleSendMsg = async () => {
-    if (!msgText.trim()||!activeCase) return;
-    await svc.sendMessage(activeCase, msgText, {[`${NS}.type`]:'note'});
-    setMsgText(''); setTimeout(()=>loadMessages(activeCase),500);
-  };
-
-  const handleProviderObservation = async () => {
-    if (!provObsValue || !provObsModal || !activeCase) return;
-    const obs = {
-      id:genOpId(), prompt_id:provObsModal.id, prompt_key:provObsModal.key,
-      value:provObsValue, notes:provObsNotes||undefined,
-      schema_version:provObsModal.version||1,
-      author:svc.userId, org:orgMeta.name, ts:Date.now()
-    };
-    await svc.sendEvent(activeCase, EVT.OBSERVATION, obs);
-    await emitOp(activeCase, 'INS',
-      {type:'provider_observation',field:provObsModal.key,value:provObsValue},
-      {prompt:provObsModal.question,notes:provObsNotes||undefined,org:orgMeta.name},
-      bridgeFrame(activeCase));
-    setProvObservations(prev=>[...prev,obs]);
-    setProvObsModal(null); setProvObsValue(''); setProvObsNotes('');
-    showToast(`Observation recorded: ${provObsModal.question}`,'success');
-  };
-
-  const loadProviderObservations = async (bid) => {
-    if (!svc.client) return;
-    const room = svc.client.getRoom(bid);
-    if (!room) return;
-    const obs = room.getLiveTimeline().getEvents()
-      .filter(e=>e.getType()===EVT.OBSERVATION).map(e=>e.getContent());
-    setProvObservations(obs);
-  };
-
-  const openCase = (bid) => { setView('case'); setActiveCase(bid); loadMessages(bid); loadProviderObservations(bid); };
-  const activeCaseData = cases.find(c=>c.bridgeRoomId===activeCase);
-
-  if(loading) return <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}><Spin s={28}/></div>;
-
-  if(initError) return <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
-    <div style={{textAlign:'center',maxWidth:400,padding:20}}>
-      <div style={{width:48,height:48,borderRadius:'var(--r-lg)',background:'var(--red-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--red)',margin:'0 auto 16px'}}><I n="alert-triangle" s={24}/></div>
-      <h3 style={{fontSize:16,fontWeight:700,marginBottom:8}}>Organization Setup Failed</h3>
-      <p style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6,marginBottom:16}}>{initError}</p>
-      <div style={{display:'flex',gap:8,justifyContent:'center'}}>
-        <button onClick={initOrg} className="b-pri"><I n="refresh-cw" s={13}/>Retry</button>
-        <button onClick={onLogout} className="b-gho">Sign Out</button>
-      </div>
-    </div>
-  </div>;
-
-  // Org setup wizard
-  if(setupStep) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
-    <div className="anim-up" style={{width:'100%',maxWidth:520,padding:20}}>
-      <div style={{background:'var(--bg-1)',border:'1px solid var(--border-0)',borderRadius:'var(--r-lg)',padding:'44px 40px'}}>
-        <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:'linear-gradient(90deg, var(--blue), var(--teal), var(--gold))'}}/>
-        <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:20}}>
-          <div style={{width:44,height:44,borderRadius:'var(--r-lg)',background:'var(--blue-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blue)'}}><I n="users" s={24}/></div>
-          <div><h2 style={{fontSize:22,fontWeight:800,fontFamily:'var(--serif)'}}>Create Organization</h2>
-            <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-2)'}}>Set up your org room on Matrix</span></div>
-        </div>
-        <div style={{marginBottom:14}}>
-          <span className="section-label">ORGANIZATION NAME</span>
-          <input value={setupData.name} onChange={e=>setSetupData({...setupData,name:e.target.value})} placeholder="e.g. Metro Services Organization"/>
-        </div>
-        <div style={{marginBottom:14}}>
-          <span className="section-label">ORGANIZATION TYPE</span>
-          <select value={setupData.type} onChange={e=>setSetupData({...setupData,type:e.target.value})}>
-            {ORG_TYPES.map(t=><option key={t} value={t}>{ORG_TYPE_LABELS[t]}</option>)}
-          </select>
-        </div>
-        <div style={{marginBottom:14}}>
-          <span className="section-label">SERVICE AREA</span>
-          <input value={setupData.service_area} onChange={e=>setSetupData({...setupData,service_area:e.target.value})} placeholder="e.g. Davidson County, TN"/>
-        </div>
-        <div style={{marginBottom:20}}>
-          <span className="section-label">LANGUAGES (comma-separated)</span>
-          <input value={setupData.languages} onChange={e=>setSetupData({...setupData,languages:e.target.value})} placeholder="en, es"/>
-        </div>
-        <div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:16,fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
-          This creates an encrypted Matrix room for your organization. You'll be the admin. Staff can be invited with specific roles. Cases are assigned per-staff.
-        </div>
-        <button onClick={handleCreateOrg} className="b-pri" disabled={!setupData.name.trim()} style={{width:'100%',padding:12,fontSize:14}}>
-          <I n="users" s={16}/> Create Organization
-        </button>
-      </div>
-    </div>
-  </div>;
-
-  return <div style={{display:'flex',height:'100%'}}>
-    {/* Sidebar */}
-    <div style={{width:250,minWidth:250,height:'100%',background:'var(--bg-1)',borderRight:'1px solid var(--border-0)',display:'flex',flexDirection:'column'}}>
-      <div style={{padding:'18px 14px 14px',borderBottom:'1px solid var(--border-0)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
-          <div style={{width:28,height:28,borderRadius:'var(--r)',background:'var(--blue-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blue)'}}><I n="users" s={15}/></div>
-          <span style={{fontFamily:'var(--serif)',fontWeight:700,fontSize:15}}>{orgMeta.name||'Organization'}</span>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:8}}>
-          <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{svc.userId}</span>
-          <span className="tag tag-blue">ORG ADMIN</span>
-        </div>
-        {orgMeta.type&&<span className={`tag tag-teal`} style={{marginTop:6,fontSize:9}}>{ORG_TYPE_LABELS[orgMeta.type]||orgMeta.type}</span>}
-      </div>
-      <div style={{flex:1,overflow:'auto',padding:'6px 6px'}}>
-        {[{id:'dashboard',icon:'briefcase',label:'Dashboard'},{id:'staff',icon:'users',label:'Staff Roster'},
-          {id:'schema',icon:'grid',label:'Schema & Authorities'},{id:'network',icon:'globe',label:'Network'},
-          {id:'activity',icon:'zap',label:'Activity Stream'}
-        ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null)}}
-          style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
-            background:view===item.id&&!activeCase?'var(--bg-4)':'transparent',
-            borderLeft:view===item.id&&!activeCase?'2px solid var(--blue)':'2px solid transparent',
-            display:'flex',alignItems:'center',gap:8,transition:'all .15s',
-            color:view===item.id&&!activeCase?'var(--tx-0)':'var(--tx-1)'}}
-          onMouseEnter={e=>{if(!(view===item.id&&!activeCase))e.currentTarget.style.background='var(--bg-3)'}}
-          onMouseLeave={e=>{if(!(view===item.id&&!activeCase))e.currentTarget.style.background='transparent'}}>
-          <I n={item.icon} s={14}/><span style={{fontSize:12.5,fontWeight:view===item.id?600:400}}>{item.label}</span>
-        </div>)}
-        <div style={{padding:'14px 10px 4px'}}><span className="section-label">CASES ({cases.length})</span></div>
-        {cases.length===0&&<p style={{color:'var(--tx-3)',fontSize:11.5,padding:'12px 10px',textAlign:'center'}}>No cases yet</p>}
-        {cases.map(c=><div key={c.bridgeRoomId} onClick={()=>openCase(c.bridgeRoomId)}
-          style={{padding:'8px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
-            background:activeCase===c.bridgeRoomId?'var(--bg-4)':'transparent',
-            borderLeft:activeCase===c.bridgeRoomId?'2px solid var(--blue)':'2px solid transparent',transition:'all .15s'}}
-          onMouseEnter={e=>{if(activeCase!==c.bridgeRoomId)e.currentTarget.style.background='var(--bg-3)'}}
-          onMouseLeave={e=>{if(activeCase!==c.bridgeRoomId)e.currentTarget.style.background='transparent'}}>
-          <span style={{fontSize:12,fontWeight:activeCase===c.bridgeRoomId?600:400,display:'block'}}>{c.sharedData.full_name||c.clientUserId}</span>
-          <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{Object.keys(c.sharedData).length} fields</span>
-        </div>)}
-        <button onClick={()=>loadCases()} className="b-gho b-xs" style={{width:'calc(100% - 12px)',margin:'8px 6px'}}><I n="search" s={10}/>Refresh Cases</button>
-      </div>
-      <div style={{padding:'8px 10px',borderTop:'1px solid var(--border-0)'}}>
-        <button onClick={onLogout} className="b-gho b-sm" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}><I n="logout" s={12}/>Logout</button>
-      </div>
-    </div>
-
-    {/* Main content */}
-    <div style={{flex:1,overflow:'auto',padding:24}}>
-
-      {/* ORG DASHBOARD */}
-      {view==='dashboard'&&!activeCase&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
-        <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:4}}>{orgMeta.name||'Organization'} Dashboard</h2>
-        <p style={{color:'var(--tx-1)',fontSize:12.5,marginBottom:24}}>Org-level case management. Staff see cases assigned to them; admins see all cases.</p>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10,marginBottom:24}}>
-          {[{l:'Active Cases',v:cases.length,c:'blue',i:'briefcase'},{l:'Staff',v:staff.length,c:'teal',i:'users'},
-            {l:'Org Type',v:ORG_TYPE_LABELS[orgMeta.type]||'—',c:'gold',i:'home'},{l:'Encryption',v:'Dual-layer',c:'green',i:'lock'}
-          ].map((s,i)=><div key={i} className="card" style={{padding:14}}><span className="section-label">{s.l.toUpperCase()}</span>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
-              <span style={{fontSize:16,fontWeight:700}}>{s.v}</span>
-              <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span></div></div>)}
-        </div>
-        {cases.length>0&&<><span className="section-label">ALL CASES</span>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))',gap:10,marginTop:6}}>
-            {cases.map(c=><div key={c.bridgeRoomId} className="card-h" onClick={()=>openCase(c.bridgeRoomId)}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                <span style={{fontSize:14,fontWeight:600}}>{c.sharedData.full_name||'Anonymous Client'}</span>
-                <I n="chevR" s={13} c="var(--tx-3)"/></div>
-              <div style={{display:'flex',gap:4}}>
-                <span className="tag tag-green"><I n="lock" s={9}/>E2EE</span>
-                <span className="tag tag-blue">{Object.keys(c.sharedData).length} fields</span></div>
-            </div>)}
-          </div></>}
-      </div>}
-
-      {/* STAFF ROSTER VIEW */}
-      {view==='staff'&&!activeCase&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
-          <div><h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Staff Roster</h2>
-            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Manage staff membership and roles. Each role determines case access level.</p></div>
-          <button onClick={()=>setInviteModal(true)} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}><I n="plus" s={14}/>Invite Staff</button>
-        </div>
-        <div className="card" style={{marginBottom:16}}>
-          <span className="section-label">ROLE DEFINITIONS</span>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:6}}>
-            {ORG_ROLES.map(r=><div key={r} style={{padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
-              <span className="tag tag-blue" style={{fontSize:9,marginBottom:4}}>{ORG_ROLE_LABELS[r]}</span>
-              <p style={{fontSize:10.5,color:'var(--tx-2)',marginTop:2}}>
-                {r==='admin'?'Full access. Manage staff, see all cases, configure schema.':
-                 r==='case_manager'?'Assigned cases only. Full read/write on assigned bridges.':
-                 r==='field_worker'?'Assigned cases. Record encounters. Limited to own observations.':
-                 r==='intake_coordinator'?'Create new bridges. Run intake assessments. Route to case managers.':
-                 'View aggregate dashboards only. No PII access.'}
-              </p>
-            </div>)}
-          </div>
-        </div>
-        <div className="card">
-          <span className="section-label">CURRENT STAFF ({staff.length})</span>
-          <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>
-            {staff.map(s=><div key={s.userId} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid var(--border-0)'}}>
-              <div>
-                <span style={{fontSize:13,fontWeight:500,display:'block'}}>{s.userId}</span>
-                <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>Joined {s.joined?new Date(s.joined).toLocaleDateString():'—'}</span>
-              </div>
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                <span className={`tag ${s.role==='admin'?'tag-gold':'tag-blue'}`} style={{fontSize:9}}>{ORG_ROLE_LABELS[s.role]}</span>
-                {s.userId!==svc.userId&&<button onClick={()=>handleRemoveStaff(s.userId)} className="b-gho b-xs" style={{color:'var(--red)'}}><I n="trash" s={11}/></button>}
-              </div>
-            </div>)}
-          </div>
-        </div>
-      </div>}
-
-      {/* ORG CASE VIEW */}
-      {view==='case'&&activeCaseData&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
-        <button onClick={()=>{setView('dashboard');setActiveCase(null)}} className="b-gho b-sm" style={{marginBottom:14,display:'flex',alignItems:'center',gap:4}}><I n="back" s={13}/>All Cases</button>
-        <div style={{marginBottom:20}}>
-          <h2 style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:700}}>{activeCaseData.sharedData.full_name||activeCaseData.clientUserId}</h2>
-          <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
-            <span className="tag tag-green"><I n="lock" s={9}/>E2EE</span>
-            <span className="tag tag-blue">{orgMeta.name}</span>
-            <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)'}}>Client-owned bridge</span></div>
-        </div>
-        <div className="card" style={{marginBottom:16}}>
-          <span className="section-label">SHARED DATA — CLIENT CONTROLLED</span>
-          {FIELD_CATEGORIES.map(cat=>{const fields=VAULT_FIELDS.filter(f=>f.category===cat&&activeCaseData.sharedData[f.key]);
-            if(!fields.length) return null;
-            return <div key={cat} style={{marginBottom:10}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
-                <span style={{color:`var(--${CAT_COLORS[cat]})`}}><I n={CAT_ICONS[cat]} s={12}/></span>
-                <span style={{fontSize:10.5,fontFamily:'var(--mono)',color:'var(--tx-2)',letterSpacing:'.05em'}}>{CAT_LABELS[cat].toUpperCase()}</span></div>
-              {fields.map(f=><div key={f.key} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
-                <span style={{fontSize:12,color:'var(--tx-1)'}}>{f.label}</span>
-                <span style={{fontSize:12.5,fontWeight:500}}>{activeCaseData.sharedData[f.key]}</span>
-              </div>)}
-            </div>;})}
-        </div>
-        {/* GIVEN/MEANT DIVIDE — Record-level framework interpretations */}
-        {provObservations.filter(obs => {
-          const prompt = [...DEFAULT_PROMPTS,...DEFAULT_PROVIDER_PROMPTS].find(p=>p.id===obs.prompt_id||p.key===obs.prompt_key);
-          return prompt && FRAMEWORK_BINDINGS[prompt.key]?.bindings?.[obs.value];
-        }).length > 0 && <div style={{marginBottom:16}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-            <div style={{width:24,height:24,borderRadius:'50%',background:'linear-gradient(135deg,var(--teal),var(--gold))',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--bg-0)',fontSize:11,fontWeight:800}}>&#8594;</div>
-            <span style={{fontFamily:'var(--serif)',fontSize:15,fontWeight:700}}>GIVEN / MEANT Divide</span>
-            <span className="gm-sup-badge">SUP</span>
-          </div>
-          <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:10}}>Same observations, different institutional meanings. Each framework interprets the data according to its own rules.</p>
-          <div style={{display:'flex',flexDirection:'column',gap:10}}>
-            {provObservations.filter(obs => {
-              const prompt = [...DEFAULT_PROMPTS,...DEFAULT_PROVIDER_PROMPTS].find(p=>p.id===obs.prompt_id||p.key===obs.prompt_key);
-              return prompt && FRAMEWORK_BINDINGS[prompt.key]?.bindings?.[obs.value];
-            }).map((obs,i) => {
-              const prompt = [...DEFAULT_PROMPTS,...DEFAULT_PROVIDER_PROMPTS].find(p=>p.id===obs.prompt_id||p.key===obs.prompt_key);
-              return <RecordGivenMeant key={obs.id||i} promptKey={prompt.key} value={obs.value}
-                reporter={obs.org ? `${obs.org} — ${obs.author}` : (obs.author || 'Provider observation')}
-                timestamp={obs.ts}/>;
-            })}
-          </div>
-        </div>}
-        {/* Provider observations */}
-        <div className="card" style={{marginBottom:16}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-            <span className="section-label" style={{marginBottom:0}}>PROVIDER OBSERVATIONS (MEANT)</span>
-            <span className="tag tag-gold">EPISTEMIC: MEANT</span>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:6,marginBottom:12}}>
-            {DEFAULT_PROVIDER_PROMPTS.map(p=><div key={p.id} className="card-h" onClick={()=>{setProvObsModal(p);setProvObsValue('');setProvObsNotes('')}}
-              style={{padding:8}}>
-              <span className={`tag tag-${OBS_CAT_COLORS[p.category]||'purple'}`} style={{fontSize:8,marginBottom:3}}>{p.category}</span>
-              <span style={{fontSize:11,fontWeight:600,display:'block'}}>{p.question}</span>
-            </div>)}
-          </div>
-          {provObservations.length>0&&<div style={{display:'flex',flexDirection:'column',gap:3}}>
-            {[...provObservations].reverse().map((obs,i)=>{
-              const prompt = DEFAULT_PROVIDER_PROMPTS.find(p=>p.id===obs.prompt_id||p.key===obs.prompt_key);
-              const optLabel = prompt?.options?.find(o=>o.v===obs.value)?.l || obs.value;
-              return <div key={obs.id||i} style={{padding:'6px 10px',background:'var(--bg-3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:6}}>
-                <span className="tag tag-gold" style={{fontSize:8}}>MEANT</span>
-                <span style={{fontSize:11,flex:1}}>{prompt?.question}: <strong>{optLabel}</strong></span>
-                <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{obs.ts?new Date(obs.ts).toLocaleTimeString():''}</span>
-              </div>;
-            })}
-          </div>}
-        </div>
-        {/* Messages */}
-        <div className="card">
-          <span className="section-label">BRIDGE MESSAGES</span>
-          <div style={{maxHeight:200,overflow:'auto',marginBottom:10}}>
-            {messages.length===0?<p style={{color:'var(--tx-3)',fontSize:12,padding:'10px 0',textAlign:'center'}}>No messages</p>
-            :messages.map((msg,i)=><div key={msg.id||i} style={{padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
-                <span style={{fontFamily:'var(--mono)',fontSize:10,color:msg.sender===svc.userId?'var(--blue)':'var(--teal)'}}>{msg.sender===svc.userId?'You (Org)':'Client'}</span>
-                <span style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--tx-3)'}}>{msg.ts?new Date(msg.ts).toLocaleString():''}</span></div>
-              <p style={{fontSize:12,color:'var(--tx-1)'}}>{msg.content?.body}</p>
-            </div>)}
-          </div>
-          <div style={{display:'flex',gap:6}}>
-            <input value={msgText} onChange={e=>setMsgText(e.target.value)} placeholder="Message (E2EE)..." onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey)handleSendMsg()}} style={{flex:1}}/>
-            <button onClick={handleSendMsg} className="b-pri"><I n="send" s={13}/></button>
-          </div>
-        </div>
-      </div>}
-
-      {/* SCHEMA WORKBENCH */}
-      {view==='schema'&&!activeCase&&<SchemaWorkbench isOrg={true}/>}
-
-      {/* NETWORK VIEW */}
-      {view==='network'&&!activeCase&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
-        <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:4}}>Network</h2>
-        <p style={{color:'var(--tx-1)',fontSize:12.5,marginBottom:20}}>Organization-level network membership. Schema propagation flows from network → org → staff → clients.</p>
-        {!networkRoom?<div className="card" style={{textAlign:'center',padding:'30px',borderStyle:'dashed'}}><I n="globe" s={32}/><p style={{color:'var(--tx-2)',marginTop:8}}>Not part of a network yet. Network membership is organizational.</p></div>
-        :<div className="card"><span className="tag tag-green"><I n="globe" s={10}/>CONNECTED</span>
-          <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)',display:'block',marginTop:4}}>{networkRoom}</span></div>}
-      </div>}
-
-      {/* ACTIVITY */}
-      {view==='activity'&&<ActivityStream session={session}/>}
-    </div>
-
-    {/* INVITE STAFF MODAL */}
-    <Modal open={inviteModal} onClose={()=>setInviteModal(false)} title="Invite Staff Member">
-      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Invite a staff member to your organization. They'll receive access to cases based on their assigned role.</p>
-      <div style={{marginBottom:14}}><span className="section-label">MATRIX ID</span>
-        <input value={inviteUserId} onChange={e=>setInviteUserId(e.target.value)} placeholder="@staff:matrix.org"/></div>
-      <div style={{marginBottom:14}}><span className="section-label">ROLE</span>
-        <select value={inviteRole} onChange={e=>setInviteRole(e.target.value)}>
-          {ORG_ROLES.map(r=><option key={r} value={r}>{ORG_ROLE_LABELS[r]}</option>)}
-        </select></div>
-      <div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:14,fontSize:11.5,color:'var(--tx-1)'}}>
-        Role determines which cases and data the staff member can access. Admins see everything; outreach workers see only assigned cases.
-      </div>
-      <button onClick={handleInviteStaff} className="b-pri" style={{width:'100%'}}>Send Invite</button>
-    </Modal>
-
-    {/* PROVIDER OBSERVATION MODAL */}
-    <Modal open={!!provObsModal} onClose={()=>setProvObsModal(null)} title={provObsModal?.question||'Record Observation'} w={500}>
-      {provObsModal&&<>
-        {provObsModal.eo?.trace&&<div style={{background:'var(--purple-dim)',border:'1px solid rgba(167,139,250,.15)',borderRadius:'var(--r)',padding:'8px 12px',marginBottom:14}}>
-          <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--purple)'}}>{provObsModal.eo.trace}</span>
-        </div>}
-        <div style={{marginBottom:14}}>
-          <span className="section-label">RESPONSE</span>
-          {provObsModal.type==='numeric'?
-            <div>
-              <input type="number" value={provObsValue} onChange={e=>setProvObsValue(e.target.value)}
-                placeholder={`${provObsModal.range?.min||0} — ${provObsModal.range?.max||100}`}
-                min={provObsModal.range?.min} max={provObsModal.range?.max}/>
-              {provObsModal.thresholds&&<div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
-                {provObsModal.thresholds.map((t,i)=><span key={i} style={{fontSize:9.5,padding:'2px 8px',
-                  background:provObsValue>=t.v&&(i===provObsModal.thresholds.length-1||provObsValue<provObsModal.thresholds[i+1]?.v)?'var(--gold-dim)':'var(--bg-3)',
-                  borderRadius:10,color:provObsValue>=t.v&&(i===provObsModal.thresholds.length-1||provObsValue<provObsModal.thresholds[i+1]?.v)?'var(--gold)':'var(--tx-2)'}}>
-                  {t.v}+ {t.l}</span>)}
-              </div>}
-            </div>
-          :<div style={{display:'flex',flexDirection:'column',gap:4}}>
-            {provObsModal.options?.map(o=><div key={o.v} onClick={()=>setProvObsValue(o.v)}
-              style={{padding:'10px 14px',borderRadius:'var(--r)',cursor:'pointer',
-                border:`1px solid ${provObsValue===o.v?'var(--gold)':'var(--border-1)'}`,
-                background:provObsValue===o.v?'var(--gold-dim)':'var(--bg-3)',transition:'all .15s'}}>
-              <span style={{fontSize:12.5,color:provObsValue===o.v?'var(--gold)':'var(--tx-1)'}}>{o.l}</span>
-            </div>)}
-          </div>}
-        </div>
-        <div style={{marginBottom:14}}>
-          <span className="section-label">CLINICAL NOTES (OPTIONAL)</span>
-          <textarea value={provObsNotes} onChange={e=>setProvObsNotes(e.target.value)} placeholder="Additional clinical context..." style={{minHeight:50}}/>
-        </div>
-        <button onClick={handleProviderObservation} className="b-pri" disabled={!provObsValue} style={{width:'100%'}}>Record Observation</button>
-      </>}
-    </Modal>
-  </div>;
-};
 
 /* ═══════════════════ MAIN APP ═══════════════════ */
 const App = () => {
@@ -3630,8 +3413,6 @@ const App = () => {
   return <>
     {accountType === 'client' ?
       <ClientApp session={session} onLogout={handleLogout} showToast={showToast}/> :
-     accountType === 'organization' ?
-      <OrgApp session={session} onLogout={handleLogout} showToast={showToast}/> :
       <ProviderApp session={session} onLogout={handleLogout} showToast={showToast}/>
     }
     {toast && <Toast key={toast.k} msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
