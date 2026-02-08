@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tessera — Sovereign Case Management</title>
+<title>Khora — Sovereign Case Management</title>
 <script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -212,13 +212,13 @@ function projectCurrentState(operations, frameType) {
 
 // SHA-256 cohort hash for metrics anonymization
 async function cohortHash(userId, salt) {
-  const data = new TextEncoder().encode(userId + (salt || 'tessera_default_salt'));
+  const data = new TextEncoder().encode(userId + (salt || 'khora_default_salt'));
   const hash = await crypto.subtle.digest('SHA-256', data);
   return btoa(String.fromCharCode(...new Uint8Array(hash)));
 }
 
 /* ═══════════════════ EVENT TYPES (§11) ═══════════════════ */
-const NS = 'io.tessera';
+const NS = 'io.khora';
 const EVT = {
   IDENTITY:       `${NS}.identity`,
   OP:             `${NS}.op`,
@@ -261,7 +261,7 @@ const EVT = {
 };
 
 /* ═══════════════════ MATRIX SERVICE ═══════════════════ */
-class TesseraService {
+class KhoraService {
   constructor() { this.client = null; this._baseUrl = null; this._token = null; this._userId = null; }
 
   async _withRetry(fn, maxAttempts = 5) {
@@ -426,7 +426,7 @@ class TesseraService {
   }
 }
 
-const svc = new TesseraService();
+const svc = new KhoraService();
 
 /* ═══════════════════ DEFINITION AUTHORITIES (§C.0) ═══════════════════ */
 const DEFAULT_AUTHORITIES = [
@@ -1016,18 +1016,23 @@ const LoginScreen = ({onLogin}) => {
   const [hs,setHs] = useState('matrix.org'); const [user,setUser] = useState(''); const [pass,setPass] = useState('');
   const [loading,setLoading] = useState(false); const [err,setErr] = useState('');
 
+  // Extract host server from username if present (e.g. @user:matrix.org -> matrix.org)
+  const userHost = user.includes(':') ? user.split(':').slice(1).join(':') : '';
+  const effectiveHs = userHost || hs;
+  const hideHs = !!userHost;
+
   const go = async (e) => {
     e.preventDefault(); setLoading(true); setErr('');
     try {
       if (mode === 'register') {
-        const baseUrl = hs.startsWith('http') ? hs : `https://${hs}`;
+        const baseUrl = effectiveHs.startsWith('http') ? effectiveHs : `https://${effectiveHs}`;
         const resp = await fetch(`${baseUrl}/_matrix/client/v3/register`, {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ username: user.replace(/^@/,'').split(':')[0], password: pass, auth: { type: 'm.login.dummy' } })
         });
         if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error || `Registration failed (${resp.status}). Try logging in if account exists.`); }
       }
-      const s = await svc.login(hs, user, pass); onLogin(s);
+      const s = await svc.login(effectiveHs, user, pass); onLogin(s);
     }
     catch (e) { setErr(e.message); }
     setLoading(false);
@@ -1039,7 +1044,7 @@ const LoginScreen = ({onLogin}) => {
         <div style={{position:'absolute',top:0,left:0,right:0,height:3,background:'linear-gradient(90deg, var(--gold), var(--teal), var(--blue))'}}/>
         <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:10}}>
           <div style={{width:44,height:44,borderRadius:'var(--r-lg)',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)'}}><I n="shield" s={24}/></div>
-          <div><h1 style={{fontSize:24,fontWeight:800,fontFamily:'var(--serif)',letterSpacing:'-0.02em'}}>Tessera</h1>
+          <div><h1 style={{fontSize:24,fontWeight:800,fontFamily:'var(--serif)',letterSpacing:'-0.02em'}}>Khora</h1>
             <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-2)',letterSpacing:'.08em'}}>SOVEREIGN CASE MANAGEMENT</span></div>
         </div>
         <p style={{color:'var(--tx-1)',fontSize:13,marginTop:18,marginBottom:24,lineHeight:1.65}}>
@@ -1056,9 +1061,9 @@ const LoginScreen = ({onLogin}) => {
         </div>}
 
         <form onSubmit={go}>
-          <div style={{marginBottom:14}}><span className="section-label">HOMESERVER</span><input value={hs} onChange={e=>setHs(e.target.value)} placeholder="matrix.org"/></div>
           <div style={{marginBottom:14}}><span className="section-label">USERNAME</span><input value={user} onChange={e=>setUser(e.target.value)} placeholder={mode==='register'?'choose a username':'@you:matrix.org'} autoComplete="username"/></div>
-          <div style={{marginBottom:24}}><span className="section-label">PASSWORD</span><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" autoComplete={mode==='register'?'new-password':'current-password'}/></div>
+          <div style={{marginBottom:14}}><span className="section-label">PASSWORD</span><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" autoComplete={mode==='register'?'new-password':'current-password'}/></div>
+          {!hideHs&&<div style={{marginBottom:14}}><span className="section-label">HOMESERVER</span><input value={hs} onChange={e=>setHs(e.target.value)} placeholder="matrix.org"/></div>}
           {err&&<div style={{background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.2)',borderRadius:'var(--r)',padding:'9px 14px',fontSize:12.5,color:'var(--red)',marginBottom:16}}>{err}</div>}
           <button type="submit" className="b-pri" disabled={loading} style={{width:'100%',padding:12,fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
             {loading?<Spin s={16}/>:<I n="lock" s={16}/>} {loading?'Connecting...':(mode==='register'?'Create Account & Connect':'Connect')}
@@ -1140,7 +1145,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
         } catch { /* skip rooms we can't read state from */ }
       }
       if (!vault) {
-        vault = await svc.createRoom('[Tessera Vault]', 'Personal data vault', [
+        vault = await svc.createRoom('[Khora Vault]', 'Personal data vault', [
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'client',owner:svc.userId,created:Date.now()}},
           {type:EVT.VAULT_SNAPSHOT,state_key:'',content:{fields:{},observations:[],
             metrics_consent:{enabled:false,categories:[]},
@@ -1150,7 +1155,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
         showToast('Vault created — encrypted room ready','success');
       }
       if (!schema) {
-        schema = await svc.createRoom('[Tessera Schema]','Schema definitions', [
+        schema = await svc.createRoom('[Khora Schema]','Schema definitions', [
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
         ]);
         const allSeeds = [
@@ -1239,7 +1244,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const handleAddProvider = async () => {
     if (!newProviderId.trim()) return;
     try {
-      const bridgeId = await svc.createRoom(`[Tessera Bridge] ${svc.userId} ↔ ${newProviderId}`, 'Tessera bridge — shared data room', [
+      const bridgeId = await svc.createRoom(`[Khora Bridge] ${svc.userId} ↔ ${newProviderId}`, 'Khora bridge — shared data room', [
         {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:newProviderId,created:Date.now(),status:'active'}},
         {type:EVT.BRIDGE_REFS,state_key:'',content:{fields:{}}},
       ]);
@@ -1280,7 +1285,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const handleHardRevoke = async (pi) => {
     const prov = providers[pi];
     try {
-      const newBridgeId = await svc.createRoom(`[Tessera Bridge] ${svc.userId} ↔ ${prov.providerUserId}`, 'Tessera bridge — replaced', [
+      const newBridgeId = await svc.createRoom(`[Khora Bridge] ${svc.userId} ↔ ${prov.providerUserId}`, 'Khora bridge — replaced', [
         {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:prov.providerUserId,created:Date.now(),status:'active',previous:prov.bridgeRoomId}},
         {type:EVT.BRIDGE_REFS,state_key:'',content:{fields:{}}},
       ]);
@@ -1353,7 +1358,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
       <div style={{padding:'18px 14px 14px',borderBottom:'1px solid var(--border-0)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
           <div style={{width:28,height:28,borderRadius:'var(--r)',background:'var(--teal-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--teal)'}}><I n="shield" s={15}/></div>
-          <span style={{fontFamily:'var(--serif)',fontWeight:700,fontSize:15}}>Tessera</span>
+          <span style={{fontFamily:'var(--serif)',fontWeight:700,fontSize:15}}>Khora</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6,marginTop:8}}>
           <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{svc.userId}</span>
@@ -1766,18 +1771,18 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         } catch { /* skip rooms we can't read state from */ }
       }
       if (!roster) {
-        roster = await svc.createRoom('[Tessera Roster]','Provider case index',[
+        roster = await svc.createRoom('[Khora Roster]','Provider case index',[
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'provider',owner:svc.userId,created:Date.now()}},
           {type:EVT.ROSTER_INDEX,state_key:'',content:{cases:[]}},
         ]);
       }
       if (!metricsR) {
-        metricsR = await svc.createRoom('[Tessera Metrics]','Anonymized metrics',[
+        metricsR = await svc.createRoom('[Khora Metrics]','Anonymized metrics',[
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'metrics',owner:svc.userId,created:Date.now()}},
         ]);
       }
       if (!schema) {
-        schema = await svc.createRoom('[Tessera Schema]','Schema definitions',[
+        schema = await svc.createRoom('[Khora Schema]','Schema definitions',[
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
         ]);
         const allSeeds = [
@@ -1915,7 +1920,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const handleCreateNetwork = async () => {
     if (!networkName.trim()) return;
     try {
-      const nRoom = await svc.createRoom(`[Tessera Network] ${networkName}`, 'Network governance room', [
+      const nRoom = await svc.createRoom(`[Khora Network] ${networkName}`, 'Network governance room', [
         {type:EVT.IDENTITY,state_key:'',content:{account_type:'network',name:networkName,owner:svc.userId,created:Date.now()}},
         {type:EVT.NET_MEMBERS,state_key:'',content:{organizations:[{id:svc.userId,joined:Date.now(),role:'admin'}],
           governance:{schema_changes_require:'admin_approval',admins:[svc.userId]}}},
@@ -1980,7 +1985,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       <div style={{padding:'18px 14px 14px',borderBottom:'1px solid var(--border-0)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:4}}>
           <div style={{width:28,height:28,borderRadius:'var(--r)',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)'}}><I n="briefcase" s={15}/></div>
-          <span style={{fontFamily:'var(--serif)',fontWeight:700,fontSize:15}}>Tessera</span>
+          <span style={{fontFamily:'var(--serif)',fontWeight:700,fontSize:15}}>Khora</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6,marginTop:8}}>
           <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{svc.userId}</span>
@@ -2328,7 +2333,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
 
     {/* JOIN NETWORK MODAL */}
     <Modal open={joinNetworkModal} onClose={()=>setJoinNetworkModal(false)} title="Join Network">
-      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Enter the Matrix room ID of an existing Tessera network to join it.</p>
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Enter the Matrix room ID of an existing Khora network to join it.</p>
       <div style={{marginBottom:14}}><span className="section-label">NETWORK ROOM ID</span>
         <input value={joinNetworkId} onChange={e=>setJoinNetworkId(e.target.value)} placeholder="!roomid:matrix.org"/></div>
       <button onClick={handleJoinNetwork} className="b-pri" style={{width:'100%'}}>Join Network</button>
@@ -2427,12 +2432,12 @@ const OrgApp = ({session, onLogout, showToast}) => {
         return;
       }
       if (!metricsR) {
-        metricsR = await svc.createRoom('[Tessera Metrics]','Anonymized metrics',[
+        metricsR = await svc.createRoom('[Khora Metrics]','Anonymized metrics',[
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'metrics',owner:svc.userId,created:Date.now()}},
         ]);
       }
       if (!schema) {
-        schema = await svc.createRoom('[Tessera Schema]','Schema definitions',[
+        schema = await svc.createRoom('[Khora Schema]','Schema definitions',[
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
         ]);
         const allSeeds = [
@@ -2464,7 +2469,7 @@ const OrgApp = ({session, onLogout, showToast}) => {
   const handleCreateOrg = async () => {
     if (!setupData.name.trim()) return;
     try {
-      const org = await svc.createRoom(`[Tessera Org] ${setupData.name}`, `Organization: ${setupData.name}`, [
+      const org = await svc.createRoom(`[Khora Org] ${setupData.name}`, `Organization: ${setupData.name}`, [
         {type:EVT.IDENTITY,state_key:'',content:{account_type:'organization',owner:svc.userId,created:Date.now()}},
         {type:EVT.ORG_METADATA,state_key:'',content:{
           name:setupData.name, type:setupData.type, service_area:setupData.service_area,
@@ -2484,10 +2489,10 @@ const OrgApp = ({session, onLogout, showToast}) => {
       setSetupStep(null);
       showToast(`Organization "${setupData.name}" created`,'success');
       // Create supporting rooms
-      const metricsR = await svc.createRoom('[Tessera Metrics]','Anonymized metrics',[
+      const metricsR = await svc.createRoom('[Khora Metrics]','Anonymized metrics',[
         {type:EVT.IDENTITY,state_key:'',content:{account_type:'metrics',owner:svc.userId,created:Date.now()}},
       ]);
-      const schema = await svc.createRoom('[Tessera Schema]','Schema definitions',[
+      const schema = await svc.createRoom('[Khora Schema]','Schema definitions',[
         {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
       ]);
       for (const p of DEFAULT_PROMPTS) await svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key);
