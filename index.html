@@ -1937,6 +1937,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const [obsDate, setObsDate] = useState(new Date().toISOString().slice(0,10));
   const [obsFreeText, setObsFreeText] = useState('');
   const [initError, setInitError] = useState(null);
+  const [claimedRooms, setClaimedRooms] = useState([]);
+  const [pendingClaims, setPendingClaims] = useState([]);
 
   useEffect(() => { initVault(); }, []);
 
@@ -1949,10 +1951,19 @@ const ClientApp = ({session, onLogout, showToast}) => {
     try {
       const scanned = await svc.scanRooms();
       let vault = null, schema = null;
+      const detectedPending = [], detectedClaimed = [];
       for (const [rid, state] of Object.entries(scanned)) {
         const id = state[EVT.IDENTITY];
         if (id?.account_type === 'client' && id.owner === svc.userId) vault = rid;
         if (id?.account_type === 'schema' && id.owner === svc.userId) schema = rid;
+        // Detect client_record rooms where this client was invited or has claimed
+        if (id?.account_type === 'client_record' && id.client_matrix_id === svc.userId) {
+          if (id.status === 'claimed' && id.owner === svc.userId) {
+            detectedClaimed.push({roomId: rid, ...id});
+          } else {
+            detectedPending.push({roomId: rid, ...id});
+          }
+        }
       }
       if (!vault) {
         vault = await svc.createRoom('[Khora Vault]', 'Personal data vault', [
@@ -1981,6 +1992,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
       }
       setVaultRoom(vault); setSchemaRoom(schema);
       await loadVault(vault);
+      setPendingClaims(detectedPending);
+      setClaimedRooms(detectedClaimed);
     } catch (e) {
       console.error('Vault init failed:', e);
       setInitError(e.message || 'Failed to initialize vault.');
@@ -2126,6 +2139,68 @@ const ClientApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Error: '+e.message,'error'); }
   };
 
+  // ─── Room claiming: client takes ownership of a provider-created client_record room ───
+  const claimFrame = (room) => ({type:'client_record',room,role:'client',epistemic:'GIVEN'});
+
+  const handleClaimRoom = async (record) => {
+    try {
+      const prevIdentity = await svc.getState(record.roomId, EVT.IDENTITY);
+      const previousOwner = prevIdentity?.owner || record.owner;
+      // 1. Ensure client has PL 100 and provider drops to PL 50
+      await svc.setPowerLevel(record.roomId, svc.userId, 100);
+      if (previousOwner && previousOwner !== svc.userId) {
+        await svc.setPowerLevel(record.roomId, previousOwner, 50);
+      }
+      // 2. Transfer ownership in identity state
+      await svc.setState(record.roomId, EVT.IDENTITY, {
+        ...prevIdentity,
+        owner: svc.userId,
+        status: 'claimed',
+        claimed_at: Date.now(),
+        claimed_by: svc.userId,
+        previous_owner: previousOwner,
+      });
+      // 3. Emit ALT operation recording the ownership transfer
+      await emitOp(record.roomId, 'ALT',
+        {entity: 'room_ownership', field: 'owner'},
+        {from: previousOwner, to: svc.userId, reason: 'client_claim'},
+        claimFrame(record.roomId));
+      // 4. Move from pending to claimed
+      setPendingClaims(prev => prev.filter(r => r.roomId !== record.roomId));
+      setClaimedRooms(prev => [...prev, {
+        ...record, owner: svc.userId, status: 'claimed',
+        claimed_at: Date.now(), previous_owner: previousOwner,
+      }]);
+      showToast(`Room claimed — you now have full control of "${record.client_name || 'this record'}"`, 'success');
+    } catch (e) { showToast('Claim failed: ' + e.message, 'error'); }
+  };
+
+  const handleRevokeFromClaimed = async (record, targetUserId) => {
+    try {
+      await svc.kick(record.roomId, targetUserId, 'Removed by room owner');
+      await emitOp(record.roomId, 'NUL',
+        {entity: 'room_member', field: targetUserId},
+        {reason: 'owner_revocation', removed_by: svc.userId},
+        claimFrame(record.roomId));
+      showToast(`Removed ${targetUserId} from room`, 'warn');
+    } catch (e) { showToast('Remove failed: ' + e.message, 'error'); }
+  };
+
+  const handleDeleteClaimedRoom = async (record) => {
+    try {
+      // Tombstone the room — marks it as permanently closed
+      await svc.setState(record.roomId, 'm.room.tombstone', {
+        body: 'This room has been closed by the owner',
+      });
+      await emitOp(record.roomId, 'NUL',
+        {entity: 'client_record', field: 'room'},
+        {reason: 'owner_closed', closed_by: svc.userId},
+        claimFrame(record.roomId));
+      setClaimedRooms(prev => prev.filter(r => r.roomId !== record.roomId));
+      showToast('Room closed permanently', 'warn');
+    } catch (e) { showToast('Close failed: ' + e.message, 'error'); }
+  };
+
   const handleMetricsToggle = async () => {
     const newConsent = {...metricsConsent, enabled:!metricsConsent.enabled,
       categories:!metricsConsent.enabled? DEFAULT_PROMPTS.filter(p=>p.metrics).map(p=>p.category) : []};
@@ -2177,7 +2252,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
       </div>
       <div style={{flex:1,overflow:'auto',padding:'6px 6px'}}>
         {[{id:'vault',icon:'folder',label:'My Vault'},{id:'observations',icon:'clipboard',label:'Observations'},
-          {id:'providers',icon:'users',label:'My Providers'},{id:'schema',icon:'grid',label:'Schema'},
+          {id:'providers',icon:'users',label:'My Providers'},{id:'records',icon:'shield',label:'My Records'},
+          {id:'schema',icon:'grid',label:'Schema'},
           {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
@@ -2188,6 +2264,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
           onMouseEnter={e=>{if(!(view===item.id&&!activeBridge))e.currentTarget.style.background='var(--bg-3)'}}
           onMouseLeave={e=>{if(!(view===item.id&&!activeBridge))e.currentTarget.style.background='transparent'}}>
           <I n={item.icon} s={14}/><span style={{fontSize:12.5,fontWeight:view===item.id?600:400}}>{item.label}</span>
+          {item.id==='records'&&pendingClaims.length>0&&<span style={{marginLeft:'auto',background:'var(--gold)',color:'var(--bg-0)',fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 6px',minWidth:16,textAlign:'center'}}>{pendingClaims.length}</span>}
         </div>)}
         {providers.length>0&&<><div style={{padding:'14px 10px 4px'}}><span className="section-label">BRIDGES</span></div>
           {providers.map((p,i)=><div key={p.bridgeRoomId} onClick={()=>openBridge(p.bridgeRoomId)}
@@ -2337,6 +2414,88 @@ const ClientApp = ({session, onLogout, showToast}) => {
               </div>
             </div>;})}
         </div>}
+      </div>}
+
+      {/* MY RECORDS VIEW — rooms claimed from providers */}
+      {view==='records'&&!activeBridge&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
+          <div><h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>My Records</h2>
+            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Rooms created by providers on your behalf. Claim them to take full ownership and control.</p></div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:20}}>
+          {[{l:'Pending',v:pendingClaims.length,c:'gold',i:'clock'},
+            {l:'Claimed',v:claimedRooms.length,c:'teal',i:'shield'},
+          ].map((s,i)=><div key={i} className="card" style={{padding:14}}><span className="section-label">{s.l.toUpperCase()}</span>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
+              <span style={{fontSize:18,fontWeight:700}}>{s.v}</span>
+              <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span></div></div>)}
+        </div>
+        {/* Pending claims */}
+        {pendingClaims.length>0&&<div style={{marginBottom:20}}>
+          <span className="section-label">PENDING — AWAITING YOUR CLAIM</span>
+          <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:8}}>
+            {pendingClaims.map(rec=><div key={rec.roomId} className="card" style={{padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:14,fontWeight:600}}>{rec.client_name||'Unnamed Record'}</span>
+                  <span className="tag tag-gold">Pending</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginTop:4}}>
+                  <span style={{fontSize:10.5,color:'var(--tx-2)'}}>Created by: <span style={{fontFamily:'var(--mono)'}}>{rec.owner}</span></span>
+                  {rec.created&&<span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{new Date(rec.created).toLocaleDateString()}</span>}
+                </div>
+                {rec.notes&&<span style={{fontSize:11,color:'var(--tx-2)',marginTop:4,display:'block',fontStyle:'italic'}}>{rec.notes}</span>}
+              </div>
+              <button onClick={()=>handleClaimRoom(rec)} className="b-pri" style={{display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}}>
+                <I n="shield" s={13}/>Claim Room
+              </button>
+            </div>)}
+          </div>
+        </div>}
+        {/* Claimed rooms */}
+        {claimedRooms.length>0&&<div style={{marginBottom:20}}>
+          <span className="section-label">CLAIMED — YOU OWN THESE ROOMS</span>
+          <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:8}}>
+            {claimedRooms.map(rec=><div key={rec.roomId} className="card" style={{padding:0,overflow:'hidden'}}>
+              <div style={{padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid var(--border-0)'}}>
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:14,fontWeight:600}}>{rec.client_name||'Record'}</span>
+                    <span className="tag tag-teal">Claimed</span>
+                    <span className="tag tag-green"><I n="lock" s={9}/>PL 100</span>
+                  </div>
+                  <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)'}}>Room: {rec.roomId.slice(0,25)}…</span>
+                </div>
+                <div style={{display:'flex',gap:4}}>
+                  {rec.previous_owner&&<button onClick={()=>handleRevokeFromClaimed(rec,rec.previous_owner)} className="b-gho b-sm" style={{color:'var(--red)',display:'flex',alignItems:'center',gap:3}}>
+                    <I n="userMinus" s={11}/>Remove Provider
+                  </button>}
+                  <button onClick={()=>handleDeleteClaimedRoom(rec)} className="b-gho b-sm" style={{color:'var(--red)',display:'flex',alignItems:'center',gap:3}}>
+                    <I n="trash" s={11}/>Close Room
+                  </button>
+                </div>
+              </div>
+              <div style={{padding:'12px 18px',fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
+                <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+                  {rec.previous_owner&&<span>Previous owner: <span style={{fontFamily:'var(--mono)',fontSize:10.5}}>{rec.previous_owner}</span></span>}
+                  {rec.claimed_at&&<span>Claimed: <span style={{fontFamily:'var(--mono)',fontSize:10.5}}>{new Date(rec.claimed_at).toLocaleString()}</span></span>}
+                </div>
+              </div>
+            </div>)}
+          </div>
+        </div>}
+        {pendingClaims.length===0&&claimedRooms.length===0&&
+          <div className="card" style={{textAlign:'center',padding:'40px 20px',borderStyle:'dashed'}}>
+            <I n="shield" s={32}/>
+            <p style={{color:'var(--tx-2)',marginTop:10,fontSize:13}}>No records to claim</p>
+            <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:4}}>When a provider creates a room for you and sends an invite, it will appear here for you to claim.</p>
+          </div>}
+        <div style={{background:'var(--teal-dim)',border:'1px solid rgba(62,201,176,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
+          <I n="shield" s={16} c="var(--teal)"/>
+          <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
+            <strong style={{color:'var(--teal)'}}>Full control after claiming:</strong> When you claim a room, ownership transfers to you (power level 100). You can remove the provider, close the room, or manage who has access. The provider cannot undo your claim.
+          </span>
+        </div>
       </div>}
 
       {/* SCHEMA WORKBENCH */}
@@ -2556,8 +2715,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         if (id?.account_type==='metrics'&&id.owner===svc.userId) metricsR=rid;
         if (id?.account_type==='schema'&&id.owner===svc.userId) schema=rid;
         if (id?.account_type==='network') network=rid;
-        // Detect client record rooms created by this provider
-        if (id?.account_type==='client_record'&&id.owner===svc.userId) {
+        // Detect client record rooms created by this provider (or claimed from this provider)
+        if (id?.account_type==='client_record'&&(id.owner===svc.userId||id.previous_owner===svc.userId)) {
           detectedClientRecords.push({roomId:rid, ...id});
         }
         // Detect org rooms — owned or joined as staff
@@ -2617,6 +2776,11 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         const enriched = [];
         for (const rec of detectedClientRecords) {
           let status = rec.status || 'created';
+          // If the identity state already says 'claimed', respect that
+          if (status === 'claimed') {
+            enriched.push({ ...rec, status });
+            continue;
+          }
           if (rec.client_matrix_id && svc.client) {
             try {
               const members = await svc.getRoomMembers(rec.roomId);
@@ -3127,6 +3291,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           {[{l:'Total Clients',v:clientRecords.length,c:'teal',i:'users'},
             {l:'Invited',v:clientRecords.filter(r=>r.status==='invited').length,c:'gold',i:'send'},
             {l:'Joined',v:clientRecords.filter(r=>r.status==='joined').length,c:'green',i:'check'},
+            {l:'Claimed',v:clientRecords.filter(r=>r.status==='claimed').length,c:'teal',i:'shield'},
             {l:'Pending',v:clientRecords.filter(r=>r.status==='created').length,c:'orange',i:'clock'},
           ].map((s,i)=><div key={i} className="card" style={{padding:14}}><span className="section-label">{s.l.toUpperCase()}</span>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
@@ -3147,8 +3312,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           </div>
           {/* Table rows */}
           {clientRecords.map((rec,i)=>{
-            const statusColors = {created:'orange',invited:'gold',joined:'green'};
-            const statusLabels = {created:'Pending',invited:'Invited',joined:'Joined'};
+            const statusColors = {created:'orange',invited:'gold',joined:'green',claimed:'teal'};
+            const statusLabels = {created:'Pending',invited:'Invited',joined:'Joined',claimed:'Claimed'};
             return <div key={rec.roomId} style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 1fr 1fr 1.2fr',gap:0,padding:'12px 16px',
               borderBottom:i<clientRecords.length-1?'1px solid var(--border-0)':'none',alignItems:'center',
               transition:'background .15s'}}
@@ -3182,7 +3347,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         <div style={{background:'var(--teal-dim)',border:'1px solid rgba(62,201,176,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
           <I n="shield" s={16} c="var(--teal)"/>
           <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
-            <strong style={{color:'var(--teal)'}}>Client sovereignty:</strong> When a client joins their room, they receive superadmin power level (100). They can kick anyone — including you — from their room at any time. You cannot remove a joined client.
+            <strong style={{color:'var(--teal)'}}>Client sovereignty:</strong> When a client joins their room, they receive superadmin power level (100). When they claim the room, ownership transfers to them permanently. They can kick anyone — including you — from their room at any time. You cannot remove a joined or claimed client.
           </span>
         </div>
       </div>}
