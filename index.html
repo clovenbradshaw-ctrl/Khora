@@ -405,11 +405,16 @@ class KhoraService {
     ];
     const opts = { name, topic, visibility: 'private', preset: 'private_chat', initial_state };
     // If we know the client's Matrix ID, pre-set them as room admin (PL 100)
-    // Provider gets PL 50 — client can kick provider but not vice versa
+    // Provider gets PL 50 — client can kick provider but not vice versa.
+    // We must explicitly set `events` to override the preset defaults (which require
+    // PL 100 for m.room.encryption etc.) — otherwise initial_state events fail
+    // because the provider only has PL 50.
     if (clientMatrixId) {
       opts.power_level_content_override = {
         users: { [this._userId]: 50, [clientMatrixId]: 100 },
-        events_default: 0, state_default: 50, kick: 50, ban: 50, invite: 50, redact: 50,
+        events_default: 0, state_default: 50,
+        events: { 'm.room.power_levels': 100, 'm.room.tombstone': 100, 'm.room.server_acl': 100 },
+        kick: 50, ban: 50, invite: 50, redact: 50,
       };
     }
     if (this.client) {
