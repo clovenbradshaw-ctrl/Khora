@@ -172,6 +172,7 @@ settings:<svg {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 
 alert:<svg {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
 clock:<svg {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
 msg:<svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+inbox:<svg {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>,
 zap:<svg {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
 grid:<svg {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
 globe:<svg {...p}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>,
@@ -3481,6 +3482,10 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const [newProviderId, setNewProviderId] = useState('');
   const [bridgeMessages, setBridgeMessages] = useState([]);
   const [msgText, setMsgText] = useState('');
+  // Inbox chat state
+  const [inboxConvo, setInboxConvo] = useState(null); // provider index for active inbox conversation
+  const [inboxMessages, setInboxMessages] = useState([]);
+  const [inboxMsgText, setInboxMsgText] = useState('');
   const [hardRevokeTarget, setHardRevokeTarget] = useState(null);
   const [obsModal, setObsModal] = useState(null); // prompt object or null
   const [obsValue, setObsValue] = useState('');
@@ -3831,6 +3836,22 @@ const ClientApp = ({session, onLogout, showToast}) => {
   };
   const openBridge = (bid) => { setActiveBridge(bid); setView('bridge'); loadBridgeMessages(bid); };
 
+  // ─── Inbox chat functions ───
+  const loadInboxMessages = async (bid) => { setInboxMessages(await svc.getMessages(bid)); };
+  const openInboxConvo = (providerIdx) => {
+    setInboxConvo(providerIdx);
+    const prov = providers[providerIdx];
+    if (prov) loadInboxMessages(prov.bridgeRoomId);
+  };
+  const handleSendInboxMsg = async () => {
+    if (!inboxMsgText.trim() || inboxConvo === null) return;
+    const prov = providers[inboxConvo];
+    if (!prov) return;
+    await svc.sendMessage(prov.bridgeRoomId, inboxMsgText, {[`${NS}.type`]:'note'});
+    setInboxMsgText('');
+    setTimeout(() => loadInboxMessages(prov.bridgeRoomId), 500);
+  };
+
   const activeProviderIdx = providers.findIndex(p=>p.bridgeRoomId===activeBridge);
   const activeProvider = activeProviderIdx>=0?providers[activeProviderIdx]:null;
   const filledFields = allFields.filter(f=>vaultData[f.key]);
@@ -3864,10 +3885,11 @@ const ClientApp = ({session, onLogout, showToast}) => {
         </div>
       </div>
       <div style={{flex:1,overflow:'auto',padding:'6px 6px'}}>
-        {[{id:'vault',icon:'folder',label:'My Vault'},{id:'observations',icon:'clipboard',label:'Observations'},
+        {[{id:'vault',icon:'folder',label:'My Vault'},{id:'inbox',icon:'inbox',label:'Inbox'},
+          {id:'observations',icon:'clipboard',label:'Observations'},
           {id:'providers',icon:'users',label:'My Providers'},{id:'records',icon:'shield',label:'My Records'},
           {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'}
-        ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null)}}
+        ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null);if(item.id!=='inbox')setInboxConvo(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:view===item.id&&!activeBridge?'var(--bg-4)':'transparent',
             borderLeft:view===item.id&&!activeBridge?'2px solid var(--teal)':'2px solid transparent',
@@ -3876,6 +3898,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
           onMouseEnter={e=>{if(!(view===item.id&&!activeBridge))e.currentTarget.style.background='var(--bg-3)'}}
           onMouseLeave={e=>{if(!(view===item.id&&!activeBridge))e.currentTarget.style.background='transparent'}}>
           <I n={item.icon} s={14}/><span style={{fontSize:12.5,fontWeight:view===item.id?600:400}}>{item.label}</span>
+          {item.id==='inbox'&&providers.length>0&&<span style={{marginLeft:'auto',background:'var(--teal)',color:'var(--bg-0)',fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 6px',minWidth:16,textAlign:'center'}}>{providers.length}</span>}
           {item.id==='records'&&pendingClaims.length>0&&<span style={{marginLeft:'auto',background:'var(--gold)',color:'var(--bg-0)',fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 6px',minWidth:16,textAlign:'center'}}>{pendingClaims.length}</span>}
         </div>)}
         {providers.length>0&&<><div style={{padding:'14px 10px 4px'}}><span className="section-label">BRIDGES</span></div>
@@ -4173,6 +4196,122 @@ const ClientApp = ({session, onLogout, showToast}) => {
         </div>
       </div>}
 
+      {/* INBOX VIEW */}
+      {view==='inbox'&&!activeBridge&&<div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+          <div>
+            <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Inbox</h2>
+            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>All your encrypted conversations with providers in one place. Messages are end-to-end encrypted.</p>
+          </div>
+          <button onClick={()=>setAddProviderModal(true)} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}><I n="plus" s={14}/>New Conversation</button>
+        </div>
+        <div style={{display:'flex',gap:0,border:'1px solid var(--border-0)',borderRadius:'var(--r-lg)',overflow:'hidden',minHeight:520,background:'var(--bg-1)'}}>
+          {/* Conversation list */}
+          <div style={{width:280,minWidth:280,borderRight:'1px solid var(--border-0)',display:'flex',flexDirection:'column',background:'var(--bg-2)'}}>
+            <div style={{padding:'14px 14px 10px',borderBottom:'1px solid var(--border-0)'}}>
+              <span className="section-label" style={{marginBottom:0}}>CONVERSATIONS ({providers.length})</span>
+            </div>
+            <div style={{flex:1,overflow:'auto'}}>
+              {providers.length===0?
+                <div style={{padding:'40px 16px',textAlign:'center'}}>
+                  <I n="msg" s={28} c="var(--tx-3)"/>
+                  <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:10}}>No conversations yet</p>
+                  <p style={{color:'var(--tx-3)',fontSize:10.5,marginTop:4}}>Add a provider to start chatting</p>
+                </div>
+              :providers.map((p,i)=><div key={p.bridgeRoomId} onClick={()=>openInboxConvo(i)}
+                style={{padding:'12px 14px',cursor:'pointer',borderBottom:'1px solid var(--border-0)',
+                  background:inboxConvo===i?'var(--bg-4)':'transparent',
+                  borderLeft:inboxConvo===i?'3px solid var(--teal)':'3px solid transparent',
+                  transition:'all .15s'}}
+                onMouseEnter={e=>{if(inboxConvo!==i)e.currentTarget.style.background='var(--bg-3)'}}
+                onMouseLeave={e=>{if(inboxConvo!==i)e.currentTarget.style.background=inboxConvo===i?'var(--bg-4)':'transparent'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{width:36,height:36,borderRadius:'50%',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',border:'2px solid var(--gold)',flexShrink:0}}>
+                    {p.providerProfile?.org_membership?.verified ? <I n="shieldCheck" s={16}/> : <I n="user" s={16}/>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontSize:13,fontWeight:inboxConvo===i?700:500,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.providerName||p.providerUserId}</span>
+                    <div style={{display:'flex',alignItems:'center',gap:4,marginTop:2}}>
+                      {p.providerProfile?.org_membership?.verified && <><I n="shieldCheck" s={9} c="var(--blue)"/><span style={{fontSize:9,color:'var(--blue)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:120}}>{p.providerProfile.org_membership.org_name}</span></>}
+                      <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{Object.values(p.sharedFields||{}).filter(Boolean).length} shared</span>
+                    </div>
+                  </div>
+                </div>
+              </div>)}
+            </div>
+          </div>
+          {/* Active conversation */}
+          <div style={{flex:1,display:'flex',flexDirection:'column',background:'var(--bg-1)'}}>
+            {inboxConvo!==null&&providers[inboxConvo] ? (() => {
+              const p = providers[inboxConvo];
+              return <>
+                {/* Chat header */}
+                <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border-0)',display:'flex',alignItems:'center',gap:12,background:'var(--bg-2)'}}>
+                  <div style={{width:32,height:32,borderRadius:'50%',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',border:'2px solid var(--gold)'}}>
+                    {p.providerProfile?.org_membership?.verified ? <I n="shieldCheck" s={14}/> : <I n="user" s={14}/>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontSize:14,fontWeight:700,display:'block'}}>{p.providerName||p.providerUserId}</span>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span className="tag tag-green" style={{fontSize:8}}><I n="lock" s={8}/>E2EE</span>
+                      {p.providerProfile?.title && <span style={{fontSize:10,color:'var(--tx-2)'}}>{p.providerProfile.title}</span>}
+                      {p.providerProfile?.org_membership?.verified && <span className="tag tag-blue" style={{fontSize:8}}>{p.providerProfile.org_membership.org_name}</span>}
+                    </div>
+                  </div>
+                  <button onClick={()=>openBridge(p.bridgeRoomId)} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:4}}><I n="share" s={11}/>Bridge</button>
+                  <button onClick={()=>loadInboxMessages(p.bridgeRoomId)} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:4}}><I n="refresh-cw" s={11}/></button>
+                </div>
+                {/* Messages */}
+                <div style={{flex:1,overflow:'auto',padding:'16px 18px',display:'flex',flexDirection:'column',gap:2}}>
+                  {inboxMessages.length===0?
+                    <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}}>
+                      <I n="msg" s={32} c="var(--tx-3)"/>
+                      <p style={{color:'var(--tx-3)',fontSize:12,marginTop:10}}>No messages yet</p>
+                      <p style={{color:'var(--tx-3)',fontSize:11,marginTop:4}}>Start the conversation below</p>
+                    </div>
+                  :[...inboxMessages].reverse().map((msg,i)=>{
+                    const isOwn = msg.sender===svc.userId;
+                    return <div key={msg.id||i} style={{display:'flex',flexDirection:'column',alignItems:isOwn?'flex-end':'flex-start',marginBottom:4}}>
+                      <div style={{maxWidth:'75%',padding:'10px 14px',borderRadius:isOwn?'14px 14px 4px 14px':'14px 14px 14px 4px',
+                        background:isOwn?'var(--teal-dim)':'var(--bg-3)',border:`1px solid ${isOwn?'rgba(62,201,176,.2)':'var(--border-0)'}`,
+                        transition:'transform .1s'}}>
+                        <p style={{fontSize:12.5,color:'var(--tx-0)',lineHeight:1.5,wordBreak:'break-word'}}>{msg.content?.body}</p>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:4,marginTop:3,padding:'0 6px'}}>
+                        <span style={{fontFamily:'var(--mono)',fontSize:9,color:isOwn?'var(--teal)':'var(--gold)'}}>{isOwn?'You':p.providerName||msg.sender}</span>
+                        <span style={{fontFamily:'var(--mono)',fontSize:8,color:'var(--tx-3)'}}>{msg.ts?new Date(msg.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</span>
+                      </div>
+                    </div>;
+                  })}
+                </div>
+                {/* Compose */}
+                <div style={{padding:'12px 18px',borderTop:'1px solid var(--border-0)',background:'var(--bg-2)'}}>
+                  <div style={{display:'flex',gap:8}}>
+                    <input value={inboxMsgText} onChange={e=>setInboxMsgText(e.target.value)} placeholder="Type a message (E2EE)..."
+                      onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSendInboxMsg()}}}
+                      style={{flex:1,borderRadius:20,padding:'10px 18px'}}/>
+                    <button onClick={handleSendInboxMsg} className="b-pri" disabled={!inboxMsgText.trim()}
+                      style={{borderRadius:20,width:42,height:42,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <I n="send" s={16}/>
+                    </button>
+                  </div>
+                </div>
+              </>;
+            })()
+            : <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}}>
+              <div style={{width:64,height:64,borderRadius:'50%',background:'var(--teal-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--teal)',marginBottom:16}}>
+                <I n="inbox" s={28}/>
+              </div>
+              <h3 style={{fontSize:16,fontWeight:700,marginBottom:6}}>Your Inbox</h3>
+              <p style={{color:'var(--tx-2)',fontSize:12,maxWidth:280,textAlign:'center',lineHeight:1.6}}>
+                {providers.length>0?'Select a conversation from the left to start chatting with your providers.':'Add a provider to begin your first encrypted conversation.'}
+              </p>
+              {providers.length===0&&<button onClick={()=>setAddProviderModal(true)} className="b-pri" style={{marginTop:14,display:'flex',alignItems:'center',gap:6}}><I n="plus" s={14}/>Add Provider</button>}
+            </div>}
+          </div>
+        </div>
+      </div>}
+
       {/* BRIDGE VIEW */}
       {view==='bridge'&&activeBridge&&activeProvider&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
         <button onClick={()=>{setView('providers');setActiveBridge(null)}} className="b-gho b-sm" style={{marginBottom:14,display:'flex',alignItems:'center',gap:4}}><I n="back" s={13}/>Back</button>
@@ -4332,7 +4471,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [metrics, setMetrics] = useState([]);
   const [networkMembers, setNetworkMembers] = useState([]);
   const [activeCase, setActiveCase] = useState(null);
-  const [view, setView] = useState('dashboard'); // dashboard|case|metrics|schema|network|activity|staff|org-settings|org-inbox
+  const [view, setView] = useState('dashboard'); // dashboard|inbox|case|metrics|schema|network|activity|staff|org-settings|org-inbox
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState('');
@@ -4398,6 +4537,11 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [composePeerOrgName, setComposePeerOrgName] = useState('');
   const [msgAccessModal, setMsgAccessModal] = useState(false);
   const [msgAccessDraft, setMsgAccessDraft] = useState({read:[],respond:[]});
+  // ─── Inbox chat state ───
+  const [inboxConvo, setInboxConvo] = useState(null); // room ID of active inbox conversation
+  const [inboxMessages, setInboxMessages] = useState([]);
+  const [inboxMsgText, setInboxMsgText] = useState('');
+  const [inboxTab, setInboxTab] = useState('cases'); // 'cases' | 'channels'
 
   useEffect(() => { initProvider(); }, []);
 
@@ -5153,6 +5297,52 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     }
   }, [orgRoom]);
 
+  // ─── Inbox chat functions ───
+  const loadInboxMessages = async (roomId) => { setInboxMessages(await svc.getMessages(roomId)); };
+  const openInboxConvo = (roomId) => {
+    setInboxConvo(roomId);
+    loadInboxMessages(roomId);
+  };
+  const handleSendInboxMsg = async () => {
+    if (!inboxMsgText.trim() || !inboxConvo) return;
+    const isOrgChannel = orgChannels.some(ch => ch.roomId === inboxConvo);
+    if (isOrgChannel) {
+      if (!hasOrgMsgPermission('respond')) { showToast('You do not have permission to send org messages','warn'); return; }
+      const envelope = {
+        [`${NS}.type`]: 'org_message',
+        [`${NS}.envelope`]: {
+          opacity: orgOpacity,
+          org_room_id: orgOpacity === 'opaque' ? undefined : orgRoom,
+          org_name: orgOpacity === 'opaque' ? undefined : (orgMeta.name || undefined),
+          sender_id: orgOpacity === 'transparent' ? svc.userId : undefined,
+          sender_name: orgOpacity === 'transparent' ? (providerProfile.display_name || undefined) : undefined,
+          ts: Date.now(),
+        },
+      };
+      await svc.sendMessage(inboxConvo, inboxMsgText, envelope);
+    } else {
+      await svc.sendMessage(inboxConvo, inboxMsgText, {[`${NS}.type`]:'note'});
+      await emitOp(inboxConvo, 'INS', {type:'provider_note',field:'message'}, {body:inboxMsgText}, bridgeFrame(inboxConvo));
+    }
+    setInboxMsgText('');
+    setTimeout(() => loadInboxMessages(inboxConvo), 500);
+  };
+  const getInboxConvoName = useCallback((roomId) => {
+    const c = cases.find(c => c.bridgeRoomId === roomId);
+    if (c) return c.sharedData.full_name || c.clientUserId;
+    const ch = orgChannels.find(ch => ch.roomId === roomId);
+    if (ch) {
+      const peerOrgId = ch.orgs?.find(o => o !== orgRoom);
+      return ch.org_names?.[peerOrgId] || peerOrgId?.slice(0,20) || 'Organization';
+    }
+    return roomId?.slice(0,20) || 'Unknown';
+  }, [cases, orgChannels, orgRoom]);
+  const getInboxConvoType = useCallback((roomId) => {
+    if (cases.some(c => c.bridgeRoomId === roomId)) return 'case';
+    if (orgChannels.some(ch => ch.roomId === roomId)) return 'channel';
+    return 'unknown';
+  }, [cases, orgChannels]);
+
   // Determine network role based on org membership
   const networkRole = useMemo(() => {
     if (!networkRoom || !orgRoom) return null;
@@ -5237,11 +5427,12 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       </div>
       <div style={{flex:1,overflow:'auto',padding:'6px 6px'}}>
         {/* Personal nav */}
-        {[{id:'dashboard',icon:'briefcase',label:'Dashboard'},{id:'clients',icon:'users',label:'Clients'},
+        {[{id:'dashboard',icon:'briefcase',label:'Dashboard'},{id:'inbox',icon:'inbox',label:'Inbox'},
+          {id:'clients',icon:'users',label:'Clients'},
           {id:'metrics',icon:'bar',label:'Metrics'},
           {id:'schema',icon:'grid',label:'Schema'},
           {id:'activity',icon:'zap',label:'Activity Stream'}
-        ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null)}}
+        ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null);if(item.id!=='inbox'){setInboxConvo(null);setInboxMessages([])}}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:view===item.id&&!activeCase?'var(--bg-4)':'transparent',
             borderLeft:view===item.id&&!activeCase?'2px solid var(--gold)':'2px solid transparent',
@@ -5250,6 +5441,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           onMouseEnter={e=>{if(!(view===item.id&&!activeCase))e.currentTarget.style.background='var(--bg-3)'}}
           onMouseLeave={e=>{if(!(view===item.id&&!activeCase))e.currentTarget.style.background='transparent'}}>
           <I n={item.icon} s={14}/><span style={{fontSize:12.5,fontWeight:view===item.id?600:400}}>{item.label}</span>
+          {item.id==='inbox'&&(cases.length+orgChannels.length)>0&&<span style={{marginLeft:'auto',background:'var(--gold)',color:'var(--bg-0)',fontSize:9,fontWeight:700,borderRadius:10,padding:'1px 6px',minWidth:16,textAlign:'center'}}>{cases.length+orgChannels.length}</span>}
         </div>)}
 
         {/* Organization section */}
@@ -5380,6 +5572,174 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         <div style={{background:'var(--gold-dim)',border:'1px solid var(--gold-mid)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
           <I n="eye" s={16} c="var(--gold)"/>
           <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>As a provider, you cannot modify client vault data. Clients can revoke your access at any time.{!orgRoom&&' Create or join an organization to manage staff, cases across your team, and participate in networks.'}</span>
+        </div>
+      </div>}
+
+      {/* INBOX VIEW */}
+      {view==='inbox'&&!activeCase&&<div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+          <div>
+            <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Inbox</h2>
+            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>All your encrypted conversations with clients{orgRoom?' and organizations':''} in one place.</p>
+          </div>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>setDiscoverModal(true)} className="b-gho" style={{display:'flex',alignItems:'center',gap:6}}><I n="search" s={14}/>Find Client</button>
+            {orgRoom&&hasOrgMsgPermission('read')&&<button onClick={()=>setComposeOrgModal(true)} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}><I n="plus" s={14}/>New Channel</button>}
+          </div>
+        </div>
+        {/* Tabs */}
+        {orgRoom&&hasOrgMsgPermission('read')&&<div className="tabs" style={{marginBottom:16}}>
+          <div className={`tab${inboxTab==='cases'?' active':''}`} onClick={()=>{setInboxTab('cases');setInboxConvo(null);setInboxMessages([])}}>Cases ({cases.length})</div>
+          <div className={`tab${inboxTab==='channels'?' active':''}`} onClick={()=>{setInboxTab('channels');setInboxConvo(null);setInboxMessages([])}}>Org Channels ({orgChannels.length})</div>
+        </div>}
+        <div style={{display:'flex',gap:0,border:'1px solid var(--border-0)',borderRadius:'var(--r-lg)',overflow:'hidden',minHeight:520,background:'var(--bg-1)'}}>
+          {/* Conversation list */}
+          <div style={{width:280,minWidth:280,borderRight:'1px solid var(--border-0)',display:'flex',flexDirection:'column',background:'var(--bg-2)'}}>
+            <div style={{padding:'14px 14px 10px',borderBottom:'1px solid var(--border-0)'}}>
+              <span className="section-label" style={{marginBottom:0}}>{inboxTab==='cases'?`CASES (${cases.length})`:`CHANNELS (${orgChannels.length})`}</span>
+            </div>
+            <div style={{flex:1,overflow:'auto'}}>
+              {inboxTab==='cases' ? <>
+                {cases.length===0?
+                  <div style={{padding:'40px 16px',textAlign:'center'}}>
+                    <I n="briefcase" s={28} c="var(--tx-3)"/>
+                    <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:10}}>No cases yet</p>
+                    <p style={{color:'var(--tx-3)',fontSize:10.5,marginTop:4}}>Clients must share a bridge with you first</p>
+                  </div>
+                :cases.map(c=><div key={c.bridgeRoomId} onClick={()=>openInboxConvo(c.bridgeRoomId)}
+                  style={{padding:'12px 14px',cursor:'pointer',borderBottom:'1px solid var(--border-0)',
+                    background:inboxConvo===c.bridgeRoomId?'var(--bg-4)':'transparent',
+                    borderLeft:inboxConvo===c.bridgeRoomId?'3px solid var(--gold)':'3px solid transparent',
+                    transition:'all .15s'}}
+                  onMouseEnter={e=>{if(inboxConvo!==c.bridgeRoomId)e.currentTarget.style.background='var(--bg-3)'}}
+                  onMouseLeave={e=>{if(inboxConvo!==c.bridgeRoomId)e.currentTarget.style.background=inboxConvo===c.bridgeRoomId?'var(--bg-4)':'transparent'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{width:36,height:36,borderRadius:'50%',background:'var(--teal-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--teal)',border:'2px solid var(--teal)',flexShrink:0}}>
+                      <I n="user" s={16}/>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <span style={{fontSize:13,fontWeight:inboxConvo===c.bridgeRoomId?700:500,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.sharedData.full_name||c.clientUserId}</span>
+                      <div style={{display:'flex',alignItems:'center',gap:4,marginTop:2}}>
+                        <span className="tag tag-green" style={{fontSize:8}}><I n="lock" s={7}/>E2EE</span>
+                        <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{Object.keys(c.sharedData).length} fields</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>)}
+              </> : <>
+                {orgChannels.length===0?
+                  <div style={{padding:'40px 16px',textAlign:'center'}}>
+                    <I n="msg" s={28} c="var(--tx-3)"/>
+                    <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:10}}>No channels yet</p>
+                    <p style={{color:'var(--tx-3)',fontSize:10.5,marginTop:4}}>Create a channel to message another org</p>
+                  </div>
+                :orgChannels.map(ch=>{
+                  const peerOrgId = ch.orgs?.find(o=>o!==orgRoom);
+                  const peerName = ch.org_names?.[peerOrgId]||peerOrgId?.slice(0,20)||'Unknown Org';
+                  return <div key={ch.roomId} onClick={()=>openInboxConvo(ch.roomId)}
+                    style={{padding:'12px 14px',cursor:'pointer',borderBottom:'1px solid var(--border-0)',
+                      background:inboxConvo===ch.roomId?'var(--bg-4)':'transparent',
+                      borderLeft:inboxConvo===ch.roomId?'3px solid var(--blue)':'3px solid transparent',
+                      transition:'all .15s'}}
+                    onMouseEnter={e=>{if(inboxConvo!==ch.roomId)e.currentTarget.style.background='var(--bg-3)'}}
+                    onMouseLeave={e=>{if(inboxConvo!==ch.roomId)e.currentTarget.style.background=inboxConvo===ch.roomId?'var(--bg-4)':'transparent'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:36,height:36,borderRadius:'50%',background:'var(--blue-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--blue)',border:'2px solid var(--blue)',flexShrink:0}}>
+                        <I n="users" s={16}/>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <span style={{fontSize:13,fontWeight:inboxConvo===ch.roomId?700:500,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{peerName}</span>
+                        <div style={{display:'flex',alignItems:'center',gap:4,marginTop:2}}>
+                          <span className={`tag ${orgOpacity==='opaque'?'tag-red':orgOpacity==='translucent'?'tag-gold':'tag-green'}`} style={{fontSize:8}}>{orgOpacity}</span>
+                          <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>org channel</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>;
+                })}
+              </>}
+            </div>
+          </div>
+          {/* Active conversation */}
+          <div style={{flex:1,display:'flex',flexDirection:'column',background:'var(--bg-1)'}}>
+            {inboxConvo ? (() => {
+              const convoType = getInboxConvoType(inboxConvo);
+              const convoName = getInboxConvoName(inboxConvo);
+              const caseData = cases.find(c => c.bridgeRoomId === inboxConvo);
+              const channelData = orgChannels.find(ch => ch.roomId === inboxConvo);
+              return <>
+                {/* Chat header */}
+                <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border-0)',display:'flex',alignItems:'center',gap:12,background:'var(--bg-2)'}}>
+                  <div style={{width:32,height:32,borderRadius:'50%',background:convoType==='case'?'var(--teal-dim)':'var(--blue-dim)',
+                    display:'flex',alignItems:'center',justifyContent:'center',color:convoType==='case'?'var(--teal)':'var(--blue)',
+                    border:`2px solid ${convoType==='case'?'var(--teal)':'var(--blue)'}`}}>
+                    <I n={convoType==='case'?'user':'users'} s={14}/>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontSize:14,fontWeight:700,display:'block'}}>{convoName}</span>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span className="tag tag-green" style={{fontSize:8}}><I n="lock" s={8}/>E2EE</span>
+                      {convoType==='case'&&caseData&&<span style={{fontSize:10,color:'var(--tx-2)'}}>{Object.keys(caseData.sharedData).length} shared fields</span>}
+                      {convoType==='channel'&&<span className={`tag ${orgOpacity==='opaque'?'tag-red':orgOpacity==='translucent'?'tag-gold':'tag-green'}`} style={{fontSize:8}}>OUTGOING: {orgOpacity}</span>}
+                    </div>
+                  </div>
+                  {convoType==='case'&&<button onClick={()=>openCase(inboxConvo)} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:4}}><I n="briefcase" s={11}/>Full Case</button>}
+                  {convoType==='channel'&&<button onClick={()=>openChannel(inboxConvo)} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:4}}><I n="msg" s={11}/>Full Channel</button>}
+                  <button onClick={()=>loadInboxMessages(inboxConvo)} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:4}}><I n="refresh-cw" s={11}/></button>
+                </div>
+                {/* Messages */}
+                <div style={{flex:1,overflow:'auto',padding:'16px 18px',display:'flex',flexDirection:'column',gap:2}}>
+                  {inboxMessages.length===0?
+                    <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}}>
+                      <I n="msg" s={32} c="var(--tx-3)"/>
+                      <p style={{color:'var(--tx-3)',fontSize:12,marginTop:10}}>No messages yet</p>
+                      <p style={{color:'var(--tx-3)',fontSize:11,marginTop:4}}>Start the conversation below</p>
+                    </div>
+                  :[...inboxMessages].reverse().map((msg,i)=>{
+                    const isOwn = msg.sender===svc.userId;
+                    const sender = convoType==='channel' ? resolveMessageSender(msg) : {label:isOwn?'You':'Client',isOwn};
+                    return <div key={msg.id||i} style={{display:'flex',flexDirection:'column',alignItems:sender.isOwn?'flex-end':'flex-start',marginBottom:4}}>
+                      <div style={{maxWidth:'75%',padding:'10px 14px',borderRadius:sender.isOwn?'14px 14px 4px 14px':'14px 14px 14px 4px',
+                        background:sender.isOwn?'var(--gold-dim)':'var(--bg-3)',border:`1px solid ${sender.isOwn?'rgba(201,163,82,.2)':'var(--border-0)'}`,
+                        transition:'transform .1s'}}>
+                        <p style={{fontSize:12.5,color:'var(--tx-0)',lineHeight:1.5,wordBreak:'break-word'}}>{msg.content?.body}</p>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:4,marginTop:3,padding:'0 6px'}}>
+                        <span style={{fontFamily:'var(--mono)',fontSize:9,color:sender.isOwn?'var(--gold)':'var(--teal)'}}>{sender.isOwn?'You'+(sender.org?` (${sender.org})`:convoType==='case'?' (Provider)':''):sender.label}</span>
+                        <span style={{fontFamily:'var(--mono)',fontSize:8,color:'var(--tx-3)'}}>{msg.ts?new Date(msg.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</span>
+                      </div>
+                    </div>;
+                  })}
+                </div>
+                {/* Compose */}
+                <div style={{padding:'12px 18px',borderTop:'1px solid var(--border-0)',background:'var(--bg-2)'}}>
+                  {(convoType==='case'||hasOrgMsgPermission('respond'))?<div style={{display:'flex',gap:8}}>
+                    <input value={inboxMsgText} onChange={e=>setInboxMsgText(e.target.value)}
+                      placeholder={convoType==='channel'?`Message as ${orgOpacity==='transparent'?(providerProfile.display_name||'you'):orgOpacity==='translucent'?(orgMeta.name||'your org'):'anonymous org'}... (E2EE)`:'Type a message (E2EE)...'}
+                      onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();handleSendInboxMsg()}}}
+                      style={{flex:1,borderRadius:20,padding:'10px 18px'}}/>
+                    <button onClick={handleSendInboxMsg} className="b-pri" disabled={!inboxMsgText.trim()}
+                      style={{borderRadius:20,width:42,height:42,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <I n="send" s={16}/>
+                    </button>
+                  </div>
+                  :<div style={{padding:'10px 14px',background:'var(--gold-dim)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:8}}>
+                    <I n="lock" s={13} c="var(--gold)"/>
+                    <span style={{fontSize:11.5,color:'var(--gold)'}}>Your role ({orgRole}) does not have permission to respond. Contact your admin.</span>
+                  </div>}
+                </div>
+              </>;
+            })()
+            : <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column'}}>
+              <div style={{width:64,height:64,borderRadius:'50%',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',marginBottom:16}}>
+                <I n="inbox" s={28}/>
+              </div>
+              <h3 style={{fontSize:16,fontWeight:700,marginBottom:6}}>Provider Inbox</h3>
+              <p style={{color:'var(--tx-2)',fontSize:12,maxWidth:300,textAlign:'center',lineHeight:1.6}}>
+                {(cases.length+orgChannels.length)>0?'Select a conversation from the left to start chatting.':'No conversations yet. Clients must share a bridge, or create an org channel.'}
+              </p>
+            </div>}
+          </div>
         </div>
       </div>}
 
