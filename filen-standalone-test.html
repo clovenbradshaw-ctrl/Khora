@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Khora • Filen Standalone Test</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f17;
+      --card: #141b28;
+      --border: #2a3447;
+      --text: #e8edf7;
+      --muted: #9aa8c2;
+      --accent: #c9a352;
+      --accent-dim: rgba(201, 163, 82, 0.15);
+      --ok: #3dd68c;
+      --error: #ff7c7c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: radial-gradient(circle at 20% 0%, #141b28 0%, #0b0f17 40%);
+      color: var(--text);
+    }
+    main {
+      max-width: 980px;
+      margin: 28px auto;
+      padding: 0 16px 32px;
+    }
+    h1 { margin: 0 0 10px; font-size: 1.7rem; }
+    p { color: var(--muted); line-height: 1.45; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    .card {
+      background: color-mix(in oklab, var(--card) 92%, black);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    label { display: block; margin-top: 10px; font-size: 0.84rem; color: var(--muted); }
+    input, textarea, button {
+      width: 100%;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: #0f1522;
+      color: var(--text);
+      padding: 10px;
+      margin-top: 6px;
+      font-size: 0.95rem;
+    }
+    textarea { resize: vertical; min-height: 84px; }
+    .btn-row { display: flex; gap: 10px; margin-top: 12px; }
+    .btn-row button { flex: 1; }
+    button {
+      cursor: pointer;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+    button:hover { border-color: var(--accent); transform: translateY(-1px); }
+    button.primary {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, var(--accent), #9f7f3e);
+      color: #121212;
+      font-weight: 600;
+    }
+    .status {
+      margin-top: 10px;
+      border-radius: 10px;
+      background: #090e18;
+      border: 1px solid var(--border);
+      min-height: 130px;
+      padding: 10px;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+    }
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 9px;
+      font-size: 0.75rem;
+      margin-left: 7px;
+      color: var(--muted);
+    }
+    .pill.ok { border-color: color-mix(in srgb, var(--ok) 60%, var(--border)); color: var(--ok); }
+    .records { margin: 8px 0 0; padding-left: 18px; }
+    .records li { margin-bottom: 8px; }
+    .hint {
+      border-left: 3px solid var(--accent);
+      background: var(--accent-dim);
+      padding: 10px;
+      border-radius: 7px;
+      margin-top: 12px;
+      font-size: 0.9rem;
+    }
+    a { color: #8db2ff; }
+    code { color: #f9de96; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Standalone Filen Login/Data Test</h1>
+  <p>
+    Use this page to quickly test the UX flow (register/login/add/view) without changing the main Khora app.
+    It includes an SDK diagnostics check and a local fallback mode so you can verify the UI even when the Filen browser SDK fails.
+  </p>
+
+  <div class="row">
+    <section class="card">
+      <h2 style="margin:0;font-size:1.15rem;">1) SDK diagnostics</h2>
+      <p>Checks whether the Filen browser SDK can load directly from CDN in this environment.</p>
+      <button id="btnCheckSdk" class="primary">Run SDK check</button>
+      <div class="hint">
+        If this fails with module specifiers like <code>os</code>/<code>path</code>, use the Vite/polyfill setup before deploying to GitHub Pages.
+      </div>
+      <div class="status" id="diagLog">Ready.</div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0;font-size:1.15rem;">2) Login + session (local harness)</h2>
+      <p>
+        Session status: <span id="sessionPill" class="pill">not logged in</span>
+      </p>
+      <label>Email</label>
+      <input id="email" type="email" placeholder="you@example.com" />
+      <label>Password</label>
+      <input id="password" type="password" placeholder="password" />
+      <div class="btn-row">
+        <button id="btnLogin" class="primary">Login (local harness)</button>
+        <button id="btnLogout">Logout</button>
+      </div>
+      <p class="hint" style="margin-bottom:0;">
+        This is intentionally a test harness. It stores a pseudo-session in <code>localStorage</code> and does not call Filen.
+      </p>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:14px;">
+    <h2 style="margin:0;font-size:1.15rem;">3) Add/View data (local harness)</h2>
+    <p>Records are saved to <code>localStorage["khora-filen-test-records"]</code>.</p>
+    <label>New record</label>
+    <textarea id="newRecord" placeholder="Type something..."></textarea>
+    <div class="btn-row">
+      <button id="btnAdd" class="primary">Add record</button>
+      <button id="btnRefresh">Refresh</button>
+      <button id="btnClear">Clear all</button>
+    </div>
+    <ul id="records" class="records"></ul>
+  </section>
+
+  <section class="card" style="margin-top:14px;">
+    <h2 style="margin:0;font-size:1.15rem;">How to run a real Filen test on GitHub Pages</h2>
+    <ol style="color:var(--muted);line-height:1.5; padding-left: 18px; margin:10px 0 0;">
+      <li>Create a Vite app and install <code>@filen/sdk</code> + <code>vite-plugin-node-polyfills</code>.</li>
+      <li>Configure polyfills in <code>vite.config.js</code> and set <code>base</code> to your repo path.</li>
+      <li>Deploy the <code>dist/</code> output to GitHub Pages (<code>gh-pages</code> branch).</li>
+    </ol>
+    <p style="margin-top:8px;">
+      See: <a href="https://filen.io" target="_blank" rel="noopener noreferrer">filen.io</a>
+    </p>
+  </section>
+</main>
+
+<script>
+(() => {
+  const LS_SESSION = 'khora-filen-test-session';
+  const LS_RECORDS = 'khora-filen-test-records';
+
+  const $ = (id) => document.getElementById(id);
+
+  const diagLog = $('diagLog');
+  const sessionPill = $('sessionPill');
+  const recordsEl = $('records');
+
+  const logDiag = (line) => {
+    const t = new Date().toISOString();
+    diagLog.textContent = `[${t}] ${line}\n` + diagLog.textContent;
+  };
+
+  const setLoggedIn = (inSession) => {
+    sessionPill.textContent = inSession ? 'logged in' : 'not logged in';
+    sessionPill.classList.toggle('ok', inSession);
+    $('btnAdd').disabled = !inSession;
+    $('btnRefresh').disabled = !inSession;
+    $('btnClear').disabled = !inSession;
+    $('btnLogout').disabled = !inSession;
+    $('btnLogin').disabled = inSession;
+  };
+
+  const loadRecords = () => {
+    try {
+      const raw = localStorage.getItem(LS_RECORDS);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const saveRecords = (records) => {
+    localStorage.setItem(LS_RECORDS, JSON.stringify(records));
+  };
+
+  const renderRecords = () => {
+    const rows = loadRecords();
+    recordsEl.innerHTML = '';
+    if (!rows.length) {
+      const li = document.createElement('li');
+      li.textContent = '(no records yet)';
+      recordsEl.appendChild(li);
+      return;
+    }
+    rows.slice().reverse().forEach((row) => {
+      const li = document.createElement('li');
+      li.textContent = `${row.createdAt} — ${row.text}`;
+      recordsEl.appendChild(li);
+    });
+  };
+
+  $('btnCheckSdk').addEventListener('click', async () => {
+    try {
+      logDiag('Checking SDK import from jsDelivr...');
+      const mod = await import('https://cdn.jsdelivr.net/npm/@filen/sdk@0.3.12/dist/browser/index.js');
+      if (mod && mod.FilenSDK) {
+        logDiag('Success: FilenSDK export is available.');
+      } else {
+        logDiag('SDK loaded, but FilenSDK export was not found.');
+      }
+    } catch (err) {
+      logDiag(`SDK check failed: ${err?.message || String(err)}`);
+      logDiag('Expected in many browsers without bundler/polyfills.');
+    }
+  });
+
+  $('btnLogin').addEventListener('click', () => {
+    const email = $('email').value.trim();
+    const password = $('password').value;
+    if (!email || !password) {
+      alert('Please enter email and password.');
+      return;
+    }
+    localStorage.setItem(LS_SESSION, JSON.stringify({ email, at: Date.now() }));
+    setLoggedIn(true);
+    renderRecords();
+  });
+
+  $('btnLogout').addEventListener('click', () => {
+    localStorage.removeItem(LS_SESSION);
+    setLoggedIn(false);
+    recordsEl.innerHTML = '';
+  });
+
+  $('btnAdd').addEventListener('click', () => {
+    const text = $('newRecord').value.trim();
+    if (!text) return;
+
+    const rows = loadRecords();
+    rows.push({ text, createdAt: new Date().toISOString() });
+    saveRecords(rows);
+    $('newRecord').value = '';
+    renderRecords();
+  });
+
+  $('btnRefresh').addEventListener('click', renderRecords);
+
+  $('btnClear').addEventListener('click', () => {
+    localStorage.removeItem(LS_RECORDS);
+    renderRecords();
+  });
+
+  const hasSession = Boolean(localStorage.getItem(LS_SESSION));
+  setLoggedIn(hasSession);
+  if (hasSession) renderRecords();
+})();
+</script>
+</body>
+</html>
