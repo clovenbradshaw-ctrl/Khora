@@ -2763,8 +2763,43 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const [initError, setInitError] = useState(null);
   const [claimedRooms, setClaimedRooms] = useState([]);
   const [pendingClaims, setPendingClaims] = useState([]);
+  const [customFieldDefs, setCustomFieldDefs] = useState([]); // [{key,label,category,sensitive}]
+  const [addFieldModal, setAddFieldModal] = useState(false);
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldCategory, setNewFieldCategory] = useState('details');
+  const [newFieldSensitive, setNewFieldSensitive] = useState(false);
 
   useEffect(() => { initVault(); }, []);
+
+  // Merge built-in fields with client-defined custom fields
+  const allFields = useMemo(() => [...VAULT_FIELDS, ...customFieldDefs], [customFieldDefs]);
+  const allCategories = useMemo(() => {
+    const cats = [...FIELD_CATEGORIES];
+    for (const f of customFieldDefs) { if (!cats.includes(f.category)) cats.push(f.category); }
+    return cats;
+  }, [customFieldDefs]);
+
+  const handleAddCustomField = async () => {
+    const label = newFieldLabel.trim();
+    if (!label) return;
+    const key = 'custom_' + label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+    if (allFields.some(f => f.key === key)) { showToast('A field with that name already exists','error'); return; }
+    const def = {key, label, category: newFieldCategory, sensitive: newFieldSensitive, custom: true};
+    const updated = [...customFieldDefs, def];
+    await emitOp(vaultRoom, 'INS', {field:key,entity:'custom_field_def'}, {label,category:newFieldCategory,sensitive:newFieldSensitive}, vaultFrame());
+    await saveSnapshot(undefined, undefined, undefined, updated);
+    setAddFieldModal(false); setNewFieldLabel(''); setNewFieldCategory('details'); setNewFieldSensitive(false);
+    showToast(`Custom field "${label}" created`, 'success');
+  };
+
+  const handleDeleteCustomField = async (fieldKey) => {
+    const updated = customFieldDefs.filter(f => f.key !== fieldKey);
+    const updatedData = {...vaultData};
+    delete updatedData[fieldKey];
+    await emitOp(vaultRoom, 'NUL', {field:fieldKey,entity:'custom_field_def'}, {reason:'client_deleted'}, vaultFrame());
+    await saveSnapshot(updatedData, undefined, undefined, updated);
+    showToast('Custom field removed', 'warn');
+  };
 
   const vaultFrame = (room) => ({type:'vault',room:room||vaultRoom,role:'client',epistemic:'GIVEN'});
   const bridgeFrame = (room) => ({type:'bridge',room,role:'client',epistemic:'MEANT'});
@@ -2813,7 +2848,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'client',owner:svc.userId,created:Date.now()}},
           {type:EVT.VAULT_SNAPSHOT,state_key:'',content:{fields:{},observations:[],
             metrics_consent:{enabled:false,categories:[]},
-            matching_consent:{enabled:false,layers:[],network_id:null,last_token_ts:null}}},
+            matching_consent:{enabled:false,layers:[],network_id:null,last_token_ts:null},
+            custom_field_defs:[]}},
           {type:EVT.VAULT_PROVIDERS,state_key:'',content:{providers:[]}},
         ]);
         showToast('Vault created — encrypted room ready','success');
@@ -2849,6 +2885,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     setVaultData(snap?.fields || {});
     setObservations(snap?.observations || []);
     setMetricsConsent(snap?.metrics_consent || {enabled:false,categories:[]});
+    setCustomFieldDefs(snap?.custom_field_defs || []);
     const idx = await svc.getState(rid, EVT.VAULT_PROVIDERS);
     // Enrich providers with profile data from bridge rooms
     const enrichedProviders = (idx?.providers || []).map(p => {
@@ -2858,10 +2895,10 @@ const ClientApp = ({session, onLogout, showToast}) => {
     setProviders(enrichedProviders);
   };
 
-  const saveSnapshot = async (fields, obs, mc) => {
-    const snapshot = {fields:fields??vaultData, observations:obs??observations, metrics_consent:mc??metricsConsent};
+  const saveSnapshot = async (fields, obs, mc, cfd) => {
+    const snapshot = {fields:fields??vaultData, observations:obs??observations, metrics_consent:mc??metricsConsent, custom_field_defs:cfd??customFieldDefs};
     await svc.setState(vaultRoom, EVT.VAULT_SNAPSHOT, snapshot);
-    setVaultData(snapshot.fields); setObservations(snapshot.observations); setMetricsConsent(snapshot.metrics_consent);
+    setVaultData(snapshot.fields); setObservations(snapshot.observations); setMetricsConsent(snapshot.metrics_consent); setCustomFieldDefs(snapshot.custom_field_defs);
   };
 
   const saveProviderIndex = async (provs) => {
@@ -2949,7 +2986,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     await emitOp(prov.bridgeRoomId, 'SEG', {field:fk,visibility:newShared[fk]?'shared':'revoked'},
       {provider:prov.providerUserId}, bridgeFrame(prov.bridgeRoomId), newShared[fk]?[]:[`prev_seg_${fk}`]);
     await syncFieldsToBridge(prov.bridgeRoomId, newShared, vaultData);
-    const label = VAULT_FIELDS.find(f=>f.key===fk)?.label||fk;
+    const label = allFields.find(f=>f.key===fk)?.label||fk;
     showToast(newShared[fk]?`Shared ${label} — new key issued`:`Revoked ${label} — key destroyed`, newShared[fk]?'success':'warn');
   };
 
@@ -3070,7 +3107,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
 
   const activeProviderIdx = providers.findIndex(p=>p.bridgeRoomId===activeBridge);
   const activeProvider = activeProviderIdx>=0?providers[activeProviderIdx]:null;
-  const filledFields = VAULT_FIELDS.filter(f=>vaultData[f.key]);
+  const filledFields = allFields.filter(f=>vaultData[f.key]);
   const sharedCount = providers.reduce((s,p)=>s+Object.values(p.sharedFields||{}).filter(Boolean).length,0);
 
   if(loading)return<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}><Spin s={28}/></div>;
@@ -3103,7 +3140,6 @@ const ClientApp = ({session, onLogout, showToast}) => {
       <div style={{flex:1,overflow:'auto',padding:'6px 6px'}}>
         {[{id:'vault',icon:'folder',label:'My Vault'},{id:'observations',icon:'clipboard',label:'Observations'},
           {id:'providers',icon:'users',label:'My Providers'},{id:'records',icon:'shield',label:'My Records'},
-          {id:'schema',icon:'grid',label:'Schema'},
           {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
@@ -3144,10 +3180,13 @@ const ClientApp = ({session, onLogout, showToast}) => {
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
           <div><h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Your Vault</h2>
             <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>All data encrypted in your private Matrix room. Only you can read this.</p></div>
-          <button onClick={()=>{setEditData({...vaultData});setEditModal(true)}} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}><I n="key" s={14}/>Edit Vault</button>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={()=>setAddFieldModal(true)} className="b-gho" style={{display:'flex',alignItems:'center',gap:6}}><I n="plus" s={14}/>Add Field</button>
+            <button onClick={()=>{setEditData({...vaultData});setEditModal(true)}} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}><I n="key" s={14}/>Edit Vault</button>
+          </div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10,marginBottom:24}}>
-          {[{l:'Fields',v:`${filledFields.length}/${VAULT_FIELDS.length}`,c:'teal',i:'folder'},
+          {[{l:'Fields',v:`${filledFields.length}/${allFields.length}`,c:'teal',i:'folder'},
             {l:'Providers',v:providers.length,c:'gold',i:'users'},
             {l:'Observations',v:observations.length,c:'blue',i:'clipboard'},
             {l:'Shared Fields',v:sharedCount,c:'orange',i:'share'},
@@ -3156,18 +3195,24 @@ const ClientApp = ({session, onLogout, showToast}) => {
               <span style={{fontSize:18,fontWeight:700}}>{s.v}</span>
               <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span></div></div>)}
         </div>
-        {FIELD_CATEGORIES.map(cat=>{const fields=VAULT_FIELDS.filter(f=>f.category===cat);const color=CAT_COLORS[cat];
+        {allCategories.map(cat=>{const fields=allFields.filter(f=>f.category===cat);const color=CAT_COLORS[cat]||'gold';
+          if(!fields.length) return null;
           return <div key={cat} style={{marginBottom:16}}>
             <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-              <span style={{color:`var(--${color})`}}><I n={CAT_ICONS[cat]} s={13}/></span>
-              <span className="section-label" style={{marginBottom:0}}>{CAT_LABELS[cat].toUpperCase()}</span></div>
+              <span style={{color:`var(--${color})`}}><I n={CAT_ICONS[cat]||'file'} s={13}/></span>
+              <span className="section-label" style={{marginBottom:0}}>{(CAT_LABELS[cat]||cat.charAt(0).toUpperCase()+cat.slice(1)).toUpperCase()}</span></div>
             <div className="card" style={{padding:0,overflow:'hidden'}}>
               {fields.map((f,fi)=><div key={f.key} style={{padding:'10px 16px',borderBottom:fi<fields.length-1?'1px solid var(--border-0)':'none',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <span style={{fontSize:12.5,fontWeight:500}}>{f.label}</span>
-                  {f.sensitive&&<span className="tag tag-red" style={{fontSize:8.5}}>SENSITIVE</span>}</div>
-                <span style={{fontFamily:'var(--mono)',fontSize:11.5,color:vaultData[f.key]?'var(--tx-1)':'var(--tx-3)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                  {vaultData[f.key]?(f.sensitive?'••••••••':vaultData[f.key]):'—'}</span>
+                  {f.sensitive&&<span className="tag tag-red" style={{fontSize:8.5}}>SENSITIVE</span>}
+                  {f.custom&&<span className="tag tag-purple" style={{fontSize:8.5}}>CUSTOM</span>}</div>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontFamily:'var(--mono)',fontSize:11.5,color:vaultData[f.key]?'var(--tx-1)':'var(--tx-3)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {vaultData[f.key]?(f.sensitive?'••••••••':vaultData[f.key]):'—'}</span>
+                  {f.custom&&<span onClick={()=>handleDeleteCustomField(f.key)} style={{cursor:'pointer',color:'var(--tx-3)',transition:'color .15s'}}
+                    onMouseEnter={e=>e.currentTarget.style.color='var(--red)'} onMouseLeave={e=>e.currentTarget.style.color='var(--tx-3)'}><I n="trash" s={12}/></span>}
+                </div>
               </div>)}
             </div>
           </div>;
@@ -3268,15 +3313,15 @@ const ClientApp = ({session, onLogout, showToast}) => {
               <div style={{padding:'12px 18px'}}>
                 <span className="section-label">FIELD-LEVEL SHARING</span>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0'}}>
-                  {VAULT_FIELDS.map(f=>{const isShared=prov.sharedFields?.[f.key]||false;const hasData=!!vaultData[f.key];
+                  {allFields.map(f=>{const isShared=prov.sharedFields?.[f.key]||false;const hasData=!!vaultData[f.key];
                     return <div key={f.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)',marginRight:16}}>
-                      <span style={{fontSize:12,color:hasData?'var(--tx-0)':'var(--tx-3)'}}>{f.label}</span>
+                      <span style={{fontSize:12,color:hasData?'var(--tx-0)':'var(--tx-3)'}}>{f.label}{f.custom?' ✦':''}</span>
                       <Toggle on={isShared} onChange={()=>handleToggleField(pi,f.key)} disabled={!hasData}/>
                     </div>;})}
                 </div>
                 <div style={{marginTop:10,display:'flex',alignItems:'center',gap:6}}>
                   <I n="key" s={12} c="var(--tx-3)"/>
-                  <span style={{fontSize:10.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{shCount}/{VAULT_FIELDS.length} fields — unique AES-256-GCM keys</span>
+                  <span style={{fontSize:10.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{shCount}/{allFields.length} fields — unique AES-256-GCM keys</span>
                 </div>
               </div>
             </div>;})}
@@ -3365,9 +3410,6 @@ const ClientApp = ({session, onLogout, showToast}) => {
         </div>
       </div>}
 
-      {/* SCHEMA WORKBENCH */}
-      {view==='schema'&&!activeBridge&&<SchemaWorkbench isOrg={false}/>}
-
       {/* METRICS VIEW (§B) */}
       {view==='metrics'&&!activeBridge&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
         <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:6}}>Metrics Consent</h2>
@@ -3433,7 +3475,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
         <div className="card" style={{marginBottom:16}}>
           <span className="section-label">CURRENTLY SHARED</span>
           <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
-            {VAULT_FIELDS.filter(f=>activeProvider.sharedFields?.[f.key]).map(f=><span key={f.key} className="tag tag-blue">{f.label}</span>)}
+            {allFields.filter(f=>activeProvider.sharedFields?.[f.key]).map(f=><span key={f.key} className="tag tag-blue">{f.label}</span>)}
             {Object.values(activeProvider.sharedFields||{}).filter(Boolean).length===0&&<span style={{fontSize:12,color:'var(--tx-3)'}}>No fields shared</span>}
           </div>
         </div>
@@ -3462,17 +3504,20 @@ const ClientApp = ({session, onLogout, showToast}) => {
     {/* EDIT VAULT MODAL */}
     <Modal open={editModal} onClose={()=>setEditModal(false)} title="Edit Vault Data" w={540}>
       <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:16,lineHeight:1.6}}>Changes to shared fields are re-encrypted with new keys per provider. Each edit emits EO operations (INS/ALT/NUL) to the vault timeline.</p>
-      {FIELD_CATEGORIES.map(cat=><div key={cat} style={{marginBottom:14}}>
-        <span className="section-label">{CAT_LABELS[cat].toUpperCase()}</span>
-        {VAULT_FIELDS.filter(f=>f.category===cat).map(f=><div key={f.key} style={{marginBottom:8}}>
+      {allCategories.map(cat=>{const fields=allFields.filter(f=>f.category===cat);
+        if(!fields.length) return null;
+        return <div key={cat} style={{marginBottom:14}}>
+        <span className="section-label">{(CAT_LABELS[cat]||cat.charAt(0).toUpperCase()+cat.slice(1)).toUpperCase()}</span>
+        {fields.map(f=><div key={f.key} style={{marginBottom:8}}>
           <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
             <label style={{fontSize:11.5,color:'var(--tx-1)'}}>{f.label}</label>
-            {f.sensitive&&<span className="tag tag-red" style={{fontSize:8}}>SENSITIVE</span>}</div>
-          {['case_notes','history','medical','documents'].includes(f.key)?
+            {f.sensitive&&<span className="tag tag-red" style={{fontSize:8}}>SENSITIVE</span>}
+            {f.custom&&<span className="tag tag-purple" style={{fontSize:8}}>CUSTOM</span>}</div>
+          {['case_notes','history','medical','documents'].includes(f.key)||(f.custom&&f.category==='case')?
             <textarea value={editData[f.key]||''} onChange={e=>setEditData({...editData,[f.key]:e.target.value})} placeholder={`Enter ${f.label.toLowerCase()}...`} style={{minHeight:50}}/>:
             <input value={editData[f.key]||''} onChange={e=>setEditData({...editData,[f.key]:e.target.value})} placeholder={`Enter ${f.label.toLowerCase()}...`}/>}
         </div>)}
-      </div>)}
+      </div>;})}
       <button onClick={handleEditSave} className="b-pri" style={{width:'100%'}}>Save & Re-encrypt Shared Fields</button>
     </Modal>
 
@@ -3523,6 +3568,27 @@ const ClientApp = ({session, onLogout, showToast}) => {
         <button onClick={()=>setHardRevokeTarget(null)} className="b-gho" style={{flex:1}}>Cancel</button>
         <button onClick={()=>handleHardRevoke(hardRevokeTarget)} className="b-red" style={{flex:1}}><I n="zap" s={13}/>Execute</button>
       </div>
+    </Modal>
+
+    {/* ADD CUSTOM FIELD MODAL */}
+    <Modal open={addFieldModal} onClose={()=>{setAddFieldModal(false);setNewFieldLabel('');setNewFieldCategory('details');setNewFieldSensitive(false)}} title="Add Custom Field" w={440}>
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:16,lineHeight:1.6}}>Create a new field to store any data you want in your vault. Custom fields work just like built-in fields — encrypted, shareable, and fully under your control.</p>
+      <div style={{marginBottom:14}}><span className="section-label">FIELD NAME</span>
+        <input value={newFieldLabel} onChange={e=>setNewFieldLabel(e.target.value)} placeholder="e.g. Emergency Contact, Preferred Language..." autoFocus
+          onKeyDown={e=>{if(e.key==='Enter'&&newFieldLabel.trim())handleAddCustomField()}}/></div>
+      <div style={{marginBottom:14}}><span className="section-label">CATEGORY</span>
+        <select value={newFieldCategory} onChange={e=>setNewFieldCategory(e.target.value)} style={{width:'100%'}}>
+          {FIELD_CATEGORIES.map(c=><option key={c} value={c}>{CAT_LABELS[c]}</option>)}
+        </select></div>
+      <div style={{marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div><span style={{fontSize:12,fontWeight:500}}>Sensitive field</span>
+          <p style={{fontSize:10.5,color:'var(--tx-2)',marginTop:2}}>Sensitive fields are masked in the vault view</p></div>
+        <Toggle on={newFieldSensitive} onChange={()=>setNewFieldSensitive(!newFieldSensitive)}/>
+      </div>
+      <div style={{background:'var(--purple-dim)',border:'1px solid rgba(167,139,250,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:14}}>
+        <span style={{fontSize:11.5,color:'var(--tx-1)',lineHeight:1.5}}>Custom fields are encrypted with AES-256-GCM, stored in your vault, and can be selectively shared with providers — identical to built-in fields.</span>
+      </div>
+      <button onClick={handleAddCustomField} className="b-pri" disabled={!newFieldLabel.trim()} style={{width:'100%'}}>Create Field</button>
     </Modal>
   </div>;
 };
@@ -4356,22 +4422,33 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         </div>
         <div className="card" style={{marginBottom:16}}>
           <span className="section-label">SHARED DATA — CLIENT CONTROLLED</span>
-          {FIELD_CATEGORIES.map(cat=>{const fields=VAULT_FIELDS.filter(f=>f.category===cat&&activeCaseData.sharedData[f.key]);
-            if(!fields.length) return null;
-            return <div key={cat} style={{marginBottom:10}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
-                <span style={{color:`var(--${CAT_COLORS[cat]})`}}><I n={CAT_ICONS[cat]} s={12}/></span>
-                <span style={{fontSize:10.5,fontFamily:'var(--mono)',color:'var(--tx-2)',letterSpacing:'.05em'}}>{CAT_LABELS[cat].toUpperCase()}</span></div>
-              {fields.map(f=><div key={f.key} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
-                <span style={{fontSize:12,color:'var(--tx-1)'}}>{f.label}</span>
-                <span style={{fontSize:12.5,fontWeight:500,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeCaseData.sharedData[f.key]}</span>
-              </div>)}
-            </div>;})}
+          {(()=>{
+            const knownKeys = new Set(VAULT_FIELDS.map(f=>f.key));
+            const customShared = Object.keys(activeCaseData.sharedData).filter(k=>!knownKeys.has(k));
+            return <>
+              {FIELD_CATEGORIES.map(cat=>{const fields=VAULT_FIELDS.filter(f=>f.category===cat&&activeCaseData.sharedData[f.key]);
+                if(!fields.length) return null;
+                return <div key={cat} style={{marginBottom:10}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                    <span style={{color:`var(--${CAT_COLORS[cat]})`}}><I n={CAT_ICONS[cat]} s={12}/></span>
+                    <span style={{fontSize:10.5,fontFamily:'var(--mono)',color:'var(--tx-2)',letterSpacing:'.05em'}}>{CAT_LABELS[cat].toUpperCase()}</span></div>
+                  {fields.map(f=><div key={f.key} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
+                    <span style={{fontSize:12,color:'var(--tx-1)'}}>{f.label}</span>
+                    <span style={{fontSize:12.5,fontWeight:500,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeCaseData.sharedData[f.key]}</span>
+                  </div>)}
+                </div>;})}
+              {customShared.length>0&&<div style={{marginBottom:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+                  <span style={{color:'var(--purple)'}}><I n="file" s={12}/></span>
+                  <span style={{fontSize:10.5,fontFamily:'var(--mono)',color:'var(--tx-2)',letterSpacing:'.05em'}}>CLIENT CUSTOM FIELDS</span></div>
+                {customShared.map(k=><div key={k} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
+                  <span style={{fontSize:12,color:'var(--tx-1)'}}>{k.replace(/^custom_/,'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span>
+                  <span style={{fontSize:12.5,fontWeight:500,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeCaseData.sharedData[k]}</span>
+                </div>)}
+              </div>}
+            </>;
+          })()}
           {Object.keys(activeCaseData.sharedData).length===0&&<p style={{color:'var(--tx-3)',fontSize:12,padding:'10px 0'}}>No fields shared yet</p>}
-          <div style={{marginTop:10,padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:6}}>
-            <I n="eyeOff" s={13} c="var(--tx-3)"/>
-            <span style={{fontSize:10.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{VAULT_FIELDS.length-Object.keys(activeCaseData.sharedData).length} fields exist but not shared</span>
-          </div>
         </div>
         {/* GIVEN/MEANT DIVIDE — Record-level framework interpretations */}
         {provObservations.filter(obs => {
