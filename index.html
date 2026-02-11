@@ -624,7 +624,94 @@ const EVT = {
   IMPORT_MANIFEST:`${NS}.import.manifest`,
   // Provider profile (self-reported identity & credentials)
   PROVIDER_PROFILE: `${NS}.provider.profile`,
+  // Governance (MVP §Screen 5)
+  GOV_PROPOSAL:   `${NS}.governance.proposal`,
+  GOV_RHYTHM:     `${NS}.governance.rhythm`,
+  // Schema field & binding (MVP event schema)
+  SCHEMA_FIELD:   `${NS}.schema.field`,
+  SCHEMA_BINDING: `${NS}.schema.binding`,
 };
+
+/* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */
+const MATURITY_LEVELS = {
+  draft:      { id: 'draft',      label: 'Draft',      color: 'blue',   icon: '🔵', desc: 'Proposed, not yet reviewed' },
+  trial:      { id: 'trial',      label: 'Trial',      color: 'gold',   icon: '🟡', desc: 'Approved for testing, may change' },
+  normative:  { id: 'normative',  label: 'Normative',  color: 'green',  icon: '🟢', desc: 'Locked, changes require formal process' },
+  de_facto:   { id: 'de_facto',   label: 'De facto',   color: 'purple', icon: '⚪', desc: 'Widely used, never formally proposed' },
+  deprecated: { id: 'deprecated', label: 'Deprecated', color: 'red',    icon: '🔴', desc: 'Being phased out' },
+};
+
+/* ═══════════════════ PROPAGATION LEVELS (MVP §CON Semantics) ═══════════════════ */
+const PROPAGATION_LEVELS = {
+  required:    { id: 'required',    label: 'Required',    color: 'red',    desc: 'Tight coupling — auto-applied to orgs, immutable' },
+  standard:    { id: 'standard',    label: 'Standard',    color: 'gold',   desc: 'Expected coupling — auto-applied, notify on divergence' },
+  recommended: { id: 'recommended', label: 'Recommended', color: 'blue',   desc: 'Suggested coupling — org reviews, adopts or ignores' },
+  optional:    { id: 'optional',    label: 'Optional',    color: 'teal',   desc: 'Loose coupling — available, no expectation' },
+};
+
+/* ═══════════════════ GOVERNANCE CONSTANTS (MVP §Screen 5) ═══════════════════ */
+const CONSENT_POSITIONS = {
+  adopt_as_is:          { id: 'adopt_as_is',          label: 'Adopt as-is',           icon: '✅', color: 'green' },
+  adopt_with_extension: { id: 'adopt_with_extension', label: 'Adopt with extension',  icon: '🔄', color: 'blue' },
+  needs_modification:   { id: 'needs_modification',   label: 'Needs modification',    icon: '⚠️', color: 'gold' },
+  cannot_adopt:         { id: 'cannot_adopt',         label: 'Cannot adopt (block)',   icon: '🚫', color: 'red' },
+};
+
+const PROPOSAL_STATUSES = {
+  submitted:     { id: 'submitted',     label: 'Submitted',     color: 'blue' },
+  discussion:    { id: 'discussion',    label: 'Discussion',    color: 'gold' },
+  consent_round: { id: 'consent_round', label: 'Consent Round', color: 'orange' },
+  resolved:      { id: 'resolved',      label: 'Resolved',      color: 'green' },
+  adopted:       { id: 'adopted',       label: 'Adopted',       color: 'green' },
+  blocked:       { id: 'blocked',       label: 'Blocked',       color: 'red' },
+};
+
+const GOV_RHYTHMS = {
+  monthly_review:     { id: 'monthly_review',     name: 'Monthly Schema Review',         frequency: 'monthly',    anchor_day: 'first_monday', duration_days: 5, participants: 'org_admins' },
+  quarterly_alignment:{ id: 'quarterly_alignment', name: 'Quarterly Framework Alignment', frequency: 'quarterly',  anchor_day: 'first_monday', duration_days: 5, participants: 'network_steward_plus_affected' },
+  annual_constitutional:{ id: 'annual_constitutional', name: 'Annual Constitutional Review', frequency: 'annual', anchor_day: 'first_monday', duration_days: 14, participants: 'all_members_supermajority' },
+};
+
+/* ═══════════════════ ROLE INFERENCE (MVP §Screen 1) ═══════════════════ */
+/* Roles are detected from room memberships — no account-type selector.
+ * A user can have multiple roles simultaneously. */
+const ROLES = {
+  client:    { id: 'client',    label: 'Client',            icon: 'shield',    color: 'teal',   desc: 'Data owner with a Client Vault' },
+  provider:  { id: 'provider',  label: 'Provider',          icon: 'briefcase', color: 'gold',   desc: 'Case manager or outreach worker' },
+  org_admin: { id: 'org_admin', label: 'Org Admin',         icon: 'users',     color: 'blue',   desc: 'Organization administrator' },
+  network:   { id: 'network',   label: 'Network Coordinator',icon: 'globe',    color: 'green',  desc: 'Network governance steward' },
+};
+
+function inferRolesFromRooms(scannedState, userId) {
+  const roles = new Set();
+  for (const [roomId, state] of Object.entries(scannedState)) {
+    const id = state[EVT.IDENTITY];
+    if (!id) continue;
+    // Client vault owned by this user → client role
+    if (id.account_type === 'client' && id.owner === userId) roles.add('client');
+    // Provider roster owned by this user → provider role
+    if (id.account_type === 'provider' && id.owner === userId) roles.add('provider');
+    // Org room where user is in staff roster → provider role
+    if (id.account_type === 'organization') roles.add('provider');
+    // Network room → network coordinator role (checked via power levels separately)
+    if (id.account_type === 'network') roles.add('provider');
+    // Bridge room where user is the provider side → provider role
+    const bridge = state[EVT.BRIDGE_META];
+    if (bridge && bridge.provider === userId) roles.add('provider');
+    // Bridge room where user is the client side → client role
+    if (bridge && bridge.client === userId) roles.add('client');
+  }
+  // Check for org admin role by examining org rosters
+  for (const [roomId, state] of Object.entries(scannedState)) {
+    const id = state[EVT.IDENTITY];
+    const roster = state[EVT.ORG_ROSTER];
+    if (id?.account_type === 'organization' && roster?.staff) {
+      const staffEntry = roster.staff.find(s => s.userId === userId);
+      if (staffEntry?.role === 'admin') roles.add('org_admin');
+    }
+  }
+  return [...roles];
+}
 
 /* ═══════════════════ MATRIX SERVICE ═══════════════════ */
 class KhoraService {
@@ -1098,7 +1185,8 @@ const DOMAIN_CONFIG = {
   /* ── Client Observation Prompts ── */
   clientPrompts: [
     { id:'prompt_current_status', key:'current_status', question:'What is your current status?', type:'single_select',
-      version:1, audience:'client',
+      version:1, audience:'client', maturity:'normative', section:'status',
+      source:{level:'network',propagation:'required'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'current_status',designation:'Current Status Prompt'},
@@ -1126,7 +1214,8 @@ const DOMAIN_CONFIG = {
       ],
       category:'status', sensitive:false, metrics:true },
     { id:'prompt_engagement', key:'engagement_type', question:'What engagement occurred?', type:'single_select',
-      version:1, audience:'client',
+      version:1, audience:'client', maturity:'normative', section:'engagement',
+      source:{level:'network',propagation:'required'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'engagement_type',designation:'Engagement Type Prompt'},
@@ -1142,7 +1231,8 @@ const DOMAIN_CONFIG = {
         {v:'intake',l:'Intake or enrollment'},{v:'follow_up',l:'Follow-up contact'},{v:'other',l:'Other'}],
       category:'engagement', sensitive:false, metrics:true },
     { id:'prompt_intake_event', key:'intake_event', question:'What intake event occurred?', type:'single_select',
-      version:1, audience:'client',
+      version:1, audience:'client', maturity:'trial', section:'intake',
+      source:{level:'network',propagation:'standard'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'intake_event',designation:'Intake Event Prompt'},
@@ -1156,7 +1246,8 @@ const DOMAIN_CONFIG = {
         {v:'waitlisted',l:'Placed on waitlist'},{v:'other',l:'Other'}],
       category:'intake', sensitive:false, metrics:true },
     { id:'prompt_additional_context', key:'additional_context', question:'Any additional context to record?', type:'single_select',
-      version:1, audience:'client',
+      version:1, audience:'client', maturity:'draft', section:'general',
+      source:{level:'local'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'additional_context',designation:'Additional Context Prompt'},
@@ -1173,7 +1264,8 @@ const DOMAIN_CONFIG = {
   /* ── Provider-Side Prompts ── */
   providerPrompts: [
     { id:'pprompt_assessment_score', key:'assessment_score', question:'Assessment Score', type:'numeric',
-      version:1, audience:'provider',
+      version:1, audience:'provider', maturity:'normative', section:'assessment',
+      source:{level:'network',propagation:'standard'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'assessment_score',designation:'Assessment Score'},
@@ -1186,7 +1278,8 @@ const DOMAIN_CONFIG = {
       range:{min:0,max:10}, thresholds:[{v:0,l:'Low'},{v:4,l:'Medium'},{v:7,l:'High'}],
       category:'assessment', sensitive:true, metrics:true },
     { id:'pprompt_case_stage', key:'case_stage', question:'Case stage?', type:'single_select',
-      version:1, audience:'provider',
+      version:1, audience:'provider', maturity:'normative', section:'case_management',
+      source:{level:'network',propagation:'required'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'case_stage',designation:'Case Stage'},
@@ -1200,7 +1293,8 @@ const DOMAIN_CONFIG = {
         {v:'closed_withdrawn',l:'Closed — withdrawn'},{v:'closed_lost',l:'Closed — lost contact'}],
       category:'case_management', sensitive:false, metrics:true },
     { id:'pprompt_referral', key:'referral_status', question:'Referral status?', type:'single_select',
-      version:1, audience:'provider',
+      version:1, audience:'provider', maturity:'trial', section:'coordination',
+      source:{level:'network',propagation:'recommended'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'referral_status',designation:'Referral Status'},
@@ -1220,7 +1314,7 @@ const DOMAIN_CONFIG = {
   /* ── Classification Definitions ── */
   definitions: [
     { id:'def_priority_level', key:'priority_level', name:'Priority Level', type:'classification_rule',
-      version:1,
+      version:1, maturity:'normative', source:{level:'network',propagation:'required'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'priority_level',designation:'Priority Level Classification'},
@@ -1263,7 +1357,7 @@ const DOMAIN_CONFIG = {
            ]}},
       ]},
     { id:'def_extended_engagement', key:'extended_engagement', name:'Extended Engagement', type:'classification_rule',
-      version:1,
+      version:1, maturity:'trial', source:{level:'network',propagation:'standard'},
       eo:{
         chain:[
           {op:'DES',target:{entity:'extended_engagement',designation:'Extended Engagement Definition'},
@@ -2294,6 +2388,156 @@ const Toast = ({msg,type='info',onClose}) => {
 
 const OP_COLORS = {INS:'green',ALT:'blue',DES:'gold',SEG:'teal',NUL:'red',REC:'orange',CON:'blue',SYN:'purple',SUP:'gold'};
 
+/* ═══════════════════ MVP BADGE COMPONENTS (§Screen 4) ═══════════════════ */
+
+// Maturity badge: Draft / Trial / Normative / De facto / Deprecated
+const MaturityBadge = ({maturity, size='sm'}) => {
+  const level = MATURITY_LEVELS[maturity];
+  if (!level) return null;
+  const pad = size === 'lg' ? '3px 10px' : '2px 7px';
+  const fs = size === 'lg' ? 11 : 9.5;
+  return <span className={`tag tag-${level.color}`} style={{fontSize:fs, padding:pad}} title={level.desc}>
+    {level.label}
+  </span>;
+};
+
+// Source badge: Network (with propagation level) or Local
+const SourceBadge = ({source}) => {
+  if (!source) return <span className="tag tag-purple" style={{fontSize:9}}>Local</span>;
+  if (source.level === 'local') return <span className="tag tag-purple" style={{fontSize:9}}>Local</span>;
+  const prop = PROPAGATION_LEVELS[source.propagation];
+  return <span className={`tag tag-${prop?.color || 'blue'}`} style={{fontSize:9}} title={`${source.propagation}: ${prop?.desc || ''}`}>
+    Network &middot; {prop?.label || source.propagation}
+  </span>;
+};
+
+// Consent gradient — not a vote count, a distribution of positions
+const ConsentGradient = ({positions = {}, totalOrgs = 0}) => {
+  const counts = {};
+  let responded = 0;
+  for (const [orgId, pos] of Object.entries(positions)) {
+    if (pos) { const p = pos.position || 'pending'; counts[p] = (counts[p] || 0) + 1; responded++; }
+  }
+  const pending = totalOrgs - responded;
+  const segments = [
+    { key: 'adopt_as_is', count: counts.adopt_as_is || 0, ...CONSENT_POSITIONS.adopt_as_is },
+    { key: 'adopt_with_extension', count: counts.adopt_with_extension || 0, ...CONSENT_POSITIONS.adopt_with_extension },
+    { key: 'needs_modification', count: counts.needs_modification || 0, ...CONSENT_POSITIONS.needs_modification },
+    { key: 'cannot_adopt', count: counts.cannot_adopt || 0, ...CONSENT_POSITIONS.cannot_adopt },
+  ];
+  const hasBlock = (counts.cannot_adopt || 0) > 0;
+  return <div style={{marginTop:8}}>
+    <div style={{display:'flex',height:8,borderRadius:4,overflow:'hidden',background:'var(--bg-3)',gap:1}}>
+      {segments.map(seg => seg.count > 0 ? <div key={seg.key} style={{
+        flex: seg.count, background: `var(--${seg.color})`, transition: 'flex .3s',
+      }} title={`${seg.label}: ${seg.count}`}/> : null)}
+      {pending > 0 && <div style={{flex:pending,background:'var(--border-1)'}} title={`Pending: ${pending}`}/>}
+    </div>
+    <div style={{display:'flex',gap:10,marginTop:6,flexWrap:'wrap'}}>
+      {segments.filter(s=>s.count>0).map(s=><div key={s.key} style={{display:'flex',alignItems:'center',gap:4}}>
+        <div style={{width:8,height:8,borderRadius:2,background:`var(--${s.color})`}}/>
+        <span style={{fontSize:10,color:'var(--tx-1)'}}>{s.icon} {s.label} ({s.count})</span>
+      </div>)}
+      {pending > 0 && <div style={{display:'flex',alignItems:'center',gap:4}}>
+        <div style={{width:8,height:8,borderRadius:2,background:'var(--border-1)'}}/>
+        <span style={{fontSize:10,color:'var(--tx-3)'}}>Pending ({pending})</span>
+      </div>}
+    </div>
+    {hasBlock && <div style={{marginTop:6,padding:'6px 10px',background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.2)',borderRadius:'var(--r)',fontSize:11,color:'var(--red)'}}>
+      Block registered — structured objection required before proceeding
+    </div>}
+  </div>;
+};
+
+// De facto field detection alert
+const DeFactoAlert = ({fieldName, orgCount, totalOrgs, onFormalize, onDismiss}) => (
+  <div className="card anim-up" style={{padding:'14px 18px',borderColor:'var(--gold)',borderLeft:'3px solid var(--gold)'}}>
+    <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+      <div style={{width:32,height:32,borderRadius:'var(--r)',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',flexShrink:0}}><I n="zap" s={16}/></div>
+      <div style={{flex:1}}>
+        <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>De facto standard detected</div>
+        <div style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.5}}>
+          {orgCount} of {totalOrgs} orgs have a "{fieldName}" field. Formalize as network standard?
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:10}}>
+          <button onClick={onFormalize} className="b-pri b-sm">Propose Formalization</button>
+          <button onClick={onDismiss} className="b-gho b-sm">Dismiss</button>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// Adoption metrics bar (ambient monitoring)
+const AdoptionMetrics = ({adopted, total, extensions, divergences}) => (
+  <div className="card" style={{padding:14}}>
+    <span className="section-label">SCHEMA ADOPTION</span>
+    <div style={{display:'flex',alignItems:'baseline',gap:6,marginTop:4}}>
+      <span style={{fontSize:22,fontWeight:700,color:'var(--green)'}}>{adopted}</span>
+      <span style={{fontSize:13,color:'var(--tx-2)'}}>of {total} network fields adopted</span>
+    </div>
+    <div style={{display:'flex',height:6,borderRadius:3,overflow:'hidden',background:'var(--bg-3)',marginTop:8,gap:1}}>
+      {adopted > 0 && <div style={{flex:adopted,background:'var(--green)'}}/>}
+      {extensions > 0 && <div style={{flex:extensions,background:'var(--blue)'}}/>}
+      {divergences > 0 && <div style={{flex:divergences,background:'var(--gold)'}}/>}
+      {(total - adopted - (extensions||0) - (divergences||0)) > 0 && <div style={{flex:total - adopted - (extensions||0) - (divergences||0),background:'var(--border-1)'}}/>}
+    </div>
+    <div style={{display:'flex',gap:12,marginTop:6,fontSize:10,color:'var(--tx-2)'}}>
+      {extensions > 0 && <span style={{color:'var(--blue)'}}>{extensions} with extensions</span>}
+      {divergences > 0 && <span style={{color:'var(--gold)'}}>{divergences} diverged</span>}
+    </div>
+  </div>
+);
+
+// Governance proposal card (MVP §Screen 5)
+const ProposalCard = ({proposal, onRespond}) => {
+  const status = PROPOSAL_STATUSES[proposal.status] || PROPOSAL_STATUSES.submitted;
+  const targetProp = PROPAGATION_LEVELS[proposal.target_propagation];
+  const targetMat = MATURITY_LEVELS[proposal.target_maturity];
+  const positionEntries = Object.entries(proposal.positions || {});
+  const totalOrgs = positionEntries.length;
+  return <div className="card" style={{padding:0,overflow:'hidden',marginBottom:10}}>
+    <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border-0)'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+        <span className={`tag tag-${status.color}`}>{status.label}</span>
+        {targetProp && <SourceBadge source={{level:'network',propagation:proposal.target_propagation}}/>}
+        {targetMat && <MaturityBadge maturity={proposal.target_maturity}/>}
+      </div>
+      <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{proposal.summary}</div>
+      {proposal.detail && <div style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.5}}>{proposal.detail}</div>}
+      <div style={{display:'flex',gap:12,marginTop:8,fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>
+        <span>By: {proposal.proposed_by}</span>
+        {proposal.governance_rhythm && <span>{proposal.governance_rhythm}</span>}
+        {proposal.deadline && <span>Due: {new Date(proposal.deadline).toLocaleDateString()}</span>}
+      </div>
+    </div>
+    <div style={{padding:'10px 18px'}}>
+      <ConsentGradient positions={proposal.positions} totalOrgs={totalOrgs}/>
+      {onRespond && proposal.status === 'consent_round' && <div style={{marginTop:10}}>
+        <button onClick={onRespond} className="b-pri b-sm">Review & Respond</button>
+      </div>}
+    </div>
+  </div>;
+};
+
+// Governance calendar display
+const GovernanceCalendar = ({rhythms = Object.values(GOV_RHYTHMS)}) => (
+  <div className="card" style={{padding:16}}>
+    <span className="section-label">GOVERNANCE CALENDAR</span>
+    <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:8}}>
+      {rhythms.map(r => <div key={r.id} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+        <div style={{width:36,height:36,borderRadius:'var(--r)',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',flexShrink:0}}>
+          <I n="clock" s={16}/>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:600}}>{r.name}</div>
+          <div style={{fontSize:10.5,color:'var(--tx-2)',marginTop:2}}>{r.frequency} &middot; {r.duration_days} day window &middot; {r.participants}</div>
+        </div>
+      </div>)}
+    </div>
+  </div>
+);
+
 /* ═══════════════════ GIVEN/MEANT DIVIDE VISUALIZATION ═══════════════════ */
 
 // Core visualization: observation on the left, crossing in the middle, frameworks on the right
@@ -3167,6 +3411,10 @@ const classifyEvent = (ev, roomInfo) => {
       case EVT.SCHEMA_DEF: return {op:'DES',epistemic:'MEANT',label:'Schema Definition',desc:content.name?.slice(0,40)};
       case EVT.SCHEMA_TRANSFORM: return {op:'REC',epistemic:'MEANT',label:'Transform Rule',desc:`${Object.keys(content.transforms||{}).length} transforms`};
       case EVT.NET_MEMBERS: return {op:'CON',epistemic:'MEANT',label:'Network Members',desc:`${(content.organizations||[]).length} orgs`};
+      case EVT.GOV_PROPOSAL: return {op:'INS',epistemic:'MEANT',label:'Governance Proposal',desc:content.summary?.slice(0,50)};
+      case EVT.GOV_RHYTHM: return {op:'REC',epistemic:'MEANT',label:'Governance Rhythm',desc:content.name};
+      case EVT.SCHEMA_FIELD: return {op:'DES',epistemic:'MEANT',label:'Schema Field',desc:content.question_text?.slice(0,40)};
+      case EVT.SCHEMA_BINDING: return {op:'DES',epistemic:'MEANT',label:'Framework Binding',desc:`${content.field_id} → ${content.framework?.name?.slice(0,25)}`};
       case 'm.room.encryption': return {op:'REC',epistemic:'GIVEN',label:'Encryption Policy',desc:content.algorithm};
       case 'm.room.tombstone': return {op:'NUL',epistemic:'MEANT',label:'Room Tombstoned',desc:`→ ${content.replacement_room?.slice(0,24)}…`};
       case 'm.room.create': return {op:'INS',epistemic:'GIVEN',label:'Room Created',desc:'New room initialized'};
@@ -3371,7 +3619,7 @@ const WelcomeScreen = ({onContinue}) => (
             <div>
               <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Roles are detected automatically</div>
               <div style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6}}>
-                Khora infers your client, provider, org admin, and network roles from room membership. If you hold multiple roles, you can switch contexts without signing out.
+                Khora infers your <strong style={{color:'var(--teal)'}}>Client</strong>, <strong style={{color:'var(--gold)'}}>Provider</strong>, Org Admin, and Network roles from room membership. If you hold multiple roles, you can switch contexts without signing out.
               </div>
             </div>
           </div>
@@ -3980,12 +4228,16 @@ const ClientApp = ({session, onLogout, showToast}) => {
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:8}}>
             {DEFAULT_PROMPTS.map(p=><div key={p.id} className="card-h" onClick={()=>{setObsModal(p);setObsValue('');setObsFreeText('');setObsDate(new Date().toISOString().slice(0,10))}}
               style={{padding:14}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
                 <span className={`tag tag-${OBS_CAT_COLORS[p.category]||'blue'}`}>{p.category}</span>
                 {p.sensitive&&<span className="tag tag-red" style={{fontSize:8}}>SENSITIVE</span>}
+                {p.maturity && <MaturityBadge maturity={p.maturity}/>}
               </div>
               <span style={{fontSize:13,fontWeight:600,display:'block'}}>{p.question}</span>
-              <span style={{fontSize:10.5,color:'var(--tx-3)',marginTop:4,display:'block'}}>{p.options.length} response options</span>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
+                <span style={{fontSize:10.5,color:'var(--tx-3)'}}>{p.options.length} response options</span>
+                {p.source && <SourceBadge source={p.source}/>}
+              </div>
             </div>)}
           </div>
         </div>
@@ -5896,9 +6148,12 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:6,marginBottom:12}}>
             {DEFAULT_PROVIDER_PROMPTS.map(p=><div key={p.id} className="card-h" onClick={()=>{setProvObsModal(p);setProvObsValue('');setProvObsNotes('')}}
               style={{padding:10}}>
-              <span className={`tag tag-${OBS_CAT_COLORS[p.category]||'purple'}`} style={{fontSize:8.5,marginBottom:4}}>{p.category}</span>
+              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:4,flexWrap:'wrap'}}>
+                <span className={`tag tag-${OBS_CAT_COLORS[p.category]||'purple'}`} style={{fontSize:8.5}}>{p.category}</span>
+                {p.maturity && <MaturityBadge maturity={p.maturity}/>}
+                {p.source && <SourceBadge source={p.source}/>}
+              </div>
               <span style={{fontSize:11.5,fontWeight:600,display:'block'}}>{p.question}</span>
-              {p.eo?.trace&&<span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)',display:'block',marginTop:2}}>{p.eo.trace}</span>}
             </div>)}
           </div>
           {provObservations.length>0&&<>
@@ -6327,30 +6582,88 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             </div>
           </div>
 
-          {/* Network schema catalog */}
+          {/* Schema Commons — Network schema catalog with maturity & propagation (MVP §Screen 5A) */}
           <div className="card" style={{marginBottom:16}}>
-            <span className="section-label">NETWORK SCHEMA CATALOG</span>
-            <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:10}}>Shared definitions that propagate to all member organizations.</p>
-            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-              {DEFAULT_PROMPTS.map(p=><span key={p.key} style={{fontSize:9.5,padding:'3px 8px',background:'var(--bg-3)',borderRadius:10,color:'var(--tx-1)'}}>
-                {p.key} <span style={{color:'var(--gold)',fontSize:8}}>standard</span></span>)}
-              {DEFAULT_DEFINITIONS.map(d=><span key={d.key} style={{fontSize:9.5,padding:'3px 8px',background:'var(--red-dim)',borderRadius:10,color:'var(--tx-1)'}}>
-                {d.key} <span style={{color:'var(--red)',fontSize:8}}>required</span></span>)}
+            <span className="section-label">SCHEMA COMMONS</span>
+            <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:10}}>All fields in the network schema. Definitions propagate to member organizations.</p>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              {DEFAULT_PROMPTS.map(p=><div key={p.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
+                  <span style={{fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.question}</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                  <MaturityBadge maturity={p.maturity || 'normative'}/>
+                  <SourceBadge source={p.source || {level:'network',propagation:'standard'}}/>
+                </div>
+              </div>)}
+              {DEFAULT_DEFINITIONS.map(d=><div key={d.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
+                  <span style={{fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}</span>
+                  <span className="tag tag-purple" style={{fontSize:8}}>DEFINITION</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                  <MaturityBadge maturity={d.maturity || 'normative'}/>
+                  <SourceBadge source={d.source || {level:'network',propagation:'required'}}/>
+                </div>
+              </div>)}
             </div>
           </div>
 
-          <div className="card" style={{marginBottom:16}}>
-            <span className="section-label">PROPAGATION MODEL</span>
+          {/* Adoption metrics (MVP §Screen 4B — ambient monitoring) */}
+          <AdoptionMetrics adopted={DEFAULT_PROMPTS.length + DEFAULT_DEFINITIONS.length}
+            total={DEFAULT_PROMPTS.length + DEFAULT_DEFINITIONS.length + 2}
+            extensions={1} divergences={0}/>
+
+          {/* Propagation model reference */}
+          <div className="card" style={{marginBottom:16,marginTop:16}}>
+            <span className="section-label">PROPAGATION MODEL (CON SEMANTICS)</span>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:6}}>
-              {[{level:'Required',desc:'Must use exactly as defined',color:'red'},
-                {level:'Standard',desc:'Additive extensions OK',color:'gold'},
-                {level:'Recommended',desc:'Can modify or replace',color:'blue'},
-                {level:'Optional',desc:'Available, no expectation',color:'teal'}
-              ].map(p=><div key={p.level} style={{padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
-                <span className={`tag tag-${p.color}`} style={{marginBottom:4,fontSize:9}}>{p.level.toUpperCase()}</span>
+              {Object.values(PROPAGATION_LEVELS).map(p=><div key={p.id} style={{padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+                <span className={`tag tag-${p.color}`} style={{marginBottom:4,fontSize:9}}>{p.label.toUpperCase()}</span>
                 <p style={{fontSize:11,color:'var(--tx-2)',marginTop:2}}>{p.desc}</p>
               </div>)}
             </div>
+          </div>
+
+          {/* Active Proposals (MVP §Screen 5B) */}
+          <div className="card" style={{marginBottom:16}}>
+            <span className="section-label">ACTIVE PROPOSALS</span>
+            <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:10}}>Consent-based governance. Required/standard proposals trigger a consent round; recommended/optional use lazy consensus.</p>
+            {/* Example proposal — in production these come from GOV_PROPOSAL events in the network room */}
+            <ProposalCard proposal={{
+              proposal_id: 'prop_example_001',
+              type: 'add_field',
+              summary: 'Add "safe parking program" as a network-standard option for sleep location',
+              detail: 'Multiple orgs already track this locally. Formalizing ensures consistent reporting across the network.',
+              proposed_by: '@steward:khora.io',
+              proposed_at: Date.now() - 86400000 * 3,
+              target_propagation: 'standard',
+              target_maturity: 'trial',
+              governance_rhythm: 'monthly_review',
+              deadline: Date.now() + 86400000 * 4,
+              status: 'consent_round',
+              positions: {
+                '!org_a:khora.io': { position: 'adopt_as_is', at: Date.now() - 86400000 * 2 },
+                '!org_b:khora.io': { position: 'adopt_with_extension', at: Date.now() - 86400000, note: 'Will add "safe lot" sub-type' },
+                '!org_c:khora.io': null,
+                '!org_d:khora.io': null,
+              }
+            }}/>
+            <div style={{textAlign:'center',padding:'12px',fontSize:11,color:'var(--tx-3)'}}>
+              Active proposals from the network room will appear here. Proposals use consent-based governance — not majority voting.
+            </div>
+          </div>
+
+          {/* Governance Calendar (MVP §Screen 5C) */}
+          <div style={{marginBottom:16}}>
+            <GovernanceCalendar/>
+          </div>
+
+          {/* De facto detection placeholder (MVP §Screen 5A) */}
+          <div style={{marginBottom:16}}>
+            <DeFactoAlert fieldName="safe parking" orgCount={4} totalOrgs={5}
+              onFormalize={()=>showToast('Proposal creation flow coming in Phase 3','info')}
+              onDismiss={()=>showToast('Dismissed','info')}/>
           </div>
 
           {/* Member-specific actions */}
@@ -6973,15 +7286,25 @@ const App = () => {
   const [session, setSession] = useState(null);
   const [availableContexts, setAvailableContexts] = useState([]);
   const [activeContext, setActiveContext] = useState(null);
+  const [detectedRoles, setDetectedRoles] = useState(null); // roles from inferRolesFromRooms
   const [toast, setToast] = useState(null);
   const [webhookData, setWebhookData] = useState(null);
   const [restoring, setRestoring] = useState(true);
+  const [detectingRoles, setDetectingRoles] = useState(false);
 
   const showToast = (msg, type='info') => setToast({msg, type, k:Date.now()});
 
+  // Context detection: scan rooms to infer roles (MVP §Screen 1)
+  // Uses inferRolesFromRooms for fine-grained role detection (client/provider/org_admin/network)
   const detectContexts = React.useCallback(async () => {
+    setDetectingRoles(true);
     try {
-      const scanned = await svc.scanRooms();
+      const scanned = await svc.scanRooms([EVT.ORG_ROSTER]);
+      // Fine-grained role detection via inferRolesFromRooms
+      const roles = inferRolesFromRooms(scanned, svc.userId);
+      setDetectedRoles(roles);
+
+      // Context detection for app routing (client vs provider)
       let hasClient = false;
       let hasProvider = false;
       for (const state of Object.values(scanned || {})) {
@@ -7005,6 +7328,7 @@ const App = () => {
       setAvailableContexts(['provider']);
       setActiveContext('provider');
     }
+    setDetectingRoles(false);
   }, []);
 
   const switchContext = (context) => {
@@ -7033,6 +7357,8 @@ const App = () => {
 
   const handleLogin = async (s) => {
     setSession(s);
+    // Detect contexts + roles from room membership (MVP §Screen 1)
+    await detectContexts();
     // Hydrate Airtable data from n8n webhooks in background
     try {
       const tables = await hydrateFromWebhooks(svc._token);
@@ -7040,11 +7366,10 @@ const App = () => {
     } catch (e) {
       console.warn('Webhook hydration failed (CORS or network):', e.message);
     }
-    await detectContexts();
   };
 
-  if (restoring) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
-    <div style={{textAlign:'center'}}><Spin s={32}/><p style={{color:'var(--tx-2)',fontSize:13,marginTop:16}}>Restoring session…</p></div>
+  if (restoring || detectingRoles) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div style={{textAlign:'center'}}><Spin s={32}/><p style={{color:'var(--tx-2)',fontSize:13,marginTop:16}}>{detectingRoles ? 'Detecting roles from room membership…' : 'Restoring session…'}</p></div>
   </div>;
   if (!welcomed && !session) return <WelcomeScreen onContinue={() => setWelcomed(true)}/>;
   if (!session) return <LoginScreen onLogin={handleLogin}/>;
@@ -7054,7 +7379,7 @@ const App = () => {
 
   const handleLogout = async () => {
     try { sessionStorage.removeItem('khora_session'); sessionStorage.removeItem('khora_active_context'); } catch {}
-    await svc.logout(); setSession(null); setAvailableContexts([]); setActiveContext(null); setWebhookData(null);
+    await svc.logout(); setSession(null); setAvailableContexts([]); setActiveContext(null); setDetectedRoles(null); setWebhookData(null);
   };
 
   return <>
@@ -7062,6 +7387,7 @@ const App = () => {
       <ClientApp session={session} onLogout={handleLogout} showToast={showToast} webhookData={webhookData}/> :
       <ProviderApp session={session} onLogout={handleLogout} showToast={showToast} webhookData={webhookData}/>
     }
+    {/* Context switcher — visible when user has multiple role contexts */}
     {availableContexts.length > 1 && <div style={{position:'fixed',top:14,right:64,zIndex:30,display:'flex',gap:6,padding:'6px',border:'1px solid var(--border-0)',background:'var(--bg-2)',borderRadius:'999px',backdropFilter:'blur(4px)'}}>
       {[{id:'provider',label:'Provider',icon:'briefcase'},{id:'client',label:'Client',icon:'shield'}]
         .filter(opt => availableContexts.includes(opt.id))
