@@ -646,6 +646,9 @@ const EVT = {
   ORG_VERIFY_CHALLENGE: `${NS}.org.verification_challenge`,
   // Organization terminology customization
   ORG_TERMINOLOGY: `${NS}.org.terminology`,
+  // Teams (flexible groups of people, not tied to a single org)
+  TEAM_META:      `${NS}.team.metadata`,
+  TEAM_MEMBERS:   `${NS}.team.members`,
   // Matching / dedup
   MATCH_TOKEN:    `${NS}.match.token`,
   MATCH_HIT:      `${NS}.match.hit`,
@@ -3404,7 +3407,7 @@ const SchemaWorkbench = ({isOrg = false}) => {
 
 
 /* ═══════════════════ ACTIVITY STREAM ═══════════════════ */
-const ROOM_COLORS = {vault:'teal',bridge:'blue',roster:'gold',org:'blue',schema:'purple',metrics:'orange',network:'green',client_record:'teal',unknown:'orange'};
+const ROOM_COLORS = {vault:'teal',bridge:'blue',roster:'gold',org:'blue',schema:'purple',metrics:'orange',network:'green',client_record:'teal',team:'purple',unknown:'orange'};
 
 // Classify a room from pre-scanned state (no HTTP calls) or fallback to getState
 const classifyRoom = async (roomId, scannedState) => {
@@ -3418,6 +3421,7 @@ const classifyRoom = async (roomId, scannedState) => {
     if (id.account_type==='schema') return {type:'schema',label:'Schema Room',color:'purple'};
     if (id.account_type==='metrics') return {type:'metrics',label:'Metrics Room',color:'orange'};
     if (id.account_type==='network') return {type:'network',label:'Network Room',color:'green'};
+    if (id.account_type==='team') return {type:'team',label:'Team Room',color:'purple'};
   }
   const meta = state[EVT.BRIDGE_META] || await svc.getState(roomId, EVT.BRIDGE_META);
   if (meta) return {type:'bridge',label:'Bridge Room',color:'blue'};
@@ -3789,6 +3793,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldCategory, setNewFieldCategory] = useState('details');
   const [newFieldSensitive, setNewFieldSensitive] = useState(false);
+  // Teams the individual belongs to
+  const [myTeams, setMyTeams] = useState([]);
 
   useEffect(() => { initVault(); }, []);
 
@@ -3841,10 +3847,11 @@ const ClientApp = ({session, onLogout, showToast}) => {
       } catch (e) { console.warn('Invited room scan failed:', e.message); }
 
       // Phase 2: Scan joined rooms (now includes any rooms we just auto-joined)
-      const scanned = await svc.scanRooms([EVT.PROVIDER_PROFILE]);
+      const scanned = await svc.scanRooms([EVT.PROVIDER_PROFILE, EVT.TEAM_META, EVT.TEAM_MEMBERS]);
       let vault = null, schema = null;
       const detectedPending = [], detectedClaimed = [];
       const bridgeProfiles = {}; // bridgeRoomId → provider profile
+      const detectedTeams = [];
       for (const [rid, state] of Object.entries(scanned)) {
         const id = state[EVT.IDENTITY];
         if (id?.account_type === 'client' && id.owner === svc.userId) vault = rid;
@@ -3856,6 +3863,12 @@ const ClientApp = ({session, onLogout, showToast}) => {
           } else {
             detectedPending.push({roomId: rid, ...id});
           }
+        }
+        // Detect team rooms the individual belongs to
+        if (id?.account_type === 'team') {
+          const teamMeta = state[EVT.TEAM_META] || {};
+          const teamMembers = state[EVT.TEAM_MEMBERS] || {members:[]};
+          detectedTeams.push({roomId:rid, ...teamMeta, members:teamMembers.members||[]});
         }
         // Collect provider profiles from bridge rooms
         const bridgeMeta = state[EVT.BRIDGE_META];
@@ -3894,6 +3907,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
       await loadVault(vault, bridgeProfiles);
       setPendingClaims(detectedPending);
       setClaimedRooms(detectedClaimed);
+      if (detectedTeams.length > 0) setMyTeams(detectedTeams);
     } catch (e) {
       console.error('Vault init failed:', e);
       setInitError(e.message || 'Failed to initialize vault.');
@@ -4177,7 +4191,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
       <div style={{flex:1,overflow:'auto',padding:'6px 6px'}}>
         {[{id:'vault',icon:'folder',label:'My Vault'},{id:'inbox',icon:'inbox',label:'Inbox'},
           {id:'observations',icon:'clipboard',label:'Observations'},
-          {id:'providers',icon:'users',label:`My ${ROLES.provider.label}s`},{id:'records',icon:'shield',label:'My Records'},
+          {id:'providers',icon:'users',label:'People & Teams'},{id:'records',icon:'shield',label:'My Records'},
           {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null);if(item.id!=='inbox')setInboxConvo(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
@@ -4318,58 +4332,142 @@ const ClientApp = ({session, onLogout, showToast}) => {
         </div>}
       </div>}
 
-      {/* PROVIDERS VIEW */}
+      {/* PROVIDERS / TEAMS / CONTACTS VIEW */}
       {view==='providers'&&!activeBridge&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
-          <div><h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>My {ROLES.provider.label}s</h2>
-            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Each {ROLES.provider.label.toLowerCase()} gets a dedicated encrypted bridge room. You control what they see.</p></div>
+          <div><h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>People & Teams</h2>
+            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Your {ROLES.provider.label.toLowerCase()}s, teams you belong to, and contacts — all in one place.</p></div>
           <button onClick={()=>setAddProviderModal(true)} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}><I n="plus" s={14}/>Add {ROLES.provider.label}</button>
         </div>
-        {providers.length===0?<div className="card" style={{textAlign:'center',padding:'40px 20px',borderStyle:'dashed'}}><I n="users" s={32}/><p style={{color:'var(--tx-2)',marginTop:10}}>No {ROLES.provider.label.toLowerCase()}s yet</p></div>
-        :<div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {providers.map((prov,pi)=>{const shCount=Object.values(prov.sharedFields||{}).filter(Boolean).length;
-            const pp = prov.providerProfile;
-            const orgInfo = pp?.org_membership;
-            return <div key={prov.bridgeRoomId} className="card" style={{padding:0,overflow:'hidden'}}>
-              <div style={{padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid var(--border-0)'}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                    <span style={{fontSize:14,fontWeight:600}}>{prov.providerName||prov.providerUserId}</span>
-                    {pp?.title && <span style={{fontSize:11,color:'var(--tx-2)'}}>{pp.title}</span>}
-                    <span className="tag tag-green"><I n="lock" s={9}/>E2EE</span>
+
+        {/* ── Section 1: Providers ── */}
+        <div style={{marginBottom:24}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+            <I n="briefcase" s={16} c="var(--gold)"/>
+            <span style={{fontSize:15,fontWeight:700}}>{ROLES.provider.label}s</span>
+            <span className="tag tag-gold" style={{fontSize:9}}>{providers.length}</span>
+          </div>
+          {providers.length===0?<div className="card" style={{textAlign:'center',padding:'24px 20px',borderStyle:'dashed'}}><I n="briefcase" s={24} c="var(--tx-3)"/><p style={{color:'var(--tx-2)',marginTop:8,fontSize:12}}>No {ROLES.provider.label.toLowerCase()}s yet. Add one to create an encrypted bridge.</p></div>
+          :<div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {providers.map((prov,pi)=>{const shCount=Object.values(prov.sharedFields||{}).filter(Boolean).length;
+              const pp = prov.providerProfile;
+              const orgInfo = pp?.org_membership;
+              return <div key={prov.bridgeRoomId} className="card" style={{padding:0,overflow:'hidden'}}>
+                <div style={{padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid var(--border-0)'}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                      <span style={{fontSize:14,fontWeight:600}}>{prov.providerName||prov.providerUserId}</span>
+                      {pp?.title && <span style={{fontSize:11,color:'var(--tx-2)'}}>{pp.title}</span>}
+                      <span className="tag tag-green"><I n="lock" s={9}/>E2EE</span>
+                    </div>
+                    {orgInfo?.verified ? <div style={{display:'flex',alignItems:'center',gap:5,marginTop:4}}>
+                      <I n="shieldCheck" s={12} c="var(--blue)"/>
+                      <span style={{fontSize:11,fontWeight:600,color:'var(--blue)'}}>{orgInfo.org_name}</span>
+                      {orgInfo.email_verified ? <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>EMAIL VERIFIED</span>
+                      : <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>}
+                      {orgInfo.role && <span style={{fontSize:9,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{orgInfo.role}</span>}
+                    </div> : <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)'}}>Independent {ROLES.provider.label.toLowerCase()}</span>}
+                    {pp?.credentials && <div style={{marginTop:2}}><span style={{fontSize:9.5,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{pp.credentials}</span></div>}
+                    <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)',display:'block',marginTop:2}}>Bridge: {prov.bridgeRoomId.slice(0,20)}…</span>
                   </div>
-                  {orgInfo?.verified ? <div style={{display:'flex',alignItems:'center',gap:5,marginTop:4}}>
-                    <I n="shieldCheck" s={12} c="var(--blue)"/>
-                    <span style={{fontSize:11,fontWeight:600,color:'var(--blue)'}}>{orgInfo.org_name}</span>
-                    {orgInfo.email_verified ? <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>EMAIL VERIFIED</span>
-                    : <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>}
-                    {orgInfo.role && <span style={{fontSize:9,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{orgInfo.role}</span>}
-                  </div> : <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)'}}>Independent provider</span>}
-                  {pp?.credentials && <div style={{marginTop:2}}><span style={{fontSize:9.5,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{pp.credentials}</span></div>}
-                  <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)',display:'block',marginTop:2}}>Bridge: {prov.bridgeRoomId.slice(0,20)}…</span>
+                  <div style={{display:'flex',gap:4}}>
+                    <button onClick={()=>openBridge(prov.bridgeRoomId)} className="b-gho b-sm">Open Bridge</button>
+                    <button onClick={()=>setHardRevokeTarget(pi)} className="b-red b-sm"><I n="zap" s={11}/></button>
+                    <button onClick={()=>handleRemoveProvider(pi)} className="b-gho b-sm" style={{color:'var(--red)'}}><I n="trash" s={12}/></button>
+                  </div>
                 </div>
-                <div style={{display:'flex',gap:4}}>
-                  <button onClick={()=>openBridge(prov.bridgeRoomId)} className="b-gho b-sm">Open Bridge</button>
-                  <button onClick={()=>setHardRevokeTarget(pi)} className="b-red b-sm"><I n="zap" s={11}/></button>
-                  <button onClick={()=>handleRemoveProvider(pi)} className="b-gho b-sm" style={{color:'var(--red)'}}><I n="trash" s={12}/></button>
+                <div style={{padding:'12px 18px'}}>
+                  <span className="section-label">FIELD-LEVEL SHARING</span>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0'}}>
+                    {allFields.map(f=>{const isShared=prov.sharedFields?.[f.key]||false;const hasData=!!vaultData[f.key];
+                      return <div key={f.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)',marginRight:16}}>
+                        <span style={{fontSize:12,color:hasData?'var(--tx-0)':'var(--tx-3)'}}>{f.label}{f.custom?' ✦':''}</span>
+                        <Toggle on={isShared} onChange={()=>handleToggleField(pi,f.key)} disabled={!hasData}/>
+                      </div>;})}
+                  </div>
+                  <div style={{marginTop:10,display:'flex',alignItems:'center',gap:6}}>
+                    <I n="key" s={12} c="var(--tx-3)"/>
+                    <span style={{fontSize:10.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{shCount}/{allFields.length} fields — unique AES-256-GCM keys</span>
+                  </div>
                 </div>
+              </div>;})}
+          </div>}
+        </div>
+
+        {/* ── Section 2: Teams ── */}
+        <div style={{marginBottom:24}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+            <I n="users" s={16} c="var(--purple,var(--blue))"/>
+            <span style={{fontSize:15,fontWeight:700}}>My Teams</span>
+            <span className="tag tag-blue" style={{fontSize:9}}>{myTeams.length}</span>
+          </div>
+          {myTeams.length===0?<div className="card" style={{textAlign:'center',padding:'24px 20px',borderStyle:'dashed'}}><I n="users" s={24} c="var(--tx-3)"/><p style={{color:'var(--tx-2)',marginTop:8,fontSize:12}}>Not part of any teams yet. Teams are created by {ROLES.provider.label.toLowerCase()}s to collaborate.</p></div>
+          :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))',gap:10}}>
+            {myTeams.map(team=><div key={team.roomId} className="card" style={{padding:'14px 18px'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                <span style={{fontSize:14,fontWeight:600}}>{team.name||'Unnamed Team'}</span>
+                {team.org_name&&<span className="tag tag-blue" style={{fontSize:8}}>{team.org_name}</span>}
               </div>
-              <div style={{padding:'12px 18px'}}>
-                <span className="section-label">FIELD-LEVEL SHARING</span>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0'}}>
-                  {allFields.map(f=>{const isShared=prov.sharedFields?.[f.key]||false;const hasData=!!vaultData[f.key];
-                    return <div key={f.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)',marginRight:16}}>
-                      <span style={{fontSize:12,color:hasData?'var(--tx-0)':'var(--tx-3)'}}>{f.label}{f.custom?' ✦':''}</span>
-                      <Toggle on={isShared} onChange={()=>handleToggleField(pi,f.key)} disabled={!hasData}/>
-                    </div>;})}
-                </div>
-                <div style={{marginTop:10,display:'flex',alignItems:'center',gap:6}}>
-                  <I n="key" s={12} c="var(--tx-3)"/>
-                  <span style={{fontSize:10.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{shCount}/{allFields.length} fields — unique AES-256-GCM keys</span>
-                </div>
+              {team.description&&<p style={{fontSize:11,color:'var(--tx-2)',lineHeight:1.5,marginBottom:8}}>{team.description}</p>}
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <I n="user" s={11} c="var(--tx-3)"/>
+                <span style={{fontSize:10.5,color:'var(--tx-2)'}}>
+                  {team.members?.length||0} member{(team.members?.length||0)!==1?'s':''}
+                </span>
               </div>
-            </div>;})}
-        </div>}
+              {team.members&&team.members.length>0&&<div style={{display:'flex',gap:3,flexWrap:'wrap',marginTop:6}}>
+                {team.members.slice(0,4).map((m,mi)=>
+                  <span key={mi} style={{fontSize:9,padding:'2px 6px',background:'var(--bg-3)',borderRadius:'var(--r)',color:'var(--tx-1)'}}>{m.display_name||m.userId?.split(':')[0]?.replace('@','')}</span>)}
+                {team.members.length>4&&<span style={{fontSize:9,color:'var(--tx-3)'}}>+{team.members.length-4}</span>}
+              </div>}
+            </div>)}
+          </div>}
+        </div>
+
+        {/* ── Section 3: Contacts ── */}
+        <div style={{marginBottom:24}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+            <I n="msg" s={16} c="var(--teal)"/>
+            <span style={{fontSize:15,fontWeight:700}}>Contacts</span>
+          </div>
+          {(() => {
+            // Derive contacts: people who appear across bridges + teams (deduplicated)
+            const contactMap = {};
+            for (const prov of providers) {
+              const uid = prov.providerUserId;
+              if (uid && uid !== svc.userId && !contactMap[uid]) {
+                contactMap[uid] = {userId:uid, name:prov.providerName||uid, source:'bridge', org:prov.providerProfile?.org_membership?.org_name};
+              }
+            }
+            for (const team of myTeams) {
+              for (const m of (team.members||[])) {
+                if (m.userId && m.userId !== svc.userId && !contactMap[m.userId]) {
+                  contactMap[m.userId] = {userId:m.userId, name:m.display_name||m.userId, source:'team', team:team.name};
+                }
+              }
+            }
+            const contacts = Object.values(contactMap);
+            return contacts.length===0
+              ? <div className="card" style={{textAlign:'center',padding:'24px 20px',borderStyle:'dashed'}}><I n="msg" s={24} c="var(--tx-3)"/><p style={{color:'var(--tx-2)',marginTop:8,fontSize:12}}>No contacts yet. Connect with {ROLES.provider.label.toLowerCase()}s or join teams to build your network.</p></div>
+              : <div className="card" style={{padding:0,overflow:'hidden'}}>
+                  {contacts.map((c,ci)=><div key={c.userId} style={{padding:'10px 16px',borderBottom:ci<contacts.length-1?'1px solid var(--border-0)':'none',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <div style={{width:24,height:24,borderRadius:'50%',background:c.source==='bridge'?'var(--gold-dim)':'var(--blue-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:c.source==='bridge'?'var(--gold)':'var(--blue)',flexShrink:0}}>
+                        <I n={c.source==='bridge'?'briefcase':'users'} s={11}/></div>
+                      <div>
+                        <span style={{fontSize:12.5,fontWeight:500,display:'block'}}>{c.name}</span>
+                        <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{c.userId}</span>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:4}}>
+                      {c.org&&<span className="tag tag-blue" style={{fontSize:8}}>{c.org}</span>}
+                      {c.team&&<span className="tag tag-purple" style={{fontSize:8}}>{c.team}</span>}
+                      <span className={`tag ${c.source==='bridge'?'tag-gold':'tag-blue'}`} style={{fontSize:8}}>{c.source==='bridge'?ROLES.provider.label:'Team'}</span>
+                    </div>
+                  </div>)}
+                </div>;
+          })()}
+        </div>
       </div>}
 
       {/* MY RECORDS VIEW — rooms claimed from providers */}
@@ -4802,6 +4900,13 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [newClientNotes, setNewClientNotes] = useState('');
   const [clientInviteMatrixId, setClientInviteMatrixId] = useState('');
   const [copiedField, setCopiedField] = useState(null);
+  // Teams — flexible groups of people (not tied to a single org)
+  const [teams, setTeams] = useState([]);
+  const [createTeamModal, setCreateTeamModal] = useState(false);
+  const [newTeamName, setNewTeamName] = useState('');
+  const [newTeamDesc, setNewTeamDesc] = useState('');
+  const [teamInviteModal, setTeamInviteModal] = useState(null); // team object or null
+  const [teamInviteUserId, setTeamInviteUserId] = useState('');
   // Client data import
   const [importModal, setImportModal] = useState(false);
   // Provider profile — self-reported identity info
@@ -4855,12 +4960,13 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     setInitError(null);
     try {
       // Single-pass scan: fetch all Khora state across rooms in one request
-      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY]);
+      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS]);
       let roster=null, metricsR=null, schema=null, network=null;
       let detectedOrg=null, detectedOrgRole=null;
       const bridgeData = [];
       const detectedClientRecords = [];
       const detectedOrgChannels = [];
+      const detectedTeams = [];
       for (const [rid, state] of Object.entries(scanned)) {
         const id = state[EVT.IDENTITY];
         if (id?.account_type==='provider'&&id.owner===svc.userId) roster=rid;
@@ -4885,6 +4991,12 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         const chanMeta = state[EVT.ORG_MSG_CHANNEL];
         if (chanMeta && chanMeta.type === 'org_msg_channel') {
           detectedOrgChannels.push({roomId: rid, ...chanMeta});
+        }
+        // Detect team rooms
+        if (id?.account_type==='team') {
+          const teamMeta = state[EVT.TEAM_META] || {};
+          const teamMembers = state[EVT.TEAM_MEMBERS] || {members:[]};
+          detectedTeams.push({roomId:rid, ...teamMeta, members:teamMembers.members||[], owner:id.owner, created:id.created});
         }
         const meta = state[EVT.BRIDGE_META];
         if (meta && meta.provider===svc.userId && meta.status!=='tombstoned') {
@@ -4949,6 +5061,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         // Load detected org messaging channels
         if (detectedOrgChannels.length > 0) setOrgChannels(detectedOrgChannels);
       }
+      // Load teams detected during scan
+      if (detectedTeams.length > 0) setTeams(detectedTeams);
       // Load client records detected during scan
       if (detectedClientRecords.length > 0) {
         // Check room membership to determine status
@@ -5080,7 +5194,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       const clientId = newClientMatrixId.trim() || null;
       const roomId = await svc.createClientRoom(
         `[Client] ${newClientName}`,
-        `Client record for ${newClientName}`,
+        `${T.client_term} record for ${newClientName}`,
         [
           { type: EVT.IDENTITY, state_key: '', content: {
             account_type: 'client_record', owner: svc.userId, created: Date.now(),
@@ -5109,7 +5223,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       setClientRecords(prev => [...prev, newRecord]);
       setCreateClientModal(false);
       setNewClientName(''); setNewClientMatrixId(''); setNewClientNotes('');
-      showToast(`Client "${newClientName}" created${clientId ? ' — invite sent' : ''}`,'success');
+      showToast(`${T.client_term} "${newClientName}" created${clientId ? ' — invite sent' : ''}`,'success');
     } catch (e) { showToast('Failed: ' + e.message, 'error'); }
   };
 
@@ -5133,6 +5247,49 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       ));
       showToast(`Invite sent to ${clientId} — they will have full room control`, 'success');
     } catch (e) { showToast('Invite failed: ' + e.message, 'error'); }
+  };
+
+  // ─── Team CRUD ───
+  const handleCreateTeam = async () => {
+    if (!newTeamName.trim()) return;
+    try {
+      const roomId = await svc.createRoom(`[Khora Team] ${newTeamName}`, newTeamDesc || `Team: ${newTeamName}`, [
+        {type:EVT.IDENTITY,state_key:'',content:{account_type:'team',owner:svc.userId,created:Date.now()}},
+        {type:EVT.TEAM_META,state_key:'',content:{
+          name:newTeamName, description:newTeamDesc||'', created:Date.now(), created_by:svc.userId,
+          org_id:orgRoom||null, org_name:orgMeta.name||null,
+        }},
+        {type:EVT.TEAM_MEMBERS,state_key:'',content:{members:[
+          {userId:svc.userId,role:'lead',joined:Date.now(),display_name:providerProfile.display_name||''}
+        ]}},
+      ]);
+      const newTeam = {
+        roomId, name:newTeamName, description:newTeamDesc||'', created:Date.now(),
+        created_by:svc.userId, org_id:orgRoom||null, org_name:orgMeta.name||null,
+        members:[{userId:svc.userId,role:'lead',joined:Date.now(),display_name:providerProfile.display_name||''}],
+        owner:svc.userId,
+      };
+      setTeams(prev => [...prev, newTeam]);
+      setCreateTeamModal(false);
+      setNewTeamName(''); setNewTeamDesc('');
+      showToast(`Team "${newTeamName}" created`,'success');
+    } catch(e) { showToast('Failed to create team: '+e.message,'error'); }
+  };
+
+  const handleTeamInvite = async () => {
+    if (!teamInviteModal || !teamInviteUserId.trim()) return;
+    try {
+      const uid = teamInviteUserId.trim();
+      // Invite user to the team room
+      if (svc.client) await svc.client.invite(teamInviteModal.roomId, uid);
+      else await svc._api('POST', `/rooms/${encodeURIComponent(teamInviteModal.roomId)}/invite`, {user_id:uid});
+      // Update the members list
+      const updatedMembers = [...(teamInviteModal.members||[]), {userId:uid,role:'member',joined:Date.now()}];
+      await svc.setState(teamInviteModal.roomId, EVT.TEAM_MEMBERS, {members:updatedMembers});
+      setTeams(prev => prev.map(t => t.roomId===teamInviteModal.roomId ? {...t, members:updatedMembers} : t));
+      showToast(`Invited ${uid} to team`,'success');
+      setTeamInviteUserId('');
+    } catch(e) { showToast('Team invite failed: '+e.message,'error'); }
   };
 
   const copyToClipboard = async (text, label) => {
@@ -5758,6 +5915,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         {[{id:'dashboard',icon:'briefcase',label:'Dashboard'},{id:'inbox',icon:'inbox',label:'Inbox'},
           {id:'clients',icon:'users',label:T.client_term_plural},
           {id:'metrics',icon:'bar',label:'Metrics'},
+          {id:'teams',icon:'users',label:`Teams${teams.length?` (${teams.length})`:''}`},
           {id:'schema',icon:'grid',label:'Schema'},
           {id:'activity',icon:'zap',label:'Activity Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null);if(item.id!=='inbox'){setInboxConvo(null);setInboxMessages([])}}}
@@ -6062,9 +6220,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
               <div style={{width:64,height:64,borderRadius:'50%',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',marginBottom:16}}>
                 <I n="inbox" s={28}/>
               </div>
-              <h3 style={{fontSize:16,fontWeight:700,marginBottom:6}}>Provider Inbox</h3>
+              <h3 style={{fontSize:16,fontWeight:700,marginBottom:6}}>{T.provider_term} Inbox</h3>
               <p style={{color:'var(--tx-2)',fontSize:12,maxWidth:300,textAlign:'center',lineHeight:1.6}}>
-                {(cases.length+orgChannels.length)>0?'Select a conversation from the left to start chatting.':'No conversations yet. Clients must share a bridge, or create an org channel.'}
+                {(cases.length+orgChannels.length)>0?'Select a conversation from the left to start chatting.':`No conversations yet. ${T.client_term_plural} must share a bridge, or create an org channel.`}
               </p>
             </div>}
           </div>
@@ -6147,7 +6305,74 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         <div style={{background:'var(--teal-dim)',border:'1px solid rgba(62,201,176,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
           <I n="shield" s={16} c="var(--teal)"/>
           <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
-            <strong style={{color:'var(--teal)'}}>Client sovereignty:</strong> When a client joins their room, they receive superadmin power level (100). When they claim the room, ownership transfers to them permanently. They can kick anyone — including you — from their room at any time. You cannot remove a joined or claimed client.
+            <strong style={{color:'var(--teal)'}}>{T.client_term} sovereignty:</strong> When a {T.client_term.toLowerCase()} joins their room, they receive superadmin power level (100). When they claim the room, ownership transfers to them permanently. They can kick anyone — including you — from their room at any time. You cannot remove a joined or claimed {T.client_term.toLowerCase()}.
+          </span>
+        </div>
+      </div>}
+
+      {/* TEAMS VIEW */}
+      {view==='teams'&&!activeCase&&<div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
+          <div>
+            <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Teams</h2>
+            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Flexible groups of people for collaboration. Teams can span across organizations — anyone with a Matrix ID can be invited.</p>
+          </div>
+          <button onClick={()=>{setCreateTeamModal(true);setNewTeamName('');setNewTeamDesc('')}} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}><I n="plus" s={14}/>New Team</button>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:20}}>
+          {[{l:'Total Teams',v:teams.length,c:'purple',i:'users'},
+            {l:'My Teams',v:teams.filter(t=>t.owner===svc.userId).length,c:'gold',i:'briefcase'},
+            {l:'Total Members',v:teams.reduce((sum,t)=>(sum+(t.members?.length||0)),0),c:'teal',i:'user'},
+          ].map((s,i)=><div key={i} className="card" style={{padding:14}}><span className="section-label">{s.l.toUpperCase()}</span>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
+              <span style={{fontSize:18,fontWeight:700}}>{s.v}</span>
+              <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span></div></div>)}
+        </div>
+        {teams.length===0?
+          <div className="card" style={{textAlign:'center',padding:'40px 20px',borderStyle:'dashed'}}>
+            <I n="users" s={32}/>
+            <p style={{color:'var(--tx-2)',marginTop:10,fontSize:13}}>No teams yet</p>
+            <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:4}}>Create a team to collaborate with people across your organization or beyond.</p>
+          </div>
+        :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:10}}>
+          {teams.map(team=><div key={team.roomId} className="card" style={{padding:0,overflow:'hidden'}}>
+            <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border-0)'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                <span style={{fontSize:15,fontWeight:700}}>{team.name||'Unnamed Team'}</span>
+                <div style={{display:'flex',gap:4}}>
+                  {team.owner===svc.userId&&<span className="tag tag-gold" style={{fontSize:8}}>LEAD</span>}
+                  {team.org_name&&<span className="tag tag-blue" style={{fontSize:8}}>{team.org_name}</span>}
+                </div>
+              </div>
+              {team.description&&<p style={{fontSize:11.5,color:'var(--tx-2)',lineHeight:1.5}}>{team.description}</p>}
+            </div>
+            <div style={{padding:'10px 18px'}}>
+              <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)',display:'block',marginBottom:6}}>MEMBERS ({team.members?.length||0})</span>
+              <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                {(team.members||[]).slice(0,5).map((m,mi)=><div key={mi} style={{display:'flex',alignItems:'center',gap:6}}>
+                  <div style={{width:18,height:18,borderRadius:'50%',background:m.role==='lead'?'var(--gold-dim)':'var(--bg-3)',display:'flex',alignItems:'center',justifyContent:'center',color:m.role==='lead'?'var(--gold)':'var(--tx-2)',flexShrink:0}}>
+                    <I n={m.role==='lead'?'briefcase':'user'} s={9}/></div>
+                  <span style={{fontSize:11,color:'var(--tx-1)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.display_name||m.userId}</span>
+                  <span className={`tag ${m.role==='lead'?'tag-gold':'tag-blue'}`} style={{fontSize:7.5,marginLeft:'auto'}}>{m.role?.toUpperCase()}</span>
+                </div>)}
+                {(team.members?.length||0)>5&&<span style={{fontSize:10,color:'var(--tx-3)',fontStyle:'italic'}}>+{team.members.length-5} more</span>}
+              </div>
+            </div>
+            <div style={{padding:'8px 18px 14px',display:'flex',gap:6}}>
+              {team.owner===svc.userId&&<button onClick={()=>{setTeamInviteModal(team);setTeamInviteUserId('')}}
+                className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
+                <I n="userPlus" s={11}/>Invite</button>}
+              <button className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}} onClick={()=>{
+                if(navigator.clipboard) navigator.clipboard.writeText(team.roomId);
+                showToast('Team room ID copied','success');
+              }}><I n="share" s={11}/>Share ID</button>
+            </div>
+          </div>)}
+        </div>}
+        <div style={{background:'var(--purple-dim,var(--blue-dim))',border:'1px solid rgba(128,90,213,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
+          <I n="users" s={16} c="var(--purple,var(--blue))"/>
+          <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
+            <strong>Teams are flexible.</strong> They can include anyone — staff from your org, people from other orgs, or unaffiliated individuals. Teams are not governed by org policies; they're lightweight collaboration groups.
           </span>
         </div>
       </div>}
@@ -7200,6 +7425,61 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       <button onClick={handleSaveEmailVerifyConfig} className="b-pri" style={{width:'100%',padding:12,fontSize:14}}>
         <I n="shieldCheck" s={16}/> Save Verification Settings
       </button>
+    </Modal>
+
+    {/* CREATE TEAM MODAL */}
+    <Modal open={createTeamModal} onClose={()=>setCreateTeamModal(false)} title="New Team" w={520}>
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:16,lineHeight:1.6}}>
+        Create a team for collaboration. Teams are flexible — they can include people from your organization, other organizations, or individuals with no org affiliation. Anyone with a Matrix ID can be invited.
+      </p>
+      <div style={{marginBottom:14}}>
+        <span className="section-label">TEAM NAME *</span>
+        <input value={newTeamName} onChange={e=>setNewTeamName(e.target.value)} placeholder="e.g. Outreach Unit, Housing Support Team"/>
+      </div>
+      <div style={{marginBottom:14}}>
+        <span className="section-label">DESCRIPTION (OPTIONAL)</span>
+        <textarea value={newTeamDesc} onChange={e=>setNewTeamDesc(e.target.value)} placeholder="What is this team for?" style={{minHeight:50}}/>
+      </div>
+      {orgRoom&&<div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:16,fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
+        <strong style={{color:'var(--blue)'}}>Org affiliation:</strong> This team will be tagged with your org "{orgMeta.name||'Organization'}" but is not restricted to org members.
+      </div>}
+      <button onClick={handleCreateTeam} className="b-pri" disabled={!newTeamName.trim()} style={{width:'100%',padding:12,fontSize:14}}>
+        <I n="users" s={16}/> Create Team
+      </button>
+    </Modal>
+
+    {/* TEAM INVITE MODAL */}
+    <Modal open={!!teamInviteModal} onClose={()=>{setTeamInviteModal(null);setTeamInviteUserId('')}} title={`Invite to: ${teamInviteModal?.name||''}`} w={520}>
+      {teamInviteModal&&<>
+        <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:16,lineHeight:1.6}}>
+          Invite someone to join this team. They'll be added as a member and can participate in team activities.
+        </p>
+        <div style={{marginBottom:14}}>
+          <span className="section-label">MATRIX ID</span>
+          <div style={{display:'flex',gap:6}}>
+            <input value={teamInviteUserId} onChange={e=>setTeamInviteUserId(e.target.value)}
+              placeholder="@user:matrix.org" style={{flex:1}}/>
+            <button onClick={handleTeamInvite} className="b-pri" disabled={!teamInviteUserId.trim()}
+              style={{whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:4}}>
+              <I n="send" s={12}/>Invite
+            </button>
+          </div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <span className="section-label">CURRENT MEMBERS ({teamInviteModal.members?.length||0})</span>
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>
+            {(teamInviteModal.members||[]).map((m,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+              <I n={m.role==='lead'?'briefcase':'user'} s={12} c={m.role==='lead'?'var(--gold)':'var(--tx-2)'}/>
+              <span style={{fontSize:11.5,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.display_name||m.userId}</span>
+              <span className={`tag ${m.role==='lead'?'tag-gold':'tag-blue'}`} style={{fontSize:8}}>{m.role?.toUpperCase()}</span>
+            </div>)}
+          </div>
+        </div>
+        <div style={{background:'var(--bg-3)',borderRadius:'var(--r)',padding:'10px 14px'}}>
+          <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)',display:'block',marginBottom:4}}>TEAM ROOM ID</span>
+          <span style={{fontSize:10.5,fontFamily:'var(--mono)',color:'var(--tx-1)',wordBreak:'break-all'}}>{teamInviteModal.roomId}</span>
+        </div>
+      </>}
     </Modal>
 
     {/* TERMINOLOGY CUSTOMIZATION MODAL */}
