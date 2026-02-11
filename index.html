@@ -460,6 +460,112 @@ async function cohortHash(userId, salt) {
   return btoa(String.fromCharCode(...new Uint8Array(hash)));
 }
 
+/* ═══════════════════ EMAIL VERIFICATION UTILITIES (§10.5) ═══════════════════
+ * Generates time-limited 6-digit codes, hashes them with SHA-256, and validates
+ * email addresses against organization-approved domains. Codes are stored hashed
+ * in Matrix room state — the plaintext code is delivered out-of-band (email/webhook).
+ * ════════════════════════════════════════════════════════════════════════════════ */
+const EmailVerification = {
+  /** Generate a cryptographically random 6-digit code */
+  generateCode() {
+    const arr = crypto.getRandomValues(new Uint8Array(4));
+    const num = (arr[0] << 24 | arr[1] << 16 | arr[2] << 8 | arr[3]) >>> 0;
+    return String(num % 1000000).padStart(6, '0');
+  },
+
+  /** SHA-256 hash a verification code (stored in state; plaintext never persisted) */
+  async hashCode(code) {
+    const data = new TextEncoder().encode(code + ':khora_email_verify_v1');
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode(...new Uint8Array(hash)));
+  },
+
+  /** Extract domain from an email address */
+  extractDomain(email) {
+    const match = (email || '').trim().toLowerCase().match(/@([a-z0-9.-]+)$/);
+    return match ? match[1] : null;
+  },
+
+  /** Validate email format */
+  isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test((email || '').trim());
+  },
+
+  /** Check if an email's domain matches any of the org's required domains */
+  domainMatches(email, requiredDomains) {
+    if (!requiredDomains || requiredDomains.length === 0) return true;
+    const domain = this.extractDomain(email);
+    return domain && requiredDomains.some(d => d.toLowerCase() === domain);
+  },
+
+  /** Create a verification challenge object (stored in room state) */
+  async createChallenge(userId, email) {
+    const code = this.generateCode();
+    const codeHash = await this.hashCode(code);
+    return {
+      challenge: {
+        user_id: userId,
+        email: email.trim().toLowerCase(),
+        domain: this.extractDomain(email),
+        code_hash: codeHash,
+        created: Date.now(),
+        expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+        attempts: 0,
+        max_attempts: 3,
+        status: 'pending',
+      },
+      plainCode: code, // returned for delivery — never stored in state
+    };
+  },
+
+  /** Validate a submitted code against a stored challenge */
+  async validateChallenge(challenge, submittedCode) {
+    if (!challenge || challenge.status !== 'pending') return { valid: false, reason: 'no_active_challenge' };
+    if (Date.now() > challenge.expires) return { valid: false, reason: 'expired' };
+    if (challenge.attempts >= challenge.max_attempts) return { valid: false, reason: 'max_attempts' };
+    const submittedHash = await this.hashCode(submittedCode);
+    if (submittedHash !== challenge.code_hash) return { valid: false, reason: 'incorrect_code' };
+    return { valid: true };
+  },
+
+  /** Default email verification config for an organization */
+  defaultConfig() {
+    return {
+      enabled: false,
+      required_domains: [],
+      require_for_roles: ['admin', 'case_manager', 'field_worker', 'intake_coordinator'],
+      grace_period_hours: 72,
+    };
+  },
+
+  /** Check if a staff member needs verification given org config */
+  needsVerification(config, staffEntry) {
+    if (!config?.enabled) return false;
+    if (!config.require_for_roles?.includes(staffEntry.role)) return false;
+    const ev = staffEntry.email_verification;
+    if (ev?.status === 'verified') return false;
+    return true;
+  },
+
+  /** Deliver verification code via n8n webhook (email relay) */
+  async sendCodeViaWebhook(email, code, orgName) {
+    try {
+      const resp = await fetch(`${WEBHOOK_BASE}/email-verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email,
+          code: code,
+          org_name: orgName,
+          subject: `Your verification code for ${orgName}`,
+          expires_minutes: 15,
+        }),
+      });
+      return resp.ok;
+    } catch { return false; }
+  },
+};
+
 /* ═══════════════════ EVENT TYPES (§11) ═══════════════════ */
 const NS = 'io.khora';
 const EVT = {
@@ -502,6 +608,9 @@ const EVT = {
   // Discovery
   INVITE_TOKEN:   `${NS}.invite.token`,
   ENCOUNTER_PROV: `${NS}.encounter.provisional`,
+  // Email verification
+  ORG_EMAIL_CONFIG: `${NS}.org.email_verification`,
+  ORG_VERIFY_CHALLENGE: `${NS}.org.verification_challenge`,
   // Matching / dedup
   MATCH_TOKEN:    `${NS}.match.token`,
   MATCH_HIT:      `${NS}.match.hit`,
@@ -3328,7 +3437,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
                   {orgInfo?.verified ? <div style={{display:'flex',alignItems:'center',gap:5,marginTop:4}}>
                     <I n="shieldCheck" s={12} c="var(--blue)"/>
                     <span style={{fontSize:11,fontWeight:600,color:'var(--blue)'}}>{orgInfo.org_name}</span>
-                    <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>
+                    {orgInfo.email_verified ? <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>EMAIL VERIFIED</span>
+                    : <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>}
                     {orgInfo.role && <span style={{fontSize:9,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{orgInfo.role}</span>}
                   </div> : <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)'}}>Independent provider</span>}
                   {pp?.credentials && <div style={{marginTop:2}}><span style={{fontSize:9.5,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{pp.credentials}</span></div>}
@@ -3496,9 +3606,11 @@ const ClientApp = ({session, onLogout, showToast}) => {
           <div style={{flex:1}}>
             <div style={{display:'flex',alignItems:'center',gap:6}}>
               <span style={{fontSize:12,fontWeight:700,color:'var(--blue)'}}>{activeProvider.providerProfile.org_membership.org_name}</span>
-              <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>
+              {activeProvider.providerProfile.org_membership.email_verified ? <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>EMAIL VERIFIED</span>
+              : <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>}
             </div>
             <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{activeProvider.providerProfile.org_membership.org_type ? (ORG_TYPE_LABELS[activeProvider.providerProfile.org_membership.org_type]||activeProvider.providerProfile.org_membership.org_type)+' · ':''}{activeProvider.providerProfile.org_membership.role}</span>
+            {activeProvider.providerProfile.org_membership.verified_domain && <span style={{fontSize:9,color:'var(--green)',fontFamily:'var(--mono)',display:'block',marginTop:2}}>@{activeProvider.providerProfile.org_membership.verified_domain}</span>}
           </div>
           {activeProvider.providerProfile.credentials && <span style={{fontSize:9.5,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{activeProvider.providerProfile.credentials}</span>}
         </div>}
@@ -3674,6 +3786,17 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [providerProfile, setProviderProfile] = useState({});
   const [profileModal, setProfileModal] = useState(false);
   const [profileDraft, setProfileDraft] = useState({display_name:'',title:'',credentials:'',bio:'',service_types:''});
+  // Email verification state
+  const [emailVerifyConfig, setEmailVerifyConfig] = useState(EmailVerification.defaultConfig());
+  const [emailVerifyModal, setEmailVerifyModal] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifyStep, setVerifyStep] = useState('email'); // 'email' | 'code' | 'done'
+  const [verifyError, setVerifyError] = useState('');
+  const [verifyPending, setVerifyPending] = useState(false);
+  const [myVerification, setMyVerification] = useState(null); // current user's verification status
+  const [emailConfigDraft, setEmailConfigDraft] = useState(EmailVerification.defaultConfig());
+  const [emailConfigModal, setEmailConfigModal] = useState(false);
   // ─── Inter-org messaging & opacity ───
   const [orgOpacity, setOrgOpacity] = useState('translucent'); // transparent|translucent|opaque
   const [orgMsgAccess, setOrgMsgAccess] = useState({read:['admin','case_manager'],respond:['admin']});
@@ -3773,6 +3896,14 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         const orgState = scanned[detectedOrg];
         if (orgState?.[EVT.ORG_METADATA]) setOrgMeta(orgState[EVT.ORG_METADATA]);
         if (orgState?.[EVT.ORG_ROSTER]?.staff) setStaff(orgState[EVT.ORG_ROSTER].staff);
+        // Load email verification config
+        try {
+          const evConfig = await svc.getState(detectedOrg, EVT.ORG_EMAIL_CONFIG).catch(()=>null);
+          if (evConfig) { setEmailVerifyConfig(evConfig); setEmailConfigDraft(evConfig); }
+          // Load my verification status from roster
+          const myStaff = orgState?.[EVT.ORG_ROSTER]?.staff?.find(s=>s.userId===svc.userId);
+          if (myStaff?.email_verification) setMyVerification(myStaff.email_verification);
+        } catch(e) { console.warn('Email verify config load:', e.message); }
         // Load opacity & message access settings
         if (orgState?.[EVT.ORG_OPACITY]) setOrgOpacity(orgState[EVT.ORG_OPACITY].level || 'translucent');
         if (orgState?.[EVT.ORG_MSG_ACCESS]) setOrgMsgAccess(orgState[EVT.ORG_MSG_ACCESS]);
@@ -4124,6 +4255,129 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Error: '+e.message,'error'); }
   };
 
+  // ─── Email verification management ───
+  const handleSaveEmailVerifyConfig = async () => {
+    if (!orgRoom || orgRole !== 'admin') return;
+    try {
+      const config = {
+        enabled: emailConfigDraft.enabled,
+        required_domains: emailConfigDraft.required_domains.filter(d => d.trim()),
+        require_for_roles: emailConfigDraft.require_for_roles,
+        grace_period_hours: emailConfigDraft.grace_period_hours || 72,
+      };
+      await svc.setState(orgRoom, EVT.ORG_EMAIL_CONFIG, config);
+      setEmailVerifyConfig(config);
+      await emitOp(orgRoom, 'ALT', {entity:'email_verification_config', field:'enabled', value:config.enabled},
+        {domains:config.required_domains, roles:config.require_for_roles}, orgFrame());
+      setEmailConfigModal(false);
+      showToast(`Email verification ${config.enabled ? 'enabled' : 'disabled'}`, 'success');
+    } catch(e) { showToast('Error saving config: '+e.message, 'error'); }
+  };
+
+  const handleStartEmailVerify = async () => {
+    if (!verifyEmail.trim() || !orgRoom) return;
+    setVerifyError('');
+    if (!EmailVerification.isValidEmail(verifyEmail)) {
+      setVerifyError('Please enter a valid email address');
+      return;
+    }
+    if (emailVerifyConfig.required_domains?.length > 0 && !EmailVerification.domainMatches(verifyEmail, emailVerifyConfig.required_domains)) {
+      setVerifyError(`Email must be from: ${emailVerifyConfig.required_domains.join(', ')}`);
+      return;
+    }
+    setVerifyPending(true);
+    try {
+      const { challenge, plainCode } = await EmailVerification.createChallenge(svc.userId, verifyEmail);
+      // Store challenge in org room state (hashed code only)
+      await svc.setState(orgRoom, EVT.ORG_VERIFY_CHALLENGE, challenge, svc.userId);
+      // Attempt to deliver via webhook; fall back to Matrix DM display
+      const sent = await EmailVerification.sendCodeViaWebhook(verifyEmail, plainCode, orgMeta.name || 'Organization');
+      if (!sent) {
+        // Fallback: show code in-app for development/demo (in production, email infra handles this)
+        showToast(`Verification code: ${plainCode} (demo mode — production sends via email)`, 'info', 12000);
+      } else {
+        showToast('Verification code sent to ' + verifyEmail, 'success');
+      }
+      await emitOp(orgRoom, 'INS', {entity:'email_verification', field:svc.userId},
+        {email_domain:EmailVerification.extractDomain(verifyEmail), status:'pending'}, orgFrame());
+      setVerifyStep('code');
+    } catch(e) { setVerifyError('Failed to start verification: ' + e.message); }
+    setVerifyPending(false);
+  };
+
+  const handleSubmitVerifyCode = async () => {
+    if (!verifyCode.trim() || verifyCode.length !== 6 || !orgRoom) return;
+    setVerifyError('');
+    setVerifyPending(true);
+    try {
+      // Fetch the stored challenge
+      const challenge = await svc.getState(orgRoom, EVT.ORG_VERIFY_CHALLENGE, svc.userId);
+      const result = await EmailVerification.validateChallenge(challenge, verifyCode);
+      if (!result.valid) {
+        // Update attempt count
+        if (result.reason === 'incorrect_code') {
+          const updated = { ...challenge, attempts: (challenge.attempts || 0) + 1 };
+          await svc.setState(orgRoom, EVT.ORG_VERIFY_CHALLENGE, updated, svc.userId);
+          setVerifyError(`Incorrect code (${updated.attempts}/${challenge.max_attempts} attempts)`);
+        } else if (result.reason === 'expired') {
+          setVerifyError('Code expired. Please request a new one.');
+          setVerifyStep('email');
+        } else if (result.reason === 'max_attempts') {
+          setVerifyError('Too many attempts. Please request a new code.');
+          setVerifyStep('email');
+        } else {
+          setVerifyError('Verification failed. Please try again.');
+        }
+        setVerifyPending(false);
+        return;
+      }
+      // Success — update roster with verified status
+      const verifiedEntry = {
+        status: 'verified',
+        email: verifyEmail.trim().toLowerCase(),
+        domain: EmailVerification.extractDomain(verifyEmail),
+        verified_at: Date.now(),
+      };
+      const newStaff = staff.map(s =>
+        s.userId === svc.userId ? { ...s, email_verification: verifiedEntry } : s
+      );
+      await svc.setState(orgRoom, EVT.ORG_ROSTER, { staff: newStaff });
+      // Clear the challenge
+      await svc.setState(orgRoom, EVT.ORG_VERIFY_CHALLENGE, { status: 'completed', verified_at: Date.now() }, svc.userId);
+      await emitOp(orgRoom, 'ALT', {entity:'email_verification', field:svc.userId, value:'verified'},
+        {email_domain:EmailVerification.extractDomain(verifyEmail), verified_at:Date.now()}, orgFrame());
+      setStaff(newStaff);
+      setMyVerification(verifiedEntry);
+      setVerifyStep('done');
+      showToast('Email verified successfully', 'success');
+    } catch(e) { setVerifyError('Verification error: ' + e.message); }
+    setVerifyPending(false);
+  };
+
+  const handleRevokeVerification = async (userId) => {
+    if (!orgRoom || orgRole !== 'admin') return;
+    try {
+      const newStaff = staff.map(s =>
+        s.userId === userId ? { ...s, email_verification: { status: 'revoked', revoked_at: Date.now(), revoked_by: svc.userId } } : s
+      );
+      await svc.setState(orgRoom, EVT.ORG_ROSTER, { staff: newStaff });
+      await emitOp(orgRoom, 'NUL', {entity:'email_verification', field:userId},
+        {reason:'admin_revoked', revoked_by:svc.userId}, orgFrame());
+      setStaff(newStaff);
+      if (userId === svc.userId) setMyVerification({ status: 'revoked' });
+      showToast(`Revoked verification for ${userId}`, 'warn');
+    } catch(e) { showToast('Error revoking: '+e.message, 'error'); }
+  };
+
+  const openEmailVerifyModal = () => {
+    setVerifyEmail('');
+    setVerifyCode('');
+    setVerifyStep('email');
+    setVerifyError('');
+    setVerifyPending(false);
+    setEmailVerifyModal(true);
+  };
+
   // ─── Provider profile management ───
   const handleSaveProfile = async () => {
     if (!rosterRoom) return;
@@ -4139,7 +4393,10 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           org_name: orgMeta.name || '',
           org_type: orgMeta.type || '',
           role: orgRole || '',
-          verified: true,
+          verified: myVerification?.status === 'verified' || !emailVerifyConfig.enabled,
+          email_verified: myVerification?.status === 'verified',
+          verified_email: myVerification?.status === 'verified' ? myVerification.email : null,
+          verified_domain: myVerification?.status === 'verified' ? myVerification.domain : null,
         } : null,
         updated: Date.now(),
       };
@@ -4364,7 +4621,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
               <span style={{fontSize:10.5,fontWeight:600,color:'var(--blue)',display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{orgMeta.name || 'Organization'}</span>
               <span style={{fontSize:9,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{ORG_ROLE_LABELS[orgRole]||orgRole} · {ORG_TYPE_LABELS[orgMeta.type]||orgMeta.type}</span>
             </div>
-            <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>
+            {myVerification?.status==='verified' ? <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>
+            : emailVerifyConfig.enabled ? <span className="tag tag-gold" style={{fontSize:7.5,padding:'1px 5px',cursor:'pointer'}} onClick={openEmailVerifyModal}>UNVERIFIED</span>
+            : <span className="tag tag-green" style={{fontSize:7.5,padding:'1px 5px'}}>VERIFIED</span>}
           </div> : <div style={{display:'flex',alignItems:'center',gap:4,padding:'4px 0'}}>
             <span style={{fontSize:9.5,color:'var(--tx-3)',fontStyle:'italic'}}>No organization — unaffiliated</span>
           </div>}
@@ -4479,7 +4738,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
               <span style={{fontSize:12.5,fontWeight:600,color:'var(--blue)',display:'block'}}>{orgMeta.name||'Organization'}</span>
               <span style={{fontSize:10,color:'var(--tx-2)'}}>{ORG_TYPE_LABELS[orgMeta.type]||orgMeta.type} · {staff.length} staff · {ORG_ROLE_LABELS[orgRole]||orgRole}</span>
             </div>
-            <span className="tag tag-green" style={{fontSize:8}}>VERIFIED</span>
+            {myVerification?.status==='verified' ? <span className="tag tag-green" style={{fontSize:8}}>VERIFIED</span>
+            : emailVerifyConfig.enabled ? <span className="tag tag-gold" style={{fontSize:8,cursor:'pointer'}} onClick={openEmailVerifyModal}>VERIFY</span>
+            : <span className="tag tag-green" style={{fontSize:8}}>VERIFIED</span>}
             <button onClick={()=>setView('org-settings')} className="b-gho b-xs"><I n="settings" s={11}/></button>
           </div> : <div style={{padding:'10px 18px',background:'var(--gold-dim)',borderTop:'1px solid var(--gold-mid)',display:'flex',alignItems:'center',gap:8}}>
             <I n="alert" s={14} c="var(--gold)"/>
@@ -4876,10 +5137,48 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           </div>}
         </div>
 
-        <div className="card">
+        <div className="card" style={{marginBottom:16}}>
           <span className="section-label">ORG ROOM ID</span>
           <div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--tx-1)',background:'var(--bg-3)',padding:'8px 12px',borderRadius:'var(--r)',wordBreak:'break-all',marginTop:4}}>{orgRoom}</div>
           <p style={{fontSize:11,color:'var(--tx-2)',marginTop:8}}>Share this room ID with providers who want to join your organization, or with other orgs to open a messaging channel.</p>
+        </div>
+
+        {/* EMAIL VERIFICATION CONFIGURATION */}
+        <div className="card" style={{marginBottom:16}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <I n="shieldCheck" s={16} c={emailVerifyConfig.enabled ? 'var(--green)' : 'var(--tx-3)'}/>
+              <span className="section-label" style={{margin:0}}>EMAIL VERIFICATION</span>
+              <span className={`tag ${emailVerifyConfig.enabled ? 'tag-green' : 'tag-gold'}`} style={{fontSize:8}}>
+                {emailVerifyConfig.enabled ? 'ENABLED' : 'DISABLED'}
+              </span>
+            </div>
+            <button onClick={()=>{setEmailConfigDraft({...emailVerifyConfig});setEmailConfigModal(true)}} className="b-gho b-xs">
+              <I n="settings" s={11}/> Configure
+            </button>
+          </div>
+          {emailVerifyConfig.enabled ? <div>
+            <p style={{fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6,marginBottom:8}}>
+              Staff members must verify their identity via email before accessing cases. Verification confirms they control an email address at an approved domain.
+            </p>
+            {emailVerifyConfig.required_domains?.length > 0 && <div style={{marginBottom:8}}>
+              <span style={{fontSize:10,color:'var(--tx-3)',display:'block',marginBottom:4}}>APPROVED DOMAINS</span>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                {emailVerifyConfig.required_domains.map((d,i)=><span key={i} className="tag tag-blue" style={{fontSize:9}}>@{d}</span>)}
+              </div>
+            </div>}
+            <div style={{marginBottom:8}}>
+              <span style={{fontSize:10,color:'var(--tx-3)',display:'block',marginBottom:4}}>REQUIRED FOR ROLES</span>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                {emailVerifyConfig.require_for_roles?.map((r,i)=><span key={i} className="tag tag-gold" style={{fontSize:9}}>{ORG_ROLE_LABELS[r]||r}</span>)}
+              </div>
+            </div>
+            <div style={{fontSize:10,color:'var(--tx-3)'}}>
+              Grace period: {emailVerifyConfig.grace_period_hours}h · {staff.filter(s=>s.email_verification?.status==='verified').length}/{staff.length} verified
+            </div>
+          </div> : <p style={{fontSize:11.5,color:'var(--tx-2)',lineHeight:1.6}}>
+            Email verification is disabled. Enable it to require staff members to confirm their identity with an organization email address before accessing cases.
+          </p>}
         </div>
       </div>}
 
@@ -4906,20 +5205,53 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           </div>
         </div>
         <div className="card">
-          <span className="section-label">CURRENT STAFF ({staff.length})</span>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+            <span className="section-label">CURRENT STAFF ({staff.length})</span>
+            {emailVerifyConfig.enabled && <span style={{fontSize:10,color:'var(--tx-3)'}}>
+              {staff.filter(s=>s.email_verification?.status==='verified').length} of {staff.length} verified
+            </span>}
+          </div>
           <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:6}}>
-            {staff.map(s=><div key={s.userId} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid var(--border-0)'}}>
+            {staff.map(s=>{
+              const ev = s.email_verification;
+              const needsVerify = emailVerifyConfig.enabled && EmailVerification.needsVerification(emailVerifyConfig, s);
+              const isMe = s.userId === svc.userId;
+              return <div key={s.userId} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid var(--border-0)'}}>
               <div>
-                <span style={{fontSize:13,fontWeight:500,display:'block'}}>{s.userId}</span>
-                <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>Joined {s.joined?new Date(s.joined).toLocaleDateString():'—'}</span>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{fontSize:13,fontWeight:500}}>{s.userId}</span>
+                  {ev?.status==='verified' && <span className="tag tag-green" style={{fontSize:8}}>VERIFIED</span>}
+                  {needsVerify && !ev && <span className="tag tag-gold" style={{fontSize:8}}>UNVERIFIED</span>}
+                  {ev?.status==='pending' && <span className="tag tag-gold" style={{fontSize:8}}>PENDING</span>}
+                  {ev?.status==='revoked' && <span className="tag tag-red" style={{fontSize:8}}>REVOKED</span>}
+                </div>
+                <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
+                  Joined {s.joined?new Date(s.joined).toLocaleDateString():'—'}
+                  {ev?.status==='verified' && ev.email && <> · {ev.email}</>}
+                </span>
               </div>
               <div style={{display:'flex',gap:6,alignItems:'center'}}>
                 <span className={`tag ${s.role==='admin'?'tag-gold':'tag-blue'}`} style={{fontSize:9}}>{ORG_ROLE_LABELS[s.role]}</span>
+                {isMe && needsVerify && ev?.status!=='verified' && <button onClick={openEmailVerifyModal} className="b-pri b-xs" style={{fontSize:10}}>Verify Email</button>}
+                {orgRole==='admin' && ev?.status==='verified' && s.userId!==svc.userId && <button onClick={()=>handleRevokeVerification(s.userId)} className="b-gho b-xs" title="Revoke verification"><I n="x" s={10}/></button>}
                 {orgRole==='admin'&&s.userId!==svc.userId&&<button onClick={()=>handleRemoveStaff(s.userId)} className="b-gho b-xs" style={{color:'var(--red)'}}><I n="trash" s={11}/></button>}
               </div>
-            </div>)}
+            </div>})}
           </div>
         </div>
+        {/* Verification prompt for current user */}
+        {emailVerifyConfig.enabled && myVerification?.status!=='verified' && EmailVerification.needsVerification(emailVerifyConfig, {role:orgRole, email_verification:myVerification}) && <div style={{background:'var(--gold-dim)',border:'1px solid var(--gold-mid)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:16}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+            <I n="alert" s={16} c="var(--gold)"/>
+            <span style={{fontSize:13,fontWeight:700,color:'var(--gold)'}}>Email Verification Required</span>
+          </div>
+          <p style={{fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6,marginBottom:10}}>
+            Your organization requires email verification for your role ({ORG_ROLE_LABELS[orgRole]}). Verify your identity with an approved email address{emailVerifyConfig.required_domains?.length > 0 ? ` (${emailVerifyConfig.required_domains.map(d=>'@'+d).join(', ')})` : ''}.
+          </p>
+          <button onClick={openEmailVerifyModal} className="b-pri" style={{display:'flex',alignItems:'center',gap:6}}>
+            <I n="shieldCheck" s={14}/> Verify My Email
+          </button>
+        </div>}
       </div>}
 
       {/* NETWORK VIEW (Addendum E) — org-to-org relationships */}
@@ -5308,15 +5640,27 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       {orgRoom ? <div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.2)',borderRadius:'var(--r)',padding:'12px 14px',marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
           <I n="shieldCheck" s={16} c="var(--blue)"/>
-          <span style={{fontSize:13,fontWeight:700,color:'var(--blue)'}}>Organization Verified</span>
-          <span className="tag tag-green" style={{fontSize:8}}>VERIFIED</span>
+          <span style={{fontSize:13,fontWeight:700,color:'var(--blue)'}}>Organization Membership</span>
+          {myVerification?.status==='verified' ? <span className="tag tag-green" style={{fontSize:8}}>EMAIL VERIFIED</span>
+          : emailVerifyConfig.enabled ? <span className="tag tag-gold" style={{fontSize:8}}>EMAIL UNVERIFIED</span>
+          : <span className="tag tag-green" style={{fontSize:8}}>ROSTER VERIFIED</span>}
         </div>
         <div style={{fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
           <strong>{orgMeta.name}</strong> · {ORG_TYPE_LABELS[orgMeta.type]||orgMeta.type}<br/>
           Role: <strong>{ORG_ROLE_LABELS[orgRole]||orgRole}</strong>
           {orgMeta.service_area && <><br/>Service Area: {orgMeta.service_area}</>}
+          {myVerification?.status==='verified' && myVerification.email && <><br/>Verified email: <strong>{myVerification.email}</strong></>}
         </div>
-        <p style={{fontSize:10,color:'var(--tx-2)',marginTop:6}}>Your organization membership is verified through the Matrix room roster and will be visible to clients on all bridges.</p>
+        {emailVerifyConfig.enabled && myVerification?.status!=='verified' ?
+          <div style={{marginTop:8}}>
+            <p style={{fontSize:10,color:'var(--gold)',marginBottom:6}}>Your organization requires email verification. Verify your email to display a verified badge to clients.</p>
+            <button onClick={openEmailVerifyModal} className="b-pri b-sm" style={{fontSize:11}}>
+              <I n="shieldCheck" s={12}/> Verify Email Now
+            </button>
+          </div>
+        : <p style={{fontSize:10,color:'var(--tx-2)',marginTop:6}}>
+            {myVerification?.status==='verified' ? 'Your identity is email-verified and visible to clients on all bridges.' : 'Your organization membership is verified through the Matrix room roster and will be visible to clients on all bridges.'}
+          </p>}
       </div> : <div style={{background:'var(--gold-dim)',border:'1px solid var(--gold-mid)',borderRadius:'var(--r)',padding:'12px 14px',marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <I n="alert" s={14} c="var(--gold)"/>
@@ -5326,6 +5670,114 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       </div>}
       <button onClick={handleSaveProfile} className="b-pri" style={{width:'100%',padding:12,fontSize:14}}>
         <I n="check" s={16}/> Save Profile & Broadcast
+      </button>
+    </Modal>
+
+    {/* EMAIL VERIFICATION MODAL */}
+    <Modal open={emailVerifyModal} onClose={()=>setEmailVerifyModal(false)} title="Verify Your Email" w={480}>
+      {verifyStep==='email' && <>
+        <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>
+          Enter your organization email address to verify your identity. A 6-digit code will be sent to your email.
+          {emailVerifyConfig.required_domains?.length > 0 && <> Your email must be from: <strong>{emailVerifyConfig.required_domains.map(d=>'@'+d).join(', ')}</strong>.</>}
+        </p>
+        <div style={{marginBottom:14}}>
+          <span className="section-label">EMAIL ADDRESS</span>
+          <input value={verifyEmail} onChange={e=>{setVerifyEmail(e.target.value);setVerifyError('')}} placeholder={emailVerifyConfig.required_domains?.[0] ? `you@${emailVerifyConfig.required_domains[0]}` : 'you@organization.org'} type="email"/>
+        </div>
+        {verifyError && <div style={{background:'var(--red-dim)',border:'1px solid rgba(239,68,68,.2)',borderRadius:'var(--r)',padding:'8px 12px',marginBottom:14,fontSize:11.5,color:'var(--red)'}}>{verifyError}</div>}
+        <div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--tx-1)',lineHeight:1.6}}>
+          <strong style={{color:'var(--blue)'}}>How it works:</strong> We'll send a one-time 6-digit code to this email. Enter it on the next screen to confirm you control this address. The code expires after 15 minutes.
+        </div>
+        <button onClick={handleStartEmailVerify} disabled={verifyPending || !verifyEmail.trim()} className="b-pri" style={{width:'100%',padding:12,fontSize:14}}>
+          {verifyPending ? 'Sending...' : <><I n="msg" s={14}/> Send Verification Code</>}
+        </button>
+      </>}
+      {verifyStep==='code' && <>
+        <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>
+          A verification code was sent to <strong>{verifyEmail}</strong>. Enter the 6-digit code below.
+        </p>
+        <div style={{marginBottom:14}}>
+          <span className="section-label">VERIFICATION CODE</span>
+          <input value={verifyCode} onChange={e=>{setVerifyCode(e.target.value.replace(/\D/g,'').slice(0,6));setVerifyError('')}}
+            placeholder="000000" maxLength={6}
+            style={{fontSize:28,letterSpacing:'0.3em',textAlign:'center',fontFamily:'var(--mono)',fontWeight:700}}/>
+        </div>
+        {verifyError && <div style={{background:'var(--red-dim)',border:'1px solid rgba(239,68,68,.2)',borderRadius:'var(--r)',padding:'8px 12px',marginBottom:14,fontSize:11.5,color:'var(--red)'}}>{verifyError}</div>}
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={()=>{setVerifyStep('email');setVerifyCode('');setVerifyError('')}} className="b-gho" style={{flex:1}}>
+            Back
+          </button>
+          <button onClick={handleSubmitVerifyCode} disabled={verifyPending || verifyCode.length !== 6} className="b-pri" style={{flex:2,padding:12,fontSize:14}}>
+            {verifyPending ? 'Verifying...' : <><I n="shieldCheck" s={14}/> Verify</>}
+          </button>
+        </div>
+      </>}
+      {verifyStep==='done' && <>
+        <div style={{textAlign:'center',padding:'20px 0'}}>
+          <div style={{width:60,height:60,borderRadius:'50%',background:'var(--green-dim)',border:'2px solid var(--green)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}>
+            <I n="check" s={28} c="var(--green)"/>
+          </div>
+          <h3 style={{fontSize:18,fontWeight:700,color:'var(--green)',marginBottom:8}}>Email Verified</h3>
+          <p style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6,marginBottom:4}}>
+            Your identity has been confirmed via <strong>{myVerification?.email}</strong>
+          </p>
+          <p style={{fontSize:11,color:'var(--tx-2)'}}>
+            Your verified status is now visible to clients on all bridges and reflected in your provider profile.
+          </p>
+        </div>
+        <button onClick={()=>setEmailVerifyModal(false)} className="b-pri" style={{width:'100%',padding:12,fontSize:14}}>Done</button>
+      </>}
+    </Modal>
+
+    {/* EMAIL VERIFICATION CONFIG MODAL (admin only) */}
+    <Modal open={emailConfigModal} onClose={()=>setEmailConfigModal(false)} title="Email Verification Settings" w={520}>
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:16,lineHeight:1.6}}>
+        Configure email verification requirements for your organization. When enabled, staff members must verify they control an email at an approved domain before accessing cases.
+      </p>
+      <div style={{marginBottom:16}}>
+        <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',padding:'12px 14px',background:emailConfigDraft.enabled?'var(--green-dim)':'var(--bg-3)',border:`1px solid ${emailConfigDraft.enabled?'rgba(61,214,140,.2)':'var(--border-0)'}`,borderRadius:'var(--r)'}}>
+          <input type="checkbox" checked={emailConfigDraft.enabled} onChange={e=>setEmailConfigDraft({...emailConfigDraft,enabled:e.target.checked})} style={{width:16,height:16}}/>
+          <div>
+            <span style={{fontSize:13,fontWeight:600,display:'block'}}>Require Email Verification</span>
+            <span style={{fontSize:11,color:'var(--tx-2)'}}>Staff must verify their email before full access</span>
+          </div>
+        </label>
+      </div>
+      {emailConfigDraft.enabled && <>
+        <div style={{marginBottom:14}}>
+          <span className="section-label">APPROVED EMAIL DOMAINS</span>
+          <input value={(emailConfigDraft.required_domains||[]).join(', ')}
+            onChange={e=>setEmailConfigDraft({...emailConfigDraft,required_domains:e.target.value.split(',').map(s=>s.trim().replace(/^@/,''))})}
+            placeholder="e.g. metroservices.org, metro-services.com"/>
+          <span style={{fontSize:10,color:'var(--tx-3)',display:'block',marginTop:4}}>Comma-separated list of allowed email domains. Leave empty to allow any domain.</span>
+        </div>
+        <div style={{marginBottom:14}}>
+          <span className="section-label">REQUIRED FOR ROLES</span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:4}}>
+            {ORG_ROLES.map(r=>{
+              const active = (emailConfigDraft.require_for_roles||[]).includes(r);
+              return <label key={r} style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer',padding:'4px 8px',background:active?'var(--blue-dim)':'var(--bg-3)',border:`1px solid ${active?'rgba(91,156,245,.2)':'var(--border-0)'}`,borderRadius:6,fontSize:11}}>
+                <input type="checkbox" checked={active} onChange={e=>{
+                  const roles = e.target.checked ? [...(emailConfigDraft.require_for_roles||[]),r] : (emailConfigDraft.require_for_roles||[]).filter(x=>x!==r);
+                  setEmailConfigDraft({...emailConfigDraft,require_for_roles:roles});
+                }} style={{width:12,height:12}}/>
+                {ORG_ROLE_LABELS[r]}
+              </label>;
+            })}
+          </div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <span className="section-label">GRACE PERIOD (HOURS)</span>
+          <input type="number" min={0} max={720} value={emailConfigDraft.grace_period_hours||72}
+            onChange={e=>setEmailConfigDraft({...emailConfigDraft,grace_period_hours:parseInt(e.target.value)||72})}/>
+          <span style={{fontSize:10,color:'var(--tx-3)',display:'block',marginTop:4}}>Time before unverified staff lose access. 0 = immediate.</span>
+        </div>
+        <div style={{background:'var(--gold-dim)',border:'1px solid var(--gold-mid)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:14,fontSize:11,color:'var(--tx-1)',lineHeight:1.6}}>
+          <strong style={{color:'var(--gold)'}}>Note:</strong> Enabling verification will prompt all existing staff in the selected roles to verify their email. Currently {staff.filter(s=>s.email_verification?.status==='verified').length} of {staff.length} staff are verified.
+        </div>
+      </>}
+      <button onClick={handleSaveEmailVerifyConfig} className="b-pri" style={{width:'100%',padding:12,fontSize:14}}>
+        <I n="shieldCheck" s={16}/> Save Verification Settings
       </button>
     </Modal>
 
