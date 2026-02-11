@@ -1457,9 +1457,36 @@ const DOMAIN_CONFIG = {
     assessment:'purple',case_management:'gold',coordination:'blue'},
 
   /* ── Org Roles ── */
-  orgRoles: ['admin','case_manager','field_worker','intake_coordinator','read_only'],
-  orgRoleLabels: {admin:'Admin',case_manager:'Case Manager',field_worker:'Field Worker',
+  orgRoles: ['admin','provider','case_manager','field_worker','intake_coordinator','read_only'],
+  orgRoleLabels: {admin:'Admin',provider:'Provider (Team Member)',case_manager:'Case Manager',field_worker:'Field Worker',
     intake_coordinator:'Intake Coordinator',read_only:'Read Only'},
+
+  /* ── Relationship Types ── */
+  // Accounts can be connected through multiple relationship kinds.
+  // client_provider is the default service relationship in MVP bridge flows.
+  relationshipTypes: {
+    client_provider: {
+      id: 'client_provider',
+      label: 'Individual ↔ Team Member',
+      legacyLabel: 'Client ↔ Provider',
+      description: 'Service relationship between an individual and a team member.'
+    },
+    teammate: {
+      id: 'teammate',
+      label: 'Team Member ↔ Team Member',
+      description: 'Collaboration relationship between two team members.'
+    },
+    org_membership: {
+      id: 'org_membership',
+      label: 'Team Member ↔ Organization',
+      description: 'Membership relationship connecting a person to an organization.'
+    },
+    network_membership: {
+      id: 'network_membership',
+      label: 'Organization ↔ Network',
+      description: 'Membership relationship connecting an organization to a network.'
+    }
+  },
 
   /* ── Org Types ── */
   orgTypes: ['direct_service','administrative','clinical','legal','coordinating_body','advocacy','other'],
@@ -1523,6 +1550,7 @@ const OPACITY_LABELS = DOMAIN_CONFIG.opacityLabels;
 const OPACITY_DESCRIPTIONS = DOMAIN_CONFIG.opacityDescriptions;
 const MSG_ACCESS_DEFAULTS = DOMAIN_CONFIG.msgAccessDefaults;
 const TERMINOLOGY_DEFAULTS = DOMAIN_CONFIG.terminologyDefaults;
+const RELATIONSHIP_TYPES = DOMAIN_CONFIG.relationshipTypes;
 
 /* ═══════════════════ FRAMEWORK BINDINGS (§C.2) ═══════════════════ */
 // Multi-framework value mappings: same observation value → different classifications
@@ -3735,9 +3763,9 @@ const classifyRoom = async (roomId, scannedState) => {
   const state = scannedState || {};
   const id = state[EVT.IDENTITY] || await svc.getState(roomId, EVT.IDENTITY);
   if (id) {
-    if (id.account_type==='client') return {type:'vault',label:'Client Vault',color:'teal'};
-    if (id.account_type==='client_record') return {type:'client_record',label:'Client Record',color:'teal'};
-    if (id.account_type==='provider') return {type:'roster',label:'Provider Roster',color:'gold'};
+    if (id.account_type==='client') return {type:'vault',label:'Individual Vault',color:'teal'};
+    if (id.account_type==='client_record') return {type:'client_record',label:'Individual Record',color:'teal'};
+    if (id.account_type==='provider') return {type:'roster',label:'Team Member Roster',color:'gold'};
     if (id.account_type==='organization') return {type:'org',label:'Organization',color:'blue'};
     if (id.account_type==='schema') return {type:'schema',label:'Schema Room',color:'purple'};
     if (id.account_type==='metrics') return {type:'metrics',label:'Metrics Room',color:'orange'};
@@ -3759,7 +3787,7 @@ const classifyEvent = (ev, roomInfo) => {
       case EVT.IDENTITY: return {op:'INS',epistemic:'GIVEN',label:'Identity Declaration',desc:`Type: ${content.account_type}`};
       case EVT.VAULT_SNAPSHOT: return {op:'ALT',epistemic:'GIVEN',label:'Vault Snapshot',desc:`${Object.keys(content.fields||{}).length} fields`};
       case EVT.VAULT_PROVIDERS: return {op:'SEG',epistemic:'GIVEN',label:'Provider Index',desc:`${(content.providers||[]).length} providers`};
-      case EVT.BRIDGE_META: return {op:'CON',epistemic:'MEANT',label:'Bridge Connection',desc:`${content.status} — ${content.client?.slice(0,16)} ↔ ${content.provider?.slice(0,16)}`};
+      case EVT.BRIDGE_META: { const rel = RELATIONSHIP_TYPES[content.relationship_type] || RELATIONSHIP_TYPES.client_provider; return {op:'CON',epistemic:'MEANT',label:'Bridge Connection',desc:`${content.status} — ${rel.label} — ${content.client?.slice(0,16)} ↔ ${content.provider?.slice(0,16)}`}; }
       case EVT.BRIDGE_REFS: return {op:'SEG',epistemic:'MEANT',label:'Field Refs Update',desc:`${Object.keys(content.fields||{}).length} encrypted refs${content.revoked?' (REVOKED)':''}`};
       case EVT.ROSTER_INDEX: return {op:'ALT',epistemic:'MEANT',label:'Roster Update',desc:`${(content.cases||[]).length} cases`};
       case EVT.ROSTER_ASSIGN: return {op:'SEG',epistemic:'MEANT',label:'Case Assignment',desc:`${Object.keys(content).length} assignments`};
@@ -4313,11 +4341,11 @@ const ClientApp = ({session, onLogout, showToast}) => {
     if (!newProviderId.trim()) return;
     try {
       const bridgeId = await svc.createRoom(`[Khora Bridge] ${svc.userId} ↔ ${newProviderId}`, 'Khora bridge — shared data room', [
-        {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:newProviderId,created:Date.now(),status:'active'}},
+        {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:newProviderId,relationship_type:RELATIONSHIP_TYPES.client_provider.id,created:Date.now(),status:'active'}},
         {type:EVT.BRIDGE_REFS,state_key:'',content:{fields:{}}},
       ]);
       await svc.invite(bridgeId, newProviderId);
-      await emitOp(vaultRoom, 'CON', {source:svc.userId,destination:newProviderId,relationship:'client_provider'},
+      await emitOp(vaultRoom, 'CON', {source:svc.userId,destination:newProviderId,relationship:RELATIONSHIP_TYPES.client_provider.id},
         {bridge_room:bridgeId,initiated_by:'client'}, vaultFrame());
       const newProv = {bridgeRoomId:bridgeId,providerUserId:newProviderId,sharedFields:{},providerName:newProviderId};
       await saveProviderIndex([...providers, newProv]);
@@ -4354,7 +4382,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     const prov = providers[pi];
     try {
       const newBridgeId = await svc.createRoom(`[Khora Bridge] ${svc.userId} ↔ ${prov.providerUserId}`, 'Khora bridge — replaced', [
-        {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:prov.providerUserId,created:Date.now(),status:'active',previous:prov.bridgeRoomId}},
+        {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:prov.providerUserId,relationship_type:RELATIONSHIP_TYPES.client_provider.id,created:Date.now(),status:'active',previous:prov.bridgeRoomId}},
         {type:EVT.BRIDGE_REFS,state_key:'',content:{fields:{}}},
       ]);
       await emitOp(prov.bridgeRoomId, 'NUL', {entity:'bridge',field:'relationship'}, {reason:'hard_revoke'}, bridgeFrame(prov.bridgeRoomId));
@@ -4363,7 +4391,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
       await svc.invite(newBridgeId, prov.providerUserId);
       await svc.tombstone(prov.bridgeRoomId, newBridgeId);
       try { await svc.kick(prov.bridgeRoomId, prov.providerUserId, 'Bridge rotated — data revoked'); } catch {}
-      await emitOp(newBridgeId, 'CON', {source:svc.userId,destination:prov.providerUserId,relationship:'client_provider'},
+      await emitOp(newBridgeId, 'CON', {source:svc.userId,destination:prov.providerUserId,relationship:RELATIONSHIP_TYPES.client_provider.id},
         {bridge_room:newBridgeId,initiated_by:'client',reason:'hard_revoke_replacement'}, bridgeFrame(newBridgeId));
       const ups = [...providers]; ups[pi] = {...prov, bridgeRoomId:newBridgeId};
       await saveProviderIndex(ups);
@@ -4377,7 +4405,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     try {
       try { await svc.kick(prov.bridgeRoomId, prov.providerUserId); } catch {}
       await svc.setState(prov.bridgeRoomId, EVT.BRIDGE_REFS, {fields:{},revoked:true,updated:Date.now()});
-      await emitOp(vaultRoom, 'NUL', {entity:'provider_relationship',field:prov.providerUserId},
+      await emitOp(vaultRoom, 'NUL', {entity:'team_member_relationship',field:prov.providerUserId},
         {reason:'full_severance',bridge:prov.bridgeRoomId}, vaultFrame());
       await saveProviderIndex(providers.filter((_,i)=>i!==pi));
       showToast(`${ROLES.provider.label} removed, all keys destroyed`,'warn');
