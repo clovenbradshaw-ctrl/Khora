@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Khora • Filen Standalone Test</title>
+  <title>Khora • Filen File Upload Test</title>
   <style>
     :root {
       color-scheme: dark;
@@ -15,31 +15,40 @@
       --accent: #c9a352;
       --accent-dim: rgba(201, 163, 82, 0.15);
       --ok: #3dd68c;
+      --ok-dim: rgba(61, 214, 140, 0.12);
       --error: #ff7c7c;
+      --error-dim: rgba(255, 124, 124, 0.10);
+      --blue: #6ea8fe;
+      --blue-dim: rgba(110, 168, 254, 0.10);
+      --teal: #3ec9b0;
+      --teal-dim: rgba(62, 201, 176, 0.10);
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; }
     body {
-      margin: 0;
       font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       background: radial-gradient(circle at 20% 0%, #141b28 0%, #0b0f17 40%);
       color: var(--text);
+      min-height: 100vh;
     }
     main {
-      max-width: 980px;
-      margin: 28px auto;
-      padding: 0 16px 32px;
+      max-width: 1020px;
+      margin: 0 auto;
+      padding: 28px 16px 48px;
     }
-    h1 { margin: 0 0 10px; font-size: 1.7rem; }
-    p { color: var(--muted); line-height: 1.45; }
-    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+    h1 { font-size: 1.7rem; margin-bottom: 6px; }
+    h2 { font-size: 1.15rem; margin: 0; }
+    p { color: var(--muted); line-height: 1.5; }
+    .subtitle { font-size: 0.9rem; margin-bottom: 20px; }
     .card {
       background: color-mix(in oklab, var(--card) 92%, black);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 14px;
+      padding: 18px;
+      margin-bottom: 14px;
     }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
     label { display: block; margin-top: 10px; font-size: 0.84rem; color: var(--muted); }
-    input, textarea, button {
+    input, textarea, select, button {
       width: 100%;
       border-radius: 9px;
       border: 1px solid var(--border);
@@ -47,28 +56,32 @@
       color: var(--text);
       padding: 10px;
       margin-top: 6px;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
+      font-family: inherit;
     }
-    textarea { resize: vertical; min-height: 84px; }
-    .btn-row { display: flex; gap: 10px; margin-top: 12px; }
-    .btn-row button { flex: 1; }
+    select { cursor: pointer; appearance: auto; }
+    textarea { resize: vertical; min-height: 70px; }
     button {
       cursor: pointer;
       transition: transform .15s ease, border-color .15s ease, background .15s ease;
     }
-    button:hover { border-color: var(--accent); transform: translateY(-1px); }
+    button:hover:not(:disabled) { border-color: var(--accent); transform: translateY(-1px); }
+    button:disabled { opacity: 0.4; cursor: default; }
+    .btn-row { display: flex; gap: 10px; margin-top: 12px; }
+    .btn-row button { flex: 1; }
     button.primary {
       border-color: var(--accent);
       background: linear-gradient(180deg, var(--accent), #9f7f3e);
       color: #121212;
       font-weight: 600;
     }
+    button.ghost { background: transparent; }
     .status {
       margin-top: 10px;
       border-radius: 10px;
       background: #090e18;
       border: 1px solid var(--border);
-      min-height: 130px;
+      min-height: 100px;
       padding: 10px;
       white-space: pre-wrap;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -84,141 +97,846 @@
       color: var(--muted);
     }
     .pill.ok { border-color: color-mix(in srgb, var(--ok) 60%, var(--border)); color: var(--ok); }
-    .records { margin: 8px 0 0; padding-left: 18px; }
-    .records li { margin-bottom: 8px; }
+    .tag {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+    .tag-ok { background: var(--ok-dim); color: var(--ok); border: 1px solid rgba(61,214,140,.2); }
+    .tag-err { background: var(--error-dim); color: var(--error); border: 1px solid rgba(255,124,124,.2); }
+    .tag-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(110,168,254,.2); }
+    .tag-teal { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(62,201,176,.2); }
+    .tag-accent { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(201,163,82,.2); }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      padding: 44px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      background: var(--card);
+    }
+    .dropzone.active { border-color: var(--accent); background: var(--accent-dim); }
+    .dropzone-icon {
+      width: 52px; height: 52px;
+      border-radius: 14px;
+      background: var(--accent-dim);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 14px;
+      font-size: 24px;
+    }
+
+    /* Records table */
+    .records-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .records-table th {
+      text-align: left;
+      padding: 8px 10px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+    }
+    .records-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid rgba(42, 52, 71, 0.5);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .records-table tr:hover td { background: rgba(201, 163, 82, 0.04); }
+
+    /* Mapping row */
+    .map-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(42, 52, 71, 0.5);
+    }
+    .map-row .source { flex: 1; min-width: 0; }
+    .map-row .arrow { color: var(--muted); font-size: 14px; flex-shrink: 0; }
+    .map-row .target { flex: 1; min-width: 0; }
+    .map-row .source-name { font-size: 0.85rem; font-weight: 500; }
+    .map-row .sample { font-size: 0.72rem; color: var(--muted); font-family: ui-monospace, monospace; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Steps indicator */
+    .steps { display: flex; gap: 6px; margin-bottom: 18px; }
+    .step-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background .2s;
+    }
+    .step-dot.active { background: var(--accent); }
+    .step-dot.done { background: var(--ok); }
+
+    /* Stats grid */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin: 14px 0; }
+    .stat {
+      background: #090e18;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+    }
+    .stat-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px; }
+    .stat-value { font-size: 1.3rem; font-weight: 700; }
+
+    /* Progress bar */
+    .progress-bar { background: var(--border); border-radius: 8px; height: 8px; overflow: hidden; margin: 16px auto; max-width: 400px; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 8px; transition: width .3s; }
+
+    /* Hint / info box */
     .hint {
       border-left: 3px solid var(--accent);
       background: var(--accent-dim);
-      padding: 10px;
+      padding: 10px 14px;
       border-radius: 7px;
+      font-size: 0.85rem;
       margin-top: 12px;
-      font-size: 0.9rem;
+      line-height: 1.5;
     }
+    .hint.green { border-color: var(--ok); background: var(--ok-dim); }
+    .hint.red { border-color: var(--error); background: var(--error-dim); }
+    .hint.blue { border-color: var(--blue); background: var(--blue-dim); }
+
+    /* Stored records */
+    .stored-records { list-style: none; padding: 0; }
+    .stored-records li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(42, 52, 71, 0.5);
+      font-size: 0.85rem;
+    }
+    .stored-records li:last-child { border-bottom: none; }
+    .rec-index { color: var(--muted); font-family: monospace; font-size: 0.75rem; min-width: 28px; padding-top: 2px; }
+    .rec-fields { flex: 1; }
+    .rec-field { display: inline-block; background: #0f1522; border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; margin: 2px 3px 2px 0; font-size: 0.78rem; }
+    .rec-field .key { color: var(--muted); }
+    .rec-field .val { color: var(--text); }
+    .rec-meta { font-size: 0.7rem; color: var(--muted); margin-top: 3px; }
+
     a { color: #8db2ff; }
-    code { color: #f9de96; }
+    code { color: #f9de96; font-size: 0.88em; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
 <main>
-  <h1>Standalone Filen Login/Data Test</h1>
-  <p>
-    Use this page to quickly test the UX flow (register/login/add/view) without changing the main Khora app.
-    It includes an SDK diagnostics check and a local fallback mode so you can verify the UI even when the Filen browser SDK fails.
+  <h1>Filen File Upload Test</h1>
+  <p class="subtitle">
+    Upload CSV or JSON files, map columns, preview data, and store records locally.
+    This standalone test page validates the full file-upload pipeline without the main Khora app.
   </p>
 
+  <!-- ═══════════════════ SECTION 1: SDK CHECK ═══════════════════ -->
   <div class="row">
     <section class="card">
-      <h2 style="margin:0;font-size:1.15rem;">1) SDK diagnostics</h2>
-      <p>Checks whether the Filen browser SDK can load directly from CDN in this environment.</p>
-      <button id="btnCheckSdk" class="primary">Run SDK check</button>
-      <div class="hint">
-        If this fails with module specifiers like <code>os</code>/<code>path</code>, use the Vite/polyfill setup before deploying to GitHub Pages.
-      </div>
+      <h2>1) SDK Diagnostics</h2>
+      <p style="margin-top:6px;">Check whether the Filen browser SDK loads from CDN.</p>
+      <button id="btnCheckSdk" class="primary" style="margin-top:10px;">Run SDK Check</button>
       <div class="status" id="diagLog">Ready.</div>
     </section>
 
     <section class="card">
-      <h2 style="margin:0;font-size:1.15rem;">2) Login + session (local harness)</h2>
-      <p>
-        Session status: <span id="sessionPill" class="pill">not logged in</span>
+      <h2>2) Session (local harness)</h2>
+      <p style="margin-top:6px;">
+        Status: <span id="sessionPill" class="pill">not logged in</span>
       </p>
       <label>Email</label>
       <input id="email" type="email" placeholder="you@example.com" />
       <label>Password</label>
       <input id="password" type="password" placeholder="password" />
       <div class="btn-row">
-        <button id="btnLogin" class="primary">Login (local harness)</button>
-        <button id="btnLogout">Logout</button>
+        <button id="btnLogin" class="primary">Login</button>
+        <button id="btnLogout" class="ghost">Logout</button>
       </div>
-      <p class="hint" style="margin-bottom:0;">
-        This is intentionally a test harness. It stores a pseudo-session in <code>localStorage</code> and does not call Filen.
-      </p>
+      <div class="hint" style="margin-top:10px;">
+        Test harness only. Stores a pseudo-session in <code>localStorage</code> — does not call Filen.
+      </div>
     </section>
   </div>
 
-  <section class="card" style="margin-top:14px;">
-    <h2 style="margin:0;font-size:1.15rem;">3) Add/View data (local harness)</h2>
-    <p>Records are saved to <code>localStorage["khora-filen-test-records"]</code>.</p>
-    <label>New record</label>
-    <textarea id="newRecord" placeholder="Type something..."></textarea>
-    <div class="btn-row">
-      <button id="btnAdd" class="primary">Add record</button>
-      <button id="btnRefresh">Refresh</button>
-      <button id="btnClear">Clear all</button>
+  <!-- ═══════════════════ SECTION 2: FILE UPLOAD ═══════════════════ -->
+  <section class="card" id="uploadSection">
+    <h2>3) Upload File</h2>
+    <p style="margin-top:6px;">Upload a CSV or JSON file. Records will be parsed, mapped, and stored locally.</p>
+
+    <!-- Step indicators -->
+    <div class="steps" style="margin-top:14px;">
+      <div class="step-dot active" id="dot-upload"></div>
+      <div class="step-dot" id="dot-map"></div>
+      <div class="step-dot" id="dot-preview"></div>
+      <div class="step-dot" id="dot-done"></div>
     </div>
-    <ul id="records" class="records"></ul>
+
+    <!-- STEP: Upload -->
+    <div id="step-upload">
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">&#128194;</div>
+        <p style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Drop a CSV or JSON file here</p>
+        <p style="font-size:12px;">or click to browse</p>
+        <div style="display:flex;gap:6px;justify-content:center;margin-top:12px;">
+          <span class="tag tag-blue">.csv</span>
+          <span class="tag tag-teal">.json</span>
+        </div>
+      </div>
+      <input type="file" id="fileInput" accept=".csv,.json,application/json,text/csv" style="display:none;" />
+      <div class="hint green" style="margin-top:14px;">
+        <strong style="color:var(--ok);">How it works:</strong>
+        Your file is parsed entirely in the browser. No data is sent to any server. Records are stored in <code>localStorage</code>.
+      </div>
+    </div>
+
+    <!-- STEP: Map Columns -->
+    <div id="step-map" class="hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--text);" id="mapFileName"></p>
+          <p style="font-size:11px;color:var(--muted);" id="mapFileMeta"></p>
+        </div>
+        <button id="btnChangeFile" class="ghost" style="width:auto;padding:6px 14px;font-size:12px;">Change File</button>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+        Map each source column to a target field. Unmapped columns are skipped.
+      </p>
+      <div id="mappingContainer" style="max-height:360px;overflow:auto;"></div>
+      <div class="stats" id="mapStats"></div>
+      <div class="btn-row">
+        <button id="btnBackToUpload" class="ghost">Back</button>
+        <button id="btnToPreview" class="primary" disabled>Preview Records</button>
+      </div>
+    </div>
+
+    <!-- STEP: Preview -->
+    <div id="step-preview" class="hidden">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+        Review the first 10 records before importing. Field values shown as stored.
+      </p>
+      <div style="overflow-x:auto;">
+        <table class="records-table" id="previewTable">
+          <thead id="previewHead"></thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+      <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;" id="previewMore"></p>
+      <div class="stats" id="previewStats"></div>
+      <div class="btn-row">
+        <button id="btnBackToMap" class="ghost">Back</button>
+        <button id="btnImport" class="primary">Import Records</button>
+      </div>
+    </div>
+
+    <!-- STEP: Done -->
+    <div id="step-done" class="hidden" style="text-align:center;padding:10px 0;">
+      <div style="width:52px;height:52px;border-radius:50%;background:var(--ok-dim);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 12px;">&#10003;</div>
+      <p style="font-size:18px;font-weight:700;color:var(--text);">Import Complete</p>
+      <p style="font-size:12px;color:var(--muted);margin-top:4px;" id="doneMessage"></p>
+      <div class="stats" id="doneStats"></div>
+      <button id="btnUploadAnother" class="primary" style="max-width:300px;margin:10px auto 0;">Upload Another File</button>
+    </div>
   </section>
 
-  <section class="card" style="margin-top:14px;">
-    <h2 style="margin:0;font-size:1.15rem;">How to run a real Filen test on GitHub Pages</h2>
-    <ol style="color:var(--muted);line-height:1.5; padding-left: 18px; margin:10px 0 0;">
-      <li>Create a Vite app and install <code>@filen/sdk</code> + <code>vite-plugin-node-polyfills</code>.</li>
-      <li>Configure polyfills in <code>vite.config.js</code> and set <code>base</code> to your repo path.</li>
-      <li>Deploy the <code>dist/</code> output to GitHub Pages (<code>gh-pages</code> branch).</li>
-    </ol>
-    <p style="margin-top:8px;">
-      See: <a href="https://filen.io" target="_blank" rel="noopener noreferrer">filen.io</a>
+  <!-- ═══════════════════ SECTION 3: STORED RECORDS ═══════════════════ -->
+  <section class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h2>4) Stored Records</h2>
+      <div style="display:flex;gap:8px;">
+        <button id="btnRefresh" class="ghost" style="width:auto;padding:6px 14px;font-size:12px;">Refresh</button>
+        <button id="btnClearAll" class="ghost" style="width:auto;padding:6px 14px;font-size:12px;color:var(--error);">Clear All</button>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+      All imported records stored in <code>localStorage["khora-filen-test-records"]</code>.
+      <span id="recordCount" class="tag tag-accent" style="margin-left:6px;">0 records</span>
     </p>
+    <ul id="recordsList" class="stored-records">
+      <li style="color:var(--muted);font-style:italic;">No records yet. Upload a file above.</li>
+    </ul>
+  </section>
+
+  <!-- ═══════════════════ SECTION 4: MANUAL ADD ═══════════════════ -->
+  <section class="card">
+    <h2>5) Add Record Manually</h2>
+    <p style="margin-top:6px;">Quickly add a text record without uploading a file.</p>
+    <label>Record text</label>
+    <textarea id="manualRecord" placeholder="Type something..."></textarea>
+    <button id="btnManualAdd" class="primary" style="margin-top:10px;">Add Record</button>
   </section>
 </main>
 
 <script>
 (() => {
+  'use strict';
+
   const LS_SESSION = 'khora-filen-test-session';
   const LS_RECORDS = 'khora-filen-test-records';
 
-  const $ = (id) => document.getElementById(id);
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+  const $id = (id) => document.getElementById(id);
 
-  const diagLog = $('diagLog');
-  const sessionPill = $('sessionPill');
-  const recordsEl = $('records');
+  // ═══════════════════ TARGET FIELDS ═══════════════════
+  // These mirror the main Khora vault fields
+  const TARGET_FIELDS = [
+    { key: 'full_name', label: 'Full Name', sensitive: true },
+    { key: 'dob', label: 'Date of Birth', sensitive: true },
+    { key: 'id_number', label: 'ID / SSN', sensitive: true },
+    { key: 'email', label: 'Email', sensitive: true },
+    { key: 'phone', label: 'Phone', sensitive: true },
+    { key: 'address', label: 'Address', sensitive: true },
+    { key: 'affiliation', label: 'Organization', sensitive: false },
+    { key: 'case_notes', label: 'Case Notes', sensitive: true },
+    { key: 'history', label: 'History', sensitive: false },
+  ];
 
+  // ═══════════════════ COLUMN AUTO-MAPPING ═══════════════════
+  const COLUMN_ALIASES = {
+    'name':'full_name','full_name':'full_name','fullname':'full_name',
+    'client_name':'full_name','client name':'full_name',
+    'first_name':'_first_name','last_name':'_last_name',
+    'firstname':'_first_name','lastname':'_last_name',
+    'first':'_first_name','last':'_last_name',
+    'dob':'dob','date_of_birth':'dob','birthdate':'dob',
+    'birth_date':'dob','birthday':'dob','date of birth':'dob',
+    'ssn':'id_number','id':'id_number','id_number':'id_number',
+    'social_security':'id_number','social':'id_number',
+    'email':'email','email_address':'email','e-mail':'email','e_mail':'email',
+    'phone':'phone','phone_number':'phone','mobile':'phone',
+    'telephone':'phone','cell':'phone','tel':'phone',
+    'address':'address','street_address':'address','home_address':'address',
+    'street':'address','mailing_address':'address','addr':'address',
+    'organization':'affiliation','affiliation':'affiliation',
+    'org':'affiliation','agency':'affiliation','employer':'affiliation','company':'affiliation',
+    'notes':'case_notes','case_notes':'case_notes','comments':'case_notes',
+    'case notes':'case_notes','note':'case_notes',
+    'history':'history','case_history':'history','case history':'history',
+  };
+
+  function autoMapColumns(headers) {
+    const mapping = {};
+    for (const h of headers) {
+      const normalized = h.toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+      const alias = COLUMN_ALIASES[normalized] || COLUMN_ALIASES[h.toLowerCase().trim()];
+      if (alias) mapping[h] = alias;
+    }
+    return mapping;
+  }
+
+  // ═══════════════════ CSV PARSER ═══════════════════
+  function parseCSV(text) {
+    const lines = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '"') { inQuotes = !inQuotes; current += ch; }
+      else if (ch === '\n' && !inQuotes) { lines.push(current); current = ''; }
+      else if (ch === '\r' && !inQuotes) { /* skip CR */ }
+      else { current += ch; }
+    }
+    if (current.trim()) lines.push(current);
+    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row');
+
+    function parseLine(line) {
+      const fields = [];
+      let field = '';
+      let q = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (q && line[i + 1] === '"') { field += '"'; i++; }
+          else { q = !q; }
+        } else if (ch === ',' && !q) {
+          fields.push(field.trim());
+          field = '';
+        } else {
+          field += ch;
+        }
+      }
+      fields.push(field.trim());
+      return fields;
+    }
+
+    const headers = parseLine(lines[0]);
+    const records = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const vals = parseLine(lines[i]);
+      const record = {};
+      headers.forEach((h, j) => {
+        if (vals[j] !== undefined && vals[j] !== '') record[h] = vals[j];
+      });
+      records.push(record);
+    }
+    return { headers, records };
+  }
+
+  // ═══════════════════ JSON PARSER ═══════════════════
+  function parseJSONImport(text) {
+    const data = JSON.parse(text);
+    const records = Array.isArray(data) ? data : (data.records || data.data || data.items || data.rows || []);
+    if (!Array.isArray(records) || records.length === 0) {
+      throw new Error('JSON must contain an array of record objects');
+    }
+    const headers = [...new Set(records.flatMap(r => Object.keys(r)))];
+    return { headers, records };
+  }
+
+  // ═══════════════════ STATE ═══════════════════
+  let fileData = null;     // { headers, records, fileName, fileType }
+  let columnMapping = {};  // { sourceCol: targetFieldKey }
+  let currentStep = 'upload';
+
+  // ═══════════════════ LOCALSTORAGE ═══════════════════
+  function loadRecords() {
+    try {
+      const raw = localStorage.getItem(LS_RECORDS);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  }
+
+  function saveRecords(records) {
+    localStorage.setItem(LS_RECORDS, JSON.stringify(records));
+  }
+
+  // ═══════════════════ UI HELPERS ═══════════════════
+  const diagLog = $id('diagLog');
   const logDiag = (line) => {
     const t = new Date().toISOString();
     diagLog.textContent = `[${t}] ${line}\n` + diagLog.textContent;
   };
 
-  const setLoggedIn = (inSession) => {
-    sessionPill.textContent = inSession ? 'logged in' : 'not logged in';
-    sessionPill.classList.toggle('ok', inSession);
-    $('btnAdd').disabled = !inSession;
-    $('btnRefresh').disabled = !inSession;
-    $('btnClear').disabled = !inSession;
-    $('btnLogout').disabled = !inSession;
-    $('btnLogin').disabled = inSession;
-  };
+  function setStep(step) {
+    currentStep = step;
+    const steps = ['upload', 'map', 'preview', 'done'];
+    const idx = steps.indexOf(step);
 
-  const loadRecords = () => {
-    try {
-      const raw = localStorage.getItem(LS_RECORDS);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
+    steps.forEach((s, i) => {
+      $id(`step-${s}`).classList.toggle('hidden', s !== step);
+      const dot = $id(`dot-${s}`);
+      dot.classList.toggle('active', i === idx);
+      dot.classList.toggle('done', i < idx);
+    });
+  }
 
-  const saveRecords = (records) => {
-    localStorage.setItem(LS_RECORDS, JSON.stringify(records));
-  };
+  function setLoggedIn(inSession) {
+    const pill = $id('sessionPill');
+    pill.textContent = inSession ? 'logged in' : 'not logged in';
+    pill.classList.toggle('ok', inSession);
+    $id('btnLogout').disabled = !inSession;
+    $id('btnLogin').disabled = inSession;
+  }
 
-  const renderRecords = () => {
-    const rows = loadRecords();
-    recordsEl.innerHTML = '';
-    if (!rows.length) {
-      const li = document.createElement('li');
-      li.textContent = '(no records yet)';
-      recordsEl.appendChild(li);
+  // ═══════════════════ RENDER STORED RECORDS ═══════════════════
+  function renderStoredRecords() {
+    const records = loadRecords();
+    const list = $id('recordsList');
+    const countTag = $id('recordCount');
+    countTag.textContent = `${records.length} record${records.length !== 1 ? 's' : ''}`;
+
+    list.innerHTML = '';
+    if (records.length === 0) {
+      list.innerHTML = '<li style="color:var(--muted);font-style:italic;">No records yet. Upload a file above.</li>';
       return;
     }
-    rows.slice().reverse().forEach((row) => {
-      const li = document.createElement('li');
-      li.textContent = `${row.createdAt} — ${row.text}`;
-      recordsEl.appendChild(li);
-    });
-  };
 
-  $('btnCheckSdk').addEventListener('click', async () => {
+    // Show most recent first, max 50 visible
+    const visible = records.slice().reverse().slice(0, 50);
+    visible.forEach((rec, i) => {
+      const li = document.createElement('li');
+      const idx = document.createElement('div');
+      idx.className = 'rec-index';
+      idx.textContent = `#${records.length - i}`;
+
+      const body = document.createElement('div');
+      body.className = 'rec-fields';
+
+      if (rec.fields && typeof rec.fields === 'object') {
+        // Structured record from file import
+        for (const [k, v] of Object.entries(rec.fields)) {
+          const span = document.createElement('span');
+          span.className = 'rec-field';
+          const tf = TARGET_FIELDS.find(f => f.key === k);
+          span.innerHTML = `<span class="key">${tf ? tf.label : k}:</span> <span class="val">${escapeHtml(truncate(String(v), 50))}</span>`;
+          body.appendChild(span);
+        }
+      } else if (rec.text) {
+        // Text-only record (manual add)
+        const span = document.createElement('span');
+        span.className = 'rec-field';
+        span.innerHTML = `<span class="val">${escapeHtml(truncate(rec.text, 80))}</span>`;
+        body.appendChild(span);
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'rec-meta';
+      const parts = [];
+      if (rec.createdAt) parts.push(new Date(rec.createdAt).toLocaleString());
+      if (rec.source) parts.push(`source: ${rec.source}`);
+      if (rec.batch) parts.push(`batch: ${rec.batch}`);
+      meta.textContent = parts.join(' · ');
+      body.appendChild(meta);
+
+      li.appendChild(idx);
+      li.appendChild(body);
+      list.appendChild(li);
+    });
+
+    if (records.length > 50) {
+      const li = document.createElement('li');
+      li.style.color = 'var(--muted)';
+      li.style.fontStyle = 'italic';
+      li.textContent = `…and ${records.length - 50} more records`;
+      list.appendChild(li);
+    }
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function truncate(str, len) {
+    return str.length > len ? str.slice(0, len) + '…' : str;
+  }
+
+  // ═══════════════════ HANDLE FILE ═══════════════════
+  async function handleFile(file) {
+    try {
+      const text = await file.text();
+      const isJSON = file.name.endsWith('.json') || file.type === 'application/json';
+      const parsed = isJSON ? parseJSONImport(text) : parseCSV(text);
+      if (parsed.records.length === 0) throw new Error('No records found in file');
+
+      fileData = {
+        ...parsed,
+        fileName: file.name,
+        fileType: isJSON ? 'JSON' : 'CSV',
+      };
+
+      // Auto-map columns
+      columnMapping = autoMapColumns(parsed.headers);
+      renderMappingStep();
+      setStep('map');
+    } catch (e) {
+      alert('Parse error: ' + e.message);
+    }
+  }
+
+  // ═══════════════════ MAPPING STEP ═══════════════════
+  function renderMappingStep() {
+    if (!fileData) return;
+
+    $id('mapFileName').textContent = fileData.fileName;
+    $id('mapFileMeta').textContent = `${fileData.fileType} · ${fileData.records.length} records · ${fileData.headers.length} columns`;
+
+    const container = $id('mappingContainer');
+    container.innerHTML = '';
+
+    for (const header of fileData.headers) {
+      const row = document.createElement('div');
+      row.className = 'map-row';
+
+      // Source column info
+      const source = document.createElement('div');
+      source.className = 'source';
+      const sourceName = document.createElement('div');
+      sourceName.className = 'source-name';
+      sourceName.textContent = header;
+      source.appendChild(sourceName);
+
+      // Show sample value
+      const sampleVal = fileData.records.slice(0, 3).map(r => r[header]).filter(Boolean)[0];
+      if (sampleVal) {
+        const sample = document.createElement('div');
+        sample.className = 'sample';
+        sample.textContent = 'e.g. ' + truncate(String(sampleVal), 40);
+        source.appendChild(sample);
+      }
+
+      // Arrow
+      const arrow = document.createElement('div');
+      arrow.className = 'arrow';
+      arrow.textContent = '→';
+
+      // Target select
+      const target = document.createElement('div');
+      target.className = 'target';
+      const sel = document.createElement('select');
+      sel.dataset.source = header;
+
+      const skipOpt = document.createElement('option');
+      skipOpt.value = '';
+      skipOpt.textContent = '— skip —';
+      sel.appendChild(skipOpt);
+
+      for (const tf of TARGET_FIELDS) {
+        const opt = document.createElement('option');
+        opt.value = tf.key;
+        opt.textContent = tf.label + (tf.sensitive ? ' 🔒' : '');
+        sel.appendChild(opt);
+      }
+
+      // Special first/last name options
+      const fnOpt = document.createElement('option');
+      fnOpt.value = '_first_name';
+      fnOpt.textContent = 'First Name (will combine)';
+      sel.appendChild(fnOpt);
+      const lnOpt = document.createElement('option');
+      lnOpt.value = '_last_name';
+      lnOpt.textContent = 'Last Name (will combine)';
+      sel.appendChild(lnOpt);
+
+      // Set current mapping
+      sel.value = columnMapping[header] || '';
+
+      sel.addEventListener('change', () => {
+        if (sel.value) {
+          columnMapping[header] = sel.value;
+        } else {
+          delete columnMapping[header];
+        }
+        updateMappingStats();
+      });
+
+      target.appendChild(sel);
+      row.appendChild(source);
+      row.appendChild(arrow);
+      row.appendChild(target);
+      container.appendChild(row);
+    }
+
+    updateMappingStats();
+  }
+
+  function getMappedFieldCount() {
+    return Object.values(columnMapping).filter(v => v && !v.startsWith('_')).length;
+  }
+
+  function updateMappingStats() {
+    const mapped = getMappedFieldCount();
+    const total = fileData ? fileData.headers.length : 0;
+    const hasFirstLast = Object.values(columnMapping).includes('_first_name') && Object.values(columnMapping).includes('_last_name');
+    const effectiveMapped = mapped + (hasFirstLast ? 1 : 0); // first+last combine into full_name
+
+    $id('mapStats').innerHTML = `
+      <div class="stat">
+        <span class="stat-label">Mapped</span>
+        <span class="stat-value" style="color:var(--accent);">${mapped}${hasFirstLast ? '+1' : ''}</span>
+        <span style="font-size:11px;color:var(--muted);"> of ${total}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Skipped</span>
+        <span class="stat-value" style="color:var(--muted);">${total - Object.keys(columnMapping).length}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Sensitive</span>
+        <span class="stat-value" style="color:var(--teal);">${
+          Object.values(columnMapping)
+            .filter(v => v && !v.startsWith('_'))
+            .filter(v => TARGET_FIELDS.find(f => f.key === v)?.sensitive).length
+        }</span>
+      </div>
+    `;
+
+    const btn = $id('btnToPreview');
+    const hasMapped = mapped > 0 || hasFirstLast;
+    btn.disabled = !hasMapped;
+    btn.textContent = hasMapped
+      ? `Preview ${fileData.records.length} Records`
+      : 'Map at least one column';
+  }
+
+  // ═══════════════════ PREVIEW STEP ═══════════════════
+  function renderPreviewStep() {
+    if (!fileData) return;
+
+    const activeMappings = Object.entries(columnMapping).filter(([, v]) => v && !v.startsWith('_'));
+    const firstNameCol = Object.entries(columnMapping).find(([, v]) => v === '_first_name')?.[0];
+    const lastNameCol = Object.entries(columnMapping).find(([, v]) => v === '_last_name')?.[0];
+    const hasNameCombine = firstNameCol && lastNameCol;
+
+    // Build header row
+    const thead = $id('previewHead');
+    thead.innerHTML = '';
+    const headerRow = document.createElement('tr');
+
+    const thIdx = document.createElement('th');
+    thIdx.textContent = '#';
+    headerRow.appendChild(thIdx);
+
+    if (hasNameCombine) {
+      const th = document.createElement('th');
+      th.textContent = 'Full Name';
+      headerRow.appendChild(th);
+    }
+
+    for (const [, vaultKey] of activeMappings) {
+      const tf = TARGET_FIELDS.find(f => f.key === vaultKey);
+      const th = document.createElement('th');
+      th.textContent = tf ? tf.label : vaultKey;
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+
+    // Build body rows (max 10)
+    const tbody = $id('previewBody');
+    tbody.innerHTML = '';
+    const previewRows = fileData.records.slice(0, 10);
+
+    previewRows.forEach((row, i) => {
+      const tr = document.createElement('tr');
+
+      const tdIdx = document.createElement('td');
+      tdIdx.style.color = 'var(--muted)';
+      tdIdx.style.fontFamily = 'monospace';
+      tdIdx.style.fontSize = '0.75rem';
+      tdIdx.textContent = i + 1;
+      tr.appendChild(tdIdx);
+
+      if (hasNameCombine) {
+        const td = document.createElement('td');
+        const first = (row[firstNameCol] || '').trim();
+        const last = (row[lastNameCol] || '').trim();
+        td.textContent = [first, last].filter(Boolean).join(' ') || '—';
+        tr.appendChild(td);
+      }
+
+      for (const [srcCol, vaultKey] of activeMappings) {
+        const td = document.createElement('td');
+        const val = row[srcCol];
+        td.textContent = val != null ? truncate(String(val), 50) : '—';
+        tr.appendChild(td);
+      }
+
+      tbody.appendChild(tr);
+    });
+
+    // "and X more" message
+    const moreEl = $id('previewMore');
+    if (fileData.records.length > 10) {
+      moreEl.textContent = `…and ${fileData.records.length - 10} more records`;
+    } else {
+      moreEl.textContent = '';
+    }
+
+    // Stats
+    const totalMapped = activeMappings.length + (hasNameCombine ? 1 : 0);
+    $id('previewStats').innerHTML = `
+      <div class="stat">
+        <span class="stat-label">Records</span>
+        <span class="stat-value">${fileData.records.length}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Fields / Row</span>
+        <span class="stat-value" style="color:var(--accent);">${totalMapped}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Total Fields</span>
+        <span class="stat-value" style="color:var(--ok);">${fileData.records.length * totalMapped}</span>
+      </div>
+    `;
+
+    $id('btnImport').textContent = `Import ${fileData.records.length} Records`;
+  }
+
+  // ═══════════════════ IMPORT ═══════════════════
+  function doImport() {
+    if (!fileData) return;
+
+    const activeMappings = Object.entries(columnMapping).filter(([, v]) => v && !v.startsWith('_'));
+    const firstNameCol = Object.entries(columnMapping).find(([, v]) => v === '_first_name')?.[0];
+    const lastNameCol = Object.entries(columnMapping).find(([, v]) => v === '_last_name')?.[0];
+    const hasNameCombine = firstNameCol && lastNameCol;
+
+    const batchId = `batch_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const existingRecords = loadRecords();
+    let imported = 0;
+    let skipped = 0;
+
+    for (const row of fileData.records) {
+      const fields = {};
+
+      // Map active columns
+      for (const [srcCol, vaultKey] of activeMappings) {
+        const val = row[srcCol];
+        if (val != null && String(val).trim() !== '') {
+          fields[vaultKey] = String(val).trim();
+        }
+      }
+
+      // Combine first + last name
+      if (hasNameCombine) {
+        const first = (row[firstNameCol] || '').trim();
+        const last = (row[lastNameCol] || '').trim();
+        const combined = [first, last].filter(Boolean).join(' ');
+        if (combined) fields['full_name'] = combined;
+      }
+
+      if (Object.keys(fields).length === 0) {
+        skipped++;
+        continue;
+      }
+
+      existingRecords.push({
+        fields,
+        createdAt: new Date().toISOString(),
+        source: fileData.fileName,
+        batch: batchId,
+        fileType: fileData.fileType,
+      });
+      imported++;
+    }
+
+    saveRecords(existingRecords);
+
+    // Show done step
+    $id('doneMessage').textContent = `${imported} records imported from ${fileData.fileName}${skipped > 0 ? ` · ${skipped} skipped (no data)` : ''}`;
+    $id('doneStats').innerHTML = `
+      <div class="stat">
+        <span class="stat-label">Imported</span>
+        <span class="stat-value" style="color:var(--ok);">${imported}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Skipped</span>
+        <span class="stat-value" style="color:${skipped > 0 ? 'var(--error)' : 'var(--muted)'};">${skipped}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Batch</span>
+        <span class="stat-value" style="font-size:0.75rem;color:var(--muted);">${batchId.slice(-8)}</span>
+      </div>
+    `;
+
+    setStep('done');
+    renderStoredRecords();
+  }
+
+  // ═══════════════════ RESET UPLOAD ═══════════════════
+  function resetUpload() {
+    fileData = null;
+    columnMapping = {};
+    $id('fileInput').value = '';
+    setStep('upload');
+  }
+
+  // ═══════════════════ EVENT LISTENERS ═══════════════════
+
+  // SDK Check
+  $id('btnCheckSdk').addEventListener('click', async () => {
     try {
       logDiag('Checking SDK import from jsDelivr...');
       const mod = await import('https://cdn.jsdelivr.net/npm/@filen/sdk@0.3.12/dist/browser/index.js');
@@ -233,45 +951,92 @@
     }
   });
 
-  $('btnLogin').addEventListener('click', () => {
-    const email = $('email').value.trim();
-    const password = $('password').value;
+  // Login
+  $id('btnLogin').addEventListener('click', () => {
+    const email = $id('email').value.trim();
+    const password = $id('password').value;
     if (!email || !password) {
       alert('Please enter email and password.');
       return;
     }
     localStorage.setItem(LS_SESSION, JSON.stringify({ email, at: Date.now() }));
     setLoggedIn(true);
-    renderRecords();
   });
 
-  $('btnLogout').addEventListener('click', () => {
+  // Logout
+  $id('btnLogout').addEventListener('click', () => {
     localStorage.removeItem(LS_SESSION);
     setLoggedIn(false);
-    recordsEl.innerHTML = '';
   });
 
-  $('btnAdd').addEventListener('click', () => {
-    const text = $('newRecord').value.trim();
+  // Drop zone
+  const dropzone = $id('dropzone');
+  const fileInput = $id('fileInput');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('active');
+  });
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.classList.remove('active');
+  });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('active');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file) handleFile(file);
+  });
+
+  // Mapping step buttons
+  $id('btnChangeFile').addEventListener('click', resetUpload);
+  $id('btnBackToUpload').addEventListener('click', resetUpload);
+
+  $id('btnToPreview').addEventListener('click', () => {
+    renderPreviewStep();
+    setStep('preview');
+  });
+
+  // Preview step buttons
+  $id('btnBackToMap').addEventListener('click', () => {
+    setStep('map');
+  });
+
+  $id('btnImport').addEventListener('click', doImport);
+
+  // Done step
+  $id('btnUploadAnother').addEventListener('click', resetUpload);
+
+  // Stored records
+  $id('btnRefresh').addEventListener('click', renderStoredRecords);
+  $id('btnClearAll').addEventListener('click', () => {
+    if (confirm('Clear all stored records?')) {
+      localStorage.removeItem(LS_RECORDS);
+      renderStoredRecords();
+    }
+  });
+
+  // Manual add
+  $id('btnManualAdd').addEventListener('click', () => {
+    const text = $id('manualRecord').value.trim();
     if (!text) return;
-
-    const rows = loadRecords();
-    rows.push({ text, createdAt: new Date().toISOString() });
-    saveRecords(rows);
-    $('newRecord').value = '';
-    renderRecords();
+    const records = loadRecords();
+    records.push({ text, createdAt: new Date().toISOString(), source: 'manual' });
+    saveRecords(records);
+    $id('manualRecord').value = '';
+    renderStoredRecords();
   });
 
-  $('btnRefresh').addEventListener('click', renderRecords);
-
-  $('btnClear').addEventListener('click', () => {
-    localStorage.removeItem(LS_RECORDS);
-    renderRecords();
-  });
-
+  // ═══════════════════ INIT ═══════════════════
   const hasSession = Boolean(localStorage.getItem(LS_SESSION));
   setLoggedIn(hasSession);
-  if (hasSession) renderRecords();
+  renderStoredRecords();
+  setStep('upload');
 })();
 </script>
 </body>
