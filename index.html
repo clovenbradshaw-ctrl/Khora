@@ -622,8 +622,11 @@ const EVT = {
   // Inter-org messaging
   ORG_MSG_CHANNEL:`${NS}.org.msg.channel`,
   ORG_MSG_ENVELOPE:`${NS}.org.msg.envelope`,
-  // Schema
-  SCHEMA_PROMPT:  `${NS}.schema.prompt`,
+  // Schema — Forms (GIVEN data collection)
+  SCHEMA_FORM:    `${NS}.schema.form`,
+  SCHEMA_PROMPT:  `${NS}.schema.prompt`,       // individual form field (backward compat)
+  // Schema — Interpretations (MEANT frameworks)
+  SCHEMA_ASSESSMENT:`${NS}.schema.assessment`,  // provider-side MEANT instruments
   SCHEMA_DEF:     `${NS}.schema.definition`,
   SCHEMA_TRANSFORM:`${NS}.schema.transform`,
   SCHEMA_SUB:     `${NS}.schema.subscription`,
@@ -1181,246 +1184,327 @@ async function hydrateFromWebhooks(token) {
  * ═══════════════════════════════════════════════════════════════════════════ */
 const DOMAIN_CONFIG = {
 
-  /* ── Authorities ── */
-  authorities: [
-    { id:'auth_org_policy', name:'Organization Policy v1',
-      uri:'local://org/policy',
-      authority_type:'organizational_policy', authority_org:'Organization', version:'v1',
-      terms:[
-        {id:'policy_1',label:'Eligibility Criteria',
-         definition:'Conditions under which an individual qualifies for services'},
-        {id:'policy_2',label:'Service Standards',
-         definition:'Required standards for service delivery'},
-        {id:'policy_3',label:'Data Collection Requirements',
-         definition:'Mandatory data elements for intake and ongoing engagement'},
-      ]},
-    { id:'auth_ext_standard', name:'External Reporting Standard',
-      uri:'local://ext/standard',
-      authority_type:'external_standard', authority_org:'Regulatory Body', version:'v1',
-      terms:[
-        {id:'ext_1',label:'Status Classification (1.01)',
-         definition:'Current status at point of engagement'},
-        {id:'ext_2',label:'Engagement Type (1.02)',
-         definition:'Nature of service engagement'},
-        {id:'ext_3',label:'Identity Elements (2.01)'},
-        {id:'ext_4',label:'Contact Elements (2.02)'},
-      ]},
-    { id:'auth_service_taxonomy', name:'Service Taxonomy',
-      uri:'local://service/taxonomy',
-      authority_type:'industry_standard', authority_org:'Standards Body', version:'v1',
-      terms:[
-        {id:'svc_cat_1',label:'Direct Services',definition:'Services delivered to individuals'},
-        {id:'svc_cat_2',label:'Coordination Services',definition:'Referral and linkage services'},
-      ]},
-    { id:'auth_local_policy', name:'Local Policy',
-      uri:'local://local/policy', authority_type:'local_policy', authority_org:'Local Authority',
-      terms:[] },
-  ],
-
-  /* ── Client Observation Prompts ── */
-  clientPrompts: [
-    { id:'prompt_current_status', key:'current_status', question:'What is your current status?', type:'single_select',
-      version:1, audience:'client', maturity:'normative', section:'status',
+  /* ═══════════════════════════════════════════════════════════════════════════
+   * FORMS — Structured GIVEN Data Collection
+   *
+   * Forms are the primary artifact of the schema system. A form is a versioned
+   * collection of fields that collects structured data at the GIVEN level —
+   * what actually happened, observed by or about the client.
+   *
+   * Forms are authored at the network or org level and propagate downward:
+   *   Network → Organization → Provider → Client
+   *
+   * Propagation levels control how member orgs interact with network forms:
+   *   required  — Auto-applied, immutable at org level
+   *   standard  — Auto-applied, orgs may extend (additive only)
+   *   recommended — Org reviews, decides whether to adopt
+   *   optional  — Available in catalog, no adoption expectation
+   *
+   * Each form groups related fields into a coherent data collection instrument
+   * that can be versioned, governed, and propagated as a unit.
+   * ═══════════════════════════════════════════════════════════════════════════ */
+  forms: [
+    { id:'form_status_engagement', name:'Status & Engagement', version:1,
+      description:'Core status and engagement tracking for active cases',
+      maturity:'normative',
       source:{level:'network',propagation:'required'},
       eo:{
         chain:[
-          {op:'DES',target:{entity:'current_status',designation:'Current Status Prompt'},
-           frame:{type:'schema',epistemic:'MEANT',role:'network'}},
-          {op:'CON',target:{source:'current_status',destination:'ext:standard_1.01'},
-           context:{authority_id:'auth_ext_standard',element:'ext_1',
-                    authority_name:'External Reporting Standard'}},
-          {op:'SEG',target:{field:'response_options',entity:'current_status'},
-           context:{rationale:'Simplified from full reporting standard for field use',
-                    excluded:['administrative_hold','archived']}}
+          {op:'DES',target:{entity:'form_status_engagement',designation:'Status & Engagement Form'},
+           frame:{type:'schema',epistemic:'GIVEN',role:'network'}},
         ],
-        trace:'current_status = DES → CON(ext:standard_1.01) → SEG({field simplified})'
+        trace:'form_status_engagement = DES (network-authored, required propagation)'
       },
-      options:[
-        {v:'active',l:'Active — currently receiving services',
-         eo:{op:'SYN',target:{local:'active',external:'ext:standard_1.01:a'}}},
-        {v:'on_hold',l:'On hold — temporarily paused',
-         eo:{op:'SYN',target:{local:'on_hold',external:'ext:standard_1.01:b'}}},
-        {v:'pending_review',l:'Pending review',
-         eo:{op:'SYN',target:{local:'pending_review',external:'ext:standard_1.01:c'}}},
-        {v:'resolved',l:'Resolved — services completed',
-         eo:{op:'SYN',target:{local:'resolved',external:'ext:standard_1.01:d'}}},
-        {v:'other',l:'Other',
-         eo:{op:'INS',target:{local:'other'},context:{note:'Catch-all not in reporting taxonomy'}}}
-      ],
-      category:'status', sensitive:false, metrics:true },
-    { id:'prompt_engagement', key:'engagement_type', question:'What engagement occurred?', type:'single_select',
-      version:1, audience:'client', maturity:'normative', section:'engagement',
-      source:{level:'network',propagation:'required'},
-      eo:{
-        chain:[
-          {op:'DES',target:{entity:'engagement_type',designation:'Engagement Type Prompt'},
-           frame:{type:'schema',epistemic:'MEANT',role:'network'}},
-          {op:'CON',target:{source:'engagement_type',destination:'svc:direct_services'},
-           context:{authority_id:'auth_service_taxonomy',authority_name:'Service Taxonomy'}}
-        ],
-        trace:'engagement_type = DES → CON(svc:direct_services)'
-      },
-      options:[
-        {v:'in_person',l:'In-person meeting'},{v:'phone_call',l:'Phone call'},
-        {v:'referral_contact',l:'Referral or linkage',eo:{op:'CON',target:{local:'referral_contact',external:'svc:svc_cat_2'}}},
-        {v:'intake',l:'Intake or enrollment'},{v:'follow_up',l:'Follow-up contact'},{v:'other',l:'Other'}],
-      category:'engagement', sensitive:false, metrics:true },
-    { id:'prompt_intake_event', key:'intake_event', question:'What intake event occurred?', type:'single_select',
-      version:1, audience:'client', maturity:'trial', section:'intake',
+      fields: [
+        { id:'prompt_current_status', key:'current_status', question:'What is your current status?', type:'single_select',
+          version:1, maturity:'normative', section:'status',
+          eo:{
+            chain:[
+              {op:'DES',target:{entity:'current_status',designation:'Current Status Field'},
+               frame:{type:'schema',epistemic:'GIVEN',role:'network'}},
+              {op:'CON',target:{source:'current_status',destination:'ext:standard_1.01'},
+               context:{authority_id:'auth_ext_standard',element:'ext_1',
+                        authority_name:'External Reporting Standard'}},
+              {op:'SEG',target:{field:'response_options',entity:'current_status'},
+               context:{rationale:'Simplified from full reporting standard for field use',
+                        excluded:['administrative_hold','archived']}}
+            ],
+            trace:'current_status = DES → CON(ext:standard_1.01) → SEG({field simplified})'
+          },
+          options:[
+            {v:'active',l:'Active — currently receiving services',
+             eo:{op:'SYN',target:{local:'active',external:'ext:standard_1.01:a'}}},
+            {v:'on_hold',l:'On hold — temporarily paused',
+             eo:{op:'SYN',target:{local:'on_hold',external:'ext:standard_1.01:b'}}},
+            {v:'pending_review',l:'Pending review',
+             eo:{op:'SYN',target:{local:'pending_review',external:'ext:standard_1.01:c'}}},
+            {v:'resolved',l:'Resolved — services completed',
+             eo:{op:'SYN',target:{local:'resolved',external:'ext:standard_1.01:d'}}},
+            {v:'other',l:'Other',
+             eo:{op:'INS',target:{local:'other'},context:{note:'Catch-all not in reporting taxonomy'}}}
+          ],
+          category:'status', sensitive:false, metrics:true },
+        { id:'prompt_engagement', key:'engagement_type', question:'What engagement occurred?', type:'single_select',
+          version:1, maturity:'normative', section:'engagement',
+          eo:{
+            chain:[
+              {op:'DES',target:{entity:'engagement_type',designation:'Engagement Type Field'},
+               frame:{type:'schema',epistemic:'GIVEN',role:'network'}},
+              {op:'CON',target:{source:'engagement_type',destination:'svc:direct_services'},
+               context:{authority_id:'auth_service_taxonomy',authority_name:'Service Taxonomy'}}
+            ],
+            trace:'engagement_type = DES → CON(svc:direct_services)'
+          },
+          options:[
+            {v:'in_person',l:'In-person meeting'},{v:'phone_call',l:'Phone call'},
+            {v:'referral_contact',l:'Referral or linkage',eo:{op:'CON',target:{local:'referral_contact',external:'svc:svc_cat_2'}}},
+            {v:'intake',l:'Intake or enrollment'},{v:'follow_up',l:'Follow-up contact'},{v:'other',l:'Other'}],
+          category:'engagement', sensitive:false, metrics:true },
+      ]},
+    { id:'form_intake', name:'Intake', version:1,
+      description:'Intake and enrollment event tracking',
+      maturity:'trial',
       source:{level:'network',propagation:'standard'},
       eo:{
         chain:[
-          {op:'DES',target:{entity:'intake_event',designation:'Intake Event Prompt'},
-           frame:{type:'schema',epistemic:'MEANT',role:'network'}}
+          {op:'DES',target:{entity:'form_intake',designation:'Intake Form'},
+           frame:{type:'schema',epistemic:'GIVEN',role:'network'}},
         ],
-        trace:'intake_event = DES'
+        trace:'form_intake = DES (network-authored, standard propagation)'
       },
-      options:[
-        {v:'application_submitted',l:'Application submitted'},{v:'documents_provided',l:'Documents provided'},
-        {v:'eligibility_confirmed',l:'Eligibility confirmed'},{v:'enrolled',l:'Enrolled in program'},
-        {v:'waitlisted',l:'Placed on waitlist'},{v:'other',l:'Other'}],
-      category:'intake', sensitive:false, metrics:true },
-    { id:'prompt_additional_context', key:'additional_context', question:'Any additional context to record?', type:'single_select',
-      version:1, audience:'client', maturity:'draft', section:'general',
+      fields: [
+        { id:'prompt_intake_event', key:'intake_event', question:'What intake event occurred?', type:'single_select',
+          version:1, maturity:'trial', section:'intake',
+          eo:{
+            chain:[
+              {op:'DES',target:{entity:'intake_event',designation:'Intake Event Field'},
+               frame:{type:'schema',epistemic:'GIVEN',role:'network'}}
+            ],
+            trace:'intake_event = DES'
+          },
+          options:[
+            {v:'application_submitted',l:'Application submitted'},{v:'documents_provided',l:'Documents provided'},
+            {v:'eligibility_confirmed',l:'Eligibility confirmed'},{v:'enrolled',l:'Enrolled in program'},
+            {v:'waitlisted',l:'Placed on waitlist'},{v:'other',l:'Other'}],
+          category:'intake', sensitive:false, metrics:true },
+      ]},
+    { id:'form_context', name:'Additional Context', version:1,
+      description:'Supplementary context and situation changes',
+      maturity:'draft',
       source:{level:'local'},
       eo:{
         chain:[
-          {op:'DES',target:{entity:'additional_context',designation:'Additional Context Prompt'},
-           frame:{type:'schema',epistemic:'MEANT',role:'network'}}
+          {op:'DES',target:{entity:'form_context',designation:'Context Form'},
+           frame:{type:'schema',epistemic:'GIVEN',role:'local'}},
         ],
-        trace:'additional_context = DES'
+        trace:'form_context = DES (local, no propagation)'
       },
-      options:[
-        {v:'situation_change',l:'Situation changed'},{v:'new_need',l:'New need identified'},
-        {v:'barrier_encountered',l:'Barrier encountered'},{v:'milestone_reached',l:'Milestone reached'},{v:'other',l:'Other'}],
-      category:'general', sensitive:true, metrics:true },
-  ],
-
-  /* ── Provider-Side Prompts ── */
-  providerPrompts: [
-    { id:'pprompt_assessment_score', key:'assessment_score', question:'Assessment Score', type:'numeric',
-      version:1, audience:'provider', maturity:'normative', section:'assessment',
-      source:{level:'network',propagation:'standard'},
-      eo:{
-        chain:[
-          {op:'DES',target:{entity:'assessment_score',designation:'Assessment Score'},
-           frame:{type:'schema',epistemic:'MEANT',role:'provider'}},
-          {op:'CON',target:{source:'assessment_score',destination:'org:assessment-v1'},
-           context:{authority_name:'Organization Policy',note:'Standard assessment instrument'}}
-        ],
-        trace:'assessment_score = DES → CON(org:assessment-v1)'
-      },
-      range:{min:0,max:10}, thresholds:[{v:0,l:'Low'},{v:4,l:'Medium'},{v:7,l:'High'}],
-      category:'assessment', sensitive:true, metrics:true },
-    { id:'pprompt_case_stage', key:'case_stage', question:'Case stage?', type:'single_select',
-      version:1, audience:'provider', maturity:'normative', section:'case_management',
-      source:{level:'network',propagation:'required'},
-      eo:{
-        chain:[
-          {op:'DES',target:{entity:'case_stage',designation:'Case Stage'},
-           frame:{type:'schema',epistemic:'MEANT',role:'provider'}}
-        ],
-        trace:'case_stage = DES'
-      },
-      options:[
-        {v:'intake',l:'Intake'},{v:'active',l:'Active'},
-        {v:'monitoring',l:'Monitoring'},{v:'closed_complete',l:'Closed — completed'},
-        {v:'closed_withdrawn',l:'Closed — withdrawn'},{v:'closed_lost',l:'Closed — lost contact'}],
-      category:'case_management', sensitive:false, metrics:true },
-    { id:'pprompt_referral', key:'referral_status', question:'Referral status?', type:'single_select',
-      version:1, audience:'provider', maturity:'trial', section:'coordination',
-      source:{level:'network',propagation:'recommended'},
-      eo:{
-        chain:[
-          {op:'DES',target:{entity:'referral_status',designation:'Referral Status'},
-           frame:{type:'schema',epistemic:'MEANT',role:'provider'}},
-          {op:'CON',target:{source:'referral_status',destination:'svc:coordination'},
-           context:{authority_id:'auth_service_taxonomy'}}
-        ],
-        trace:'referral_status = DES → CON(svc:coordination)'
-      },
-      options:[
-        {v:'identified',l:'Need identified'},{v:'referred',l:'Referred'},
-        {v:'scheduled',l:'Appointment scheduled'},{v:'completed',l:'Service completed'},
-        {v:'declined',l:'Declined'},{v:'no_capacity',l:'Receiving org at capacity'}],
-      category:'coordination', sensitive:false, metrics:true },
-  ],
-
-  /* ── Classification Definitions ── */
-  definitions: [
-    { id:'def_priority_level', key:'priority_level', name:'Priority Level', type:'classification_rule',
-      version:1, maturity:'normative', source:{level:'network',propagation:'required'},
-      eo:{
-        chain:[
-          {op:'DES',target:{entity:'priority_level',designation:'Priority Level Classification'},
-           frame:{type:'schema',epistemic:'MEANT',role:'network'}},
-          {op:'CON',target:{source:'priority_level',destination:'org:policy_1'},
-           context:{authority_id:'auth_org_policy',
-                    authority_name:'Organization Policy v1',version:'v1'}},
-          {op:'SEG',target:{field:'categories',entity:'priority_level'},
-           context:{included:['priority_a','priority_b'],excluded:['priority_d'],
-                    rationale:'Network prioritizes highest-need categories'}}
-        ],
-        trace:'priority_level = DES → CON(org:policy_1) → SEG({Categories A-B})'
-      },
-      rules:[
-        {category:'priority_a', criteria:'current_status IN (active) AND assessment_score >= 7', authority_code:'A',
-         eo:{
-           chain:[
-             {op:'SYN',target:{local:'priority_a',external:'org:policy_1(a)'}},
-             {op:'CON',target:{source:'priority_a',destination:'current_status'},
-              context:{derivation:'Classification derived from observation',
-                       epistemic_crossing:'GIVEN → MEANT',
-                       note:'Observation (current status) is GIVEN; classification (priority A) is MEANT'}}
-           ]}},
-        {category:'priority_b', criteria:'intake_event=eligibility_confirmed AND engagement_type != none', authority_code:'B',
-         eo:{
-           chain:[
-             {op:'SYN',target:{local:'priority_b',external:'org:policy_1(b)'}},
-             {op:'CON',target:{source:'priority_b',destination:'intake_event'},
-              context:{derivation:'Classification derived from intake observation + engagement',
-                       epistemic_crossing:'GIVEN → MEANT'}}
-           ]}},
-        {category:'stable', criteria:'current_status=resolved for 30+ days', authority_code:null,
-         eo:{
-           chain:[
-             {op:'DES',target:{entity:'stable',designation:'Stable'},
-              context:{note:'Local definition — no direct external equivalent'}},
-             {op:'CON',target:{source:'stable',destination:'current_status'},
-              context:{derivation:'Classification from sustained observation pattern',
-                       epistemic_crossing:'GIVEN → MEANT'}}
-           ]}},
-      ]},
-    { id:'def_extended_engagement', key:'extended_engagement', name:'Extended Engagement', type:'classification_rule',
-      version:1, maturity:'trial', source:{level:'network',propagation:'standard'},
-      eo:{
-        chain:[
-          {op:'DES',target:{entity:'extended_engagement',designation:'Extended Engagement Definition'},
-           frame:{type:'schema',epistemic:'MEANT',role:'network'}},
-          {op:'CON',target:{source:'extended_engagement',destination:'org:policy_1'},
-           context:{authority_id:'auth_org_policy',
-                    authority_name:'Organization Policy v1',version:'v1'}},
-          {op:'SUP',target:{entity:'extended_engagement',field:'definition'},
-           context:{
-             states:[
-               {source:'org:policy_1',definition:'12 months continuous OR 4 engagement episodes in 3 years',
-                frame:'organization_standard'},
-               {source:'local_policy',definition:'6 months continuous OR 3 episodes in 2 years',
-                frame:'local_practice'}
-             ],
-             resolution:null,
-             note:'Organization definition used for reporting; local definition used for prioritization'
-           }}
-        ],
-        trace:'extended_engagement = DES → CON(org:policy_1) → SUP({org vs local})'
-      },
-      rules:[
-        {category:'extended_org', criteria:'active engagement for 12+ months continuous OR 4+ episodes in 3 years', authority_code:'ext',
-         eo:{chain:[{op:'SYN',target:{local:'extended_org',external:'org:policy_1'}}]}},
-        {category:'extended_local', criteria:'active engagement for 6+ months continuous OR 3+ episodes in 2 years', authority_code:null,
-         eo:{chain:[{op:'DES',target:{entity:'extended_local'},context:{note:'Local threshold — lower bar for outreach'}}]}},
+      fields: [
+        { id:'prompt_additional_context', key:'additional_context', question:'Any additional context to record?', type:'single_select',
+          version:1, maturity:'draft', section:'general',
+          eo:{
+            chain:[
+              {op:'DES',target:{entity:'additional_context',designation:'Additional Context Field'},
+               frame:{type:'schema',epistemic:'GIVEN',role:'local'}}
+            ],
+            trace:'additional_context = DES'
+          },
+          options:[
+            {v:'situation_change',l:'Situation changed'},{v:'new_need',l:'New need identified'},
+            {v:'barrier_encountered',l:'Barrier encountered'},{v:'milestone_reached',l:'Milestone reached'},{v:'other',l:'Other'}],
+          category:'general', sensitive:true, metrics:true },
       ]},
   ],
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+   * INTERPRETATIONS — Frameworks That Create MEANT From GIVEN
+   *
+   * Interpretations are the structures that derive institutional meaning from
+   * the raw GIVEN data collected by forms. They include:
+   *
+   *   authorities  — External standards/frameworks (HUD, CoC, etc.)
+   *   assessments  — Provider-side structured observations (MEANT frame)
+   *   definitions  — Classification rules that derive categories from GIVEN values
+   *
+   * The GIVEN/MEANT divide is the core epistemic boundary:
+   *   GIVEN = what was observed (collected via forms)
+   *   MEANT = what an institution classifies that observation as
+   *
+   * Interpretations are also authored at network/org level and propagate
+   * alongside forms, but they operate on a different epistemic plane.
+   * ═══════════════════════════════════════════════════════════════════════════ */
+  interpretations: {
+    /* ── Authorities: External institutional standards ── */
+    authorities: [
+      { id:'auth_org_policy', name:'Organization Policy v1',
+        uri:'local://org/policy',
+        authority_type:'organizational_policy', authority_org:'Organization', version:'v1',
+        terms:[
+          {id:'policy_1',label:'Eligibility Criteria',
+           definition:'Conditions under which an individual qualifies for services'},
+          {id:'policy_2',label:'Service Standards',
+           definition:'Required standards for service delivery'},
+          {id:'policy_3',label:'Data Collection Requirements',
+           definition:'Mandatory data elements for intake and ongoing engagement'},
+        ]},
+      { id:'auth_ext_standard', name:'External Reporting Standard',
+        uri:'local://ext/standard',
+        authority_type:'external_standard', authority_org:'Regulatory Body', version:'v1',
+        terms:[
+          {id:'ext_1',label:'Status Classification (1.01)',
+           definition:'Current status at point of engagement'},
+          {id:'ext_2',label:'Engagement Type (1.02)',
+           definition:'Nature of service engagement'},
+          {id:'ext_3',label:'Identity Elements (2.01)'},
+          {id:'ext_4',label:'Contact Elements (2.02)'},
+        ]},
+      { id:'auth_service_taxonomy', name:'Service Taxonomy',
+        uri:'local://service/taxonomy',
+        authority_type:'industry_standard', authority_org:'Standards Body', version:'v1',
+        terms:[
+          {id:'svc_cat_1',label:'Direct Services',definition:'Services delivered to individuals'},
+          {id:'svc_cat_2',label:'Coordination Services',definition:'Referral and linkage services'},
+        ]},
+      { id:'auth_local_policy', name:'Local Policy',
+        uri:'local://local/policy', authority_type:'local_policy', authority_org:'Local Authority',
+        terms:[] },
+    ],
+
+    /* ── Assessments: Provider-side structured observations (MEANT frame) ──
+     * These are NOT forms — they are interpretation instruments. Providers use
+     * them to record professional assessments that classify or evaluate the
+     * GIVEN data collected from clients. Each assessment produces a MEANT event.
+     */
+    assessments: [
+      { id:'pprompt_assessment_score', key:'assessment_score', question:'Assessment Score', type:'numeric',
+        version:1, audience:'provider', maturity:'normative', section:'assessment',
+        source:{level:'network',propagation:'standard'},
+        eo:{
+          chain:[
+            {op:'DES',target:{entity:'assessment_score',designation:'Assessment Score'},
+             frame:{type:'schema',epistemic:'MEANT',role:'provider'}},
+            {op:'CON',target:{source:'assessment_score',destination:'org:assessment-v1'},
+             context:{authority_name:'Organization Policy',note:'Standard assessment instrument'}}
+          ],
+          trace:'assessment_score = DES → CON(org:assessment-v1)'
+        },
+        range:{min:0,max:10}, thresholds:[{v:0,l:'Low'},{v:4,l:'Medium'},{v:7,l:'High'}],
+        category:'assessment', sensitive:true, metrics:true },
+      { id:'pprompt_case_stage', key:'case_stage', question:'Case stage?', type:'single_select',
+        version:1, audience:'provider', maturity:'normative', section:'case_management',
+        source:{level:'network',propagation:'required'},
+        eo:{
+          chain:[
+            {op:'DES',target:{entity:'case_stage',designation:'Case Stage'},
+             frame:{type:'schema',epistemic:'MEANT',role:'provider'}}
+          ],
+          trace:'case_stage = DES'
+        },
+        options:[
+          {v:'intake',l:'Intake'},{v:'active',l:'Active'},
+          {v:'monitoring',l:'Monitoring'},{v:'closed_complete',l:'Closed — completed'},
+          {v:'closed_withdrawn',l:'Closed — withdrawn'},{v:'closed_lost',l:'Closed — lost contact'}],
+        category:'case_management', sensitive:false, metrics:true },
+      { id:'pprompt_referral', key:'referral_status', question:'Referral status?', type:'single_select',
+        version:1, audience:'provider', maturity:'trial', section:'coordination',
+        source:{level:'network',propagation:'recommended'},
+        eo:{
+          chain:[
+            {op:'DES',target:{entity:'referral_status',designation:'Referral Status'},
+             frame:{type:'schema',epistemic:'MEANT',role:'provider'}},
+            {op:'CON',target:{source:'referral_status',destination:'svc:coordination'},
+             context:{authority_id:'auth_service_taxonomy'}}
+          ],
+          trace:'referral_status = DES → CON(svc:coordination)'
+        },
+        options:[
+          {v:'identified',l:'Need identified'},{v:'referred',l:'Referred'},
+          {v:'scheduled',l:'Appointment scheduled'},{v:'completed',l:'Service completed'},
+          {v:'declined',l:'Declined'},{v:'no_capacity',l:'Receiving org at capacity'}],
+        category:'coordination', sensitive:false, metrics:true },
+    ],
+
+    /* ── Definitions: Classification rules that derive MEANT from GIVEN ──
+     * These rules operate on GIVEN observation values (collected via forms)
+     * and produce MEANT classifications. The epistemic crossing is explicit:
+     * each rule documents which GIVEN fields it reads and which MEANT
+     * category it produces.
+     */
+    definitions: [
+      { id:'def_priority_level', key:'priority_level', name:'Priority Level', type:'classification_rule',
+        version:1, maturity:'normative', source:{level:'network',propagation:'required'},
+        eo:{
+          chain:[
+            {op:'DES',target:{entity:'priority_level',designation:'Priority Level Classification'},
+             frame:{type:'schema',epistemic:'MEANT',role:'network'}},
+            {op:'CON',target:{source:'priority_level',destination:'org:policy_1'},
+             context:{authority_id:'auth_org_policy',
+                      authority_name:'Organization Policy v1',version:'v1'}},
+            {op:'SEG',target:{field:'categories',entity:'priority_level'},
+             context:{included:['priority_a','priority_b'],excluded:['priority_d'],
+                      rationale:'Network prioritizes highest-need categories'}}
+          ],
+          trace:'priority_level = DES → CON(org:policy_1) → SEG({Categories A-B})'
+        },
+        rules:[
+          {category:'priority_a', criteria:'current_status IN (active) AND assessment_score >= 7', authority_code:'A',
+           eo:{
+             chain:[
+               {op:'SYN',target:{local:'priority_a',external:'org:policy_1(a)'}},
+               {op:'CON',target:{source:'priority_a',destination:'current_status'},
+                context:{derivation:'Classification derived from observation',
+                         epistemic_crossing:'GIVEN → MEANT',
+                         note:'Observation (current status) is GIVEN; classification (priority A) is MEANT'}}
+             ]}},
+          {category:'priority_b', criteria:'intake_event=eligibility_confirmed AND engagement_type != none', authority_code:'B',
+           eo:{
+             chain:[
+               {op:'SYN',target:{local:'priority_b',external:'org:policy_1(b)'}},
+               {op:'CON',target:{source:'priority_b',destination:'intake_event'},
+                context:{derivation:'Classification derived from intake observation + engagement',
+                         epistemic_crossing:'GIVEN → MEANT'}}
+             ]}},
+          {category:'stable', criteria:'current_status=resolved for 30+ days', authority_code:null,
+           eo:{
+             chain:[
+               {op:'DES',target:{entity:'stable',designation:'Stable'},
+                context:{note:'Local definition — no direct external equivalent'}},
+               {op:'CON',target:{source:'stable',destination:'current_status'},
+                context:{derivation:'Classification from sustained observation pattern',
+                         epistemic_crossing:'GIVEN → MEANT'}}
+             ]}},
+        ]},
+      { id:'def_extended_engagement', key:'extended_engagement', name:'Extended Engagement', type:'classification_rule',
+        version:1, maturity:'trial', source:{level:'network',propagation:'standard'},
+        eo:{
+          chain:[
+            {op:'DES',target:{entity:'extended_engagement',designation:'Extended Engagement Definition'},
+             frame:{type:'schema',epistemic:'MEANT',role:'network'}},
+            {op:'CON',target:{source:'extended_engagement',destination:'org:policy_1'},
+             context:{authority_id:'auth_org_policy',
+                      authority_name:'Organization Policy v1',version:'v1'}},
+            {op:'SUP',target:{entity:'extended_engagement',field:'definition'},
+             context:{
+               states:[
+                 {source:'org:policy_1',definition:'12 months continuous OR 4 engagement episodes in 3 years',
+                  frame:'organization_standard'},
+                 {source:'local_policy',definition:'6 months continuous OR 3 episodes in 2 years',
+                  frame:'local_practice'}
+               ],
+               resolution:null,
+               note:'Organization definition used for reporting; local definition used for prioritization'
+             }}
+          ],
+          trace:'extended_engagement = DES → CON(org:policy_1) → SUP({org vs local})'
+        },
+        rules:[
+          {category:'extended_org', criteria:'active engagement for 12+ months continuous OR 4+ episodes in 3 years', authority_code:'ext',
+           eo:{chain:[{op:'SYN',target:{local:'extended_org',external:'org:policy_1'}}]}},
+          {category:'extended_local', criteria:'active engagement for 6+ months continuous OR 3+ episodes in 2 years', authority_code:null,
+           eo:{chain:[{op:'DES',target:{entity:'extended_local'},context:{note:'Local threshold — lower bar for outreach'}}]}},
+        ]},
+    ],
+  },
 
   /* ── Anonymization Transforms ── */
   transforms: {
@@ -1524,11 +1608,18 @@ const DOMAIN_CONFIG = {
   },
 };
 
-/* ── Derived constants (backward-compatible references) ── */
-const DEFAULT_AUTHORITIES = DOMAIN_CONFIG.authorities;
-const DEFAULT_PROMPTS = DOMAIN_CONFIG.clientPrompts;
-const DEFAULT_PROVIDER_PROMPTS = DOMAIN_CONFIG.providerPrompts;
-const DEFAULT_DEFINITIONS = DOMAIN_CONFIG.definitions;
+/* ── Derived constants ──
+ * Forms → flat field arrays for backward compatibility with seeding & UI.
+ * DEFAULT_PROMPTS = all GIVEN fields (client-facing) extracted from forms.
+ * DEFAULT_PROVIDER_PROMPTS = all MEANT assessments (provider-facing).
+ */
+const DEFAULT_FORMS = DOMAIN_CONFIG.forms;
+const DEFAULT_PROMPTS = DOMAIN_CONFIG.forms.flatMap(f =>
+  f.fields.map(field => ({...field, audience:'client', source:field.source||f.source, form_id:f.id, form_name:f.name}))
+);
+const DEFAULT_PROVIDER_PROMPTS = DOMAIN_CONFIG.interpretations.assessments;
+const DEFAULT_AUTHORITIES = DOMAIN_CONFIG.interpretations.authorities;
+const DEFAULT_DEFINITIONS = DOMAIN_CONFIG.interpretations.definitions;
 const DEFAULT_TRANSFORMS = DOMAIN_CONFIG.transforms;
 
 /* ═══════════════════ VAULT FIELD DEFINITIONS (§10) ═══════════════════ */
@@ -3796,19 +3887,21 @@ const classifyEvent = (ev, roomInfo) => {
       case EVT.ORG_INVITE: return {op:'CON',epistemic:'MEANT',label:'Org Invite',desc:content.userId};
       case EVT.SCHEMA_AUTHORITY: return {op:'CON',epistemic:'MEANT',label:'Authority Binding',desc:content.name?.slice(0,40)};
       case EVT.SCHEMA_PROP: return {op:'REC',epistemic:'MEANT',label:'Schema Propagation',desc:`${content.level}: ${content.prompt_key}`};
+      case EVT.SCHEMA_FORM: return {op:'DES',epistemic:'GIVEN',label:'Form Definition',desc:content.name?.slice(0,40)};
+      case EVT.SCHEMA_ASSESSMENT: return {op:'DES',epistemic:'MEANT',label:'Assessment Instrument',desc:content.question?.slice(0,40)};
       case EVT.OBSERVATION: return {op:'INS',epistemic:'MEANT',label:'Provider Observation',desc:`${content.prompt_id}: ${content.value}`};
       case EVT.INVITE_TOKEN: return {op:'CON',epistemic:'MEANT',label:'Invite Token',desc:'QR/link token'};
       case EVT.ENCOUNTER_PROV: return {op:'INS',epistemic:'MEANT',label:'Provisional Encounter',desc:content.description?.slice(0,40)};
       case EVT.MATCH_TOKEN: return {op:'CON',epistemic:'MEANT',label:'Match Token',desc:'Blind matching token'};
       case EVT.MATCH_HIT: return {op:'SUP',epistemic:'MEANT',label:'Match Hit',desc:'Potential duplicate'};
       case EVT.MATCH_RESOLVE: return {op:'REC',epistemic:'MEANT',label:'Match Resolved',desc:content.resolution};
-      case EVT.SCHEMA_PROMPT: return {op:'DES',epistemic:'MEANT',label:'Schema Prompt',desc:content.question?.slice(0,40)};
-      case EVT.SCHEMA_DEF: return {op:'DES',epistemic:'MEANT',label:'Schema Definition',desc:content.name?.slice(0,40)};
+      case EVT.SCHEMA_PROMPT: return {op:'DES',epistemic:'GIVEN',label:'Form Field',desc:content.question?.slice(0,40)};
+      case EVT.SCHEMA_DEF: return {op:'DES',epistemic:'MEANT',label:'Classification Rule',desc:content.name?.slice(0,40)};
       case EVT.SCHEMA_TRANSFORM: return {op:'REC',epistemic:'MEANT',label:'Transform Rule',desc:`${Object.keys(content.transforms||{}).length} transforms`};
       case EVT.NET_MEMBERS: return {op:'CON',epistemic:'MEANT',label:'Network Members',desc:`${(content.organizations||[]).length} orgs`};
       case EVT.GOV_PROPOSAL: return {op:'INS',epistemic:'MEANT',label:'Governance Proposal',desc:content.summary?.slice(0,50)};
       case EVT.GOV_RHYTHM: return {op:'REC',epistemic:'MEANT',label:'Governance Rhythm',desc:content.name};
-      case EVT.SCHEMA_FIELD: return {op:'DES',epistemic:'MEANT',label:'Schema Field',desc:content.question_text?.slice(0,40)};
+      case EVT.SCHEMA_FIELD: return {op:'DES',epistemic:'GIVEN',label:'Form Field',desc:content.question_text?.slice(0,40)};
       case EVT.SCHEMA_BINDING: return {op:'DES',epistemic:'MEANT',label:'Framework Binding',desc:`${content.field_id} → ${content.framework?.name?.slice(0,25)}`};
       case 'm.room.encryption': return {op:'REC',epistemic:'GIVEN',label:'Encryption Policy',desc:content.algorithm};
       case 'm.room.tombstone': return {op:'NUL',epistemic:'MEANT',label:'Room Tombstoned',desc:`→ ${content.replacement_room?.slice(0,24)}…`};
@@ -4245,7 +4338,10 @@ const ClientApp = ({session, onLogout, showToast}) => {
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
         ]);
         const allSeeds = [
+          // Forms — GIVEN data collection instruments
+          ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)),
           ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
+          // Interpretations — MEANT frameworks
           ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(schema, EVT.SCHEMA_DEF, d, d.key)),
           ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(schema, EVT.SCHEMA_AUTHORITY, a, a.id)),
           [() => svc.setState(schema, EVT.SCHEMA_TRANSFORM, {id:'transform_default',transforms:DEFAULT_TRANSFORMS}, 'default')],
@@ -4635,22 +4731,28 @@ const ClientApp = ({session, onLogout, showToast}) => {
         </div>
         <div className="card" style={{marginBottom:20}}>
           <span className="section-label">RECORD NEW OBSERVATION</span>
-          <p style={{fontSize:12,color:'var(--tx-2)',marginBottom:12}}>Choose a prompt to record what you observed. Each observation is an immutable GIVEN event in your vault.</p>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:8}}>
-            {DEFAULT_PROMPTS.map(p=><div key={p.id} className="card-h" onClick={()=>{setObsModal(p);setObsValue('');setObsFreeText('');setObsDate(new Date().toISOString().slice(0,10))}}
-              style={{padding:14}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
-                <span className={`tag tag-${OBS_CAT_COLORS[p.category]||'blue'}`}>{p.category}</span>
-                {p.sensitive&&<span className="tag tag-red" style={{fontSize:8}}>SENSITIVE</span>}
-                {p.maturity && <MaturityBadge maturity={p.maturity}/>}
-              </div>
-              <span style={{fontSize:13,fontWeight:600,display:'block'}}>{p.question}</span>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
-                <span style={{fontSize:10.5,color:'var(--tx-3)'}}>{p.options.length} response options</span>
-                {p.source && <SourceBadge source={p.source}/>}
-              </div>
-            </div>)}
-          </div>
+          <p style={{fontSize:12,color:'var(--tx-2)',marginBottom:12}}>Choose a form field to record what you observed. Each observation is an immutable GIVEN event in your vault.</p>
+          {DEFAULT_FORMS.map(f=><div key={f.id} style={{marginBottom:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+              <span style={{fontSize:11.5,fontWeight:600,color:'var(--tx-0)'}}>{f.name}</span>
+              <MaturityBadge maturity={f.maturity}/>
+              {f.source && <SourceBadge source={f.source}/>}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:8}}>
+              {f.fields.map(p=><div key={p.id} className="card-h" onClick={()=>{setObsModal(p);setObsValue('');setObsFreeText('');setObsDate(new Date().toISOString().slice(0,10))}}
+                style={{padding:14}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+                  <span className={`tag tag-${OBS_CAT_COLORS[p.category]||'blue'}`}>{p.category}</span>
+                  {p.sensitive&&<span className="tag tag-red" style={{fontSize:8}}>SENSITIVE</span>}
+                  {p.maturity && <MaturityBadge maturity={p.maturity}/>}
+                </div>
+                <span style={{fontSize:13,fontWeight:600,display:'block'}}>{p.question}</span>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
+                  <span style={{fontSize:10.5,color:'var(--tx-3)'}}>{p.options.length} response options</span>
+                </div>
+              </div>)}
+            </div>
+          </div>)}
         </div>
         {/* Observation history */}
         <div className="card">
@@ -5389,8 +5491,12 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
         ]);
         const allSeeds = [
+          // Forms — GIVEN data collection instruments
+          ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)),
           ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
-          ...DEFAULT_PROVIDER_PROMPTS.map(pp => () => svc.setState(schema, EVT.SCHEMA_PROMPT, pp, pp.key)),
+          // Interpretations — MEANT assessments (provider instruments)
+          ...DEFAULT_PROVIDER_PROMPTS.map(pp => () => svc.setState(schema, EVT.SCHEMA_ASSESSMENT, pp, pp.key)),
+          // Interpretations — classification rules and authorities
           ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(schema, EVT.SCHEMA_DEF, d, d.key)),
           ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(schema, EVT.SCHEMA_AUTHORITY, a, a.id)),
           [() => svc.setState(schema, EVT.SCHEMA_TRANSFORM, {id:'transform_default',transforms:DEFAULT_TRANSFORMS}, 'default')],
@@ -5721,8 +5827,13 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         {type:EVT.NET_MEMBERS,state_key:'',content:{organizations:[{id:orgRoom,name:orgMeta.name||'',joined:Date.now(),role:'admin'}],
           governance:{schema_changes_require:'admin_approval',admins:[orgRoom]}}},
       ]);
-      // Seed network schema
-      for (const p of DEFAULT_PROMPTS) await svc.setState(nRoom, EVT.SCHEMA_PROMPT, {...p, propagation:'standard', network:networkName}, `net:${p.key}`);
+      // Seed network schema — forms propagate to member orgs, then to clients through providers
+      // Forms (GIVEN data collection) — propagate as standard (orgs can extend)
+      for (const f of DEFAULT_FORMS) await svc.setState(nRoom, EVT.SCHEMA_FORM, {...f, propagation:f.source?.propagation||'standard', network:networkName}, `net:${f.id}`);
+      for (const p of DEFAULT_PROMPTS) await svc.setState(nRoom, EVT.SCHEMA_PROMPT, {...p, propagation:p.source?.propagation||'standard', network:networkName}, `net:${p.key}`);
+      // Interpretations — assessments propagate alongside forms
+      for (const pp of DEFAULT_PROVIDER_PROMPTS) await svc.setState(nRoom, EVT.SCHEMA_ASSESSMENT, {...pp, propagation:pp.source?.propagation||'standard', network:networkName}, `net:${pp.key}`);
+      // Definitions propagate as required (immutable at org level)
       for (const d of DEFAULT_DEFINITIONS) await svc.setState(nRoom, EVT.SCHEMA_DEF, {...d, propagation:'required', network:networkName}, `net:${d.key}`);
       await emitOp(nRoom, 'INS', {entity:'network',field:networkName}, {created_by:svc.userId,org:orgMeta.name}, networkFrame(nRoom));
       setNetworkRoom(nRoom);
@@ -5779,8 +5890,11 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       const orgSchema = await svc.createRoom('[Khora Schema]','Org schema definitions',[
         {type:EVT.IDENTITY,state_key:'',content:{account_type:'schema',owner:svc.userId,created:Date.now()}},
       ]);
+      // Forms — GIVEN data collection (propagated to clients through providers)
+      for (const f of DEFAULT_FORMS) await svc.setState(orgSchema, EVT.SCHEMA_FORM, f, f.id);
       for (const p of DEFAULT_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_PROMPT, p, p.key);
-      for (const pp of DEFAULT_PROVIDER_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_PROMPT, pp, pp.key);
+      // Interpretations — MEANT assessments, definitions, authorities
+      for (const pp of DEFAULT_PROVIDER_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_ASSESSMENT, pp, pp.key);
       for (const d of DEFAULT_DEFINITIONS) await svc.setState(orgSchema, EVT.SCHEMA_DEF, d, d.key);
       for (const a of DEFAULT_AUTHORITIES) await svc.setState(orgSchema, EVT.SCHEMA_AUTHORITY, a, a.id);
       await svc.setState(orgSchema, EVT.SCHEMA_TRANSFORM, {id:'transform_default',transforms:DEFAULT_TRANSFORMS}, 'default');
@@ -7300,36 +7414,73 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             </div>
           </div>
 
-          {/* Schema Commons — Network schema catalog with maturity & propagation (MVP §Screen 5A) */}
+          {/* Schema Commons — Network schema catalog organized by forms + interpretations */}
           <div className="card" style={{marginBottom:16}}>
             <span className="section-label">SCHEMA COMMONS</span>
-            <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:10}}>All fields in the network schema. Definitions propagate to member organizations.</p>
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              {DEFAULT_PROMPTS.map(p=><div key={p.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
-                  <span style={{fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.question}</span>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-                  <MaturityBadge maturity={p.maturity || 'normative'}/>
-                  <SourceBadge source={p.source || {level:'network',propagation:'standard'}}/>
-                </div>
-              </div>)}
-              {DEFAULT_DEFINITIONS.map(d=><div key={d.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
-                  <span style={{fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}</span>
-                  <span className="tag tag-purple" style={{fontSize:8}}>DEFINITION</span>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-                  <MaturityBadge maturity={d.maturity || 'normative'}/>
-                  <SourceBadge source={d.source || {level:'network',propagation:'required'}}/>
-                </div>
-              </div>)}
+            <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:10}}>Network schema organized into forms (GIVEN data collection) and interpretations (MEANT frameworks). Forms propagate to member organizations and down to clients through providers.</p>
+
+            {/* Forms — GIVEN data collection */}
+            <div style={{marginBottom:14}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <span style={{fontSize:11,fontFamily:'var(--mono)',color:'var(--teal)',fontWeight:600,letterSpacing:'.05em'}}>FORMS</span>
+                <span className="tag tag-teal" style={{fontSize:8}}>GIVEN</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {DEFAULT_FORMS.map(f=><div key={f.id} style={{background:'var(--bg-3)',borderRadius:'var(--r)',border:'1px solid var(--border-0)',overflow:'hidden'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',borderBottom:'1px solid var(--border-0)'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:12,fontWeight:600}}>{f.name}</span>
+                      <span style={{fontSize:10,color:'var(--tx-2)'}}>{f.fields.length} field{f.fields.length!==1?'s':''}</span>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <MaturityBadge maturity={f.maturity || 'normative'}/>
+                      <SourceBadge source={f.source || {level:'network',propagation:'standard'}}/>
+                    </div>
+                  </div>
+                  <div style={{padding:'4px 12px'}}>
+                    {f.fields.map(p=><div key={p.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
+                      <span style={{fontSize:11.5,color:'var(--tx-1)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.question}</span>
+                      <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)',flexShrink:0,marginLeft:8}}>{p.type}</span>
+                    </div>)}
+                  </div>
+                </div>)}
+              </div>
+            </div>
+
+            {/* Interpretations — MEANT frameworks */}
+            <div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <span style={{fontSize:11,fontFamily:'var(--mono)',color:'var(--gold)',fontWeight:600,letterSpacing:'.05em'}}>INTERPRETATIONS</span>
+                <span className="tag tag-gold" style={{fontSize:8}}>MEANT</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                {DEFAULT_PROVIDER_PROMPTS.map(p=><div key={p.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
+                    <span style={{fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.question}</span>
+                    <span className="tag tag-gold" style={{fontSize:8}}>ASSESSMENT</span>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                    <MaturityBadge maturity={p.maturity || 'normative'}/>
+                    <SourceBadge source={p.source || {level:'network',propagation:'standard'}}/>
+                  </div>
+                </div>)}
+                {DEFAULT_DEFINITIONS.map(d=><div key={d.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
+                    <span style={{fontSize:12,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{d.name}</span>
+                    <span className="tag tag-purple" style={{fontSize:8}}>CLASSIFICATION</span>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                    <MaturityBadge maturity={d.maturity || 'normative'}/>
+                    <SourceBadge source={d.source || {level:'network',propagation:'required'}}/>
+                  </div>
+                </div>)}
+              </div>
             </div>
           </div>
 
           {/* Adoption metrics (MVP §Screen 4B — ambient monitoring) */}
-          <AdoptionMetrics adopted={DEFAULT_PROMPTS.length + DEFAULT_DEFINITIONS.length}
-            total={DEFAULT_PROMPTS.length + DEFAULT_DEFINITIONS.length + 2}
+          <AdoptionMetrics adopted={DEFAULT_FORMS.length + DEFAULT_DEFINITIONS.length + DEFAULT_PROVIDER_PROMPTS.length}
+            total={DEFAULT_FORMS.length + DEFAULT_DEFINITIONS.length + DEFAULT_PROVIDER_PROMPTS.length + 2}
             extensions={1} divergences={0}/>
 
           {/* Propagation model reference */}

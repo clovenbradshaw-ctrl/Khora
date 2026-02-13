@@ -142,18 +142,21 @@ Network members are individual user IDs, not orgs. The `io.khora.network.members
 5. Org's `io.khora.identity` updated with network membership
 
 **Schema propagation enforcement:**
-- **Required**: prompts/definitions copied to org schema as immutable references
-- **Standard**: can extend (add options) but not reduce
+- **Required**: forms/definitions copied to org schema as immutable references
+- **Standard**: can extend (add fields to forms) but not reduce
 - **Recommended**: can modify or replace
 - **Optional**: available, no expectation
-- Currently these levels are displayed but never enforced (lines 1748–1759)
+- Currently these levels are displayed but never enforced
 - Uses EO `REC` operator for governance — recursive descent through hierarchy
+- Forms (GIVEN data collection) and interpretations (MEANT frameworks) propagate separately but in parallel
+- Full propagation path: Network → Organization → Provider → Client
 
 ### Required State Events
 ```
-io.khora.network.members   → { organizations: [{ org_room_id, org_name, org_type, role, joined }] }
+io.khora.network.members    → { organizations: [{ org_room_id, org_name, org_type, role, joined }] }
 io.khora.network.join_request → { org_room_id, org_name, requested_by, ts }
-io.khora.schema.propagation → { prompt_key, level, source_network, version, immutable }
+io.khora.schema.form         → { id, name, fields[], source, propagation, maturity }
+io.khora.schema.propagation  → { form_id, level, source_network, version, immutable }
 ```
 
 ### Dependency

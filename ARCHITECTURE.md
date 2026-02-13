@@ -282,51 +282,81 @@ The hash salt enables **deterministic matching tokens** — different organizati
 
 ## 8. Schema System
 
-The schema system defines **what data is collected and how it is classified**. It operates at three levels: network, organization, and client.
+The schema system is organized around two layers that mirror the GIVEN/MEANT divide: **forms** (structured GIVEN data collection) and **interpretations** (frameworks that create MEANT from GIVEN). It operates at three levels: network, organization, and client.
 
-### Schema Components
+### Forms — GIVEN Data Collection
 
-**Prompts** (`io.khora.schema.prompt`): Questions asked to clients or providers.
+Forms are the primary schema artifact. A form is a versioned collection of fields that collects structured data at the GIVEN level — what actually happened, observed by or about the client. Forms are authored at the network or org level and propagate downward through the hierarchy:
+
+```
+Network → Organization → Provider → Client
+```
+
+**Form** (`io.khora.schema.form`): A named, versioned collection of related fields.
 
 ```
 {
-  id: 'prompt_current_status',
-  key: 'current_status',
-  question: 'What is your current status?',
-  type: 'single_select',
-  audience: 'client',        // or 'provider'
-  maturity: 'normative',     // draft | trial | normative | de_facto | deprecated
+  id: 'form_status_engagement',
+  name: 'Status & Engagement',
+  version: 1,
+  description: 'Core status and engagement tracking for active cases',
+  maturity: 'normative',
   source: { level: 'network', propagation: 'required' },
-  options: [
-    { v: 'active', l: 'Active — currently receiving services' },
-    { v: 'on_hold', l: 'On hold — temporarily paused' },
-    ...
+  fields: [
+    { id: 'prompt_current_status', key: 'current_status',
+      question: 'What is your current status?', type: 'single_select',
+      options: [...], category: 'status', sensitive: false, metrics: true },
+    { id: 'prompt_engagement', key: 'engagement_type',
+      question: 'What engagement occurred?', type: 'single_select', ... }
   ]
 }
 ```
 
-**Definitions** (`io.khora.schema.definition`): Classification rules that derive institutional categories from raw observation values.
+**Form Fields** (`io.khora.schema.prompt`): Individual data collection points within a form. Each field has a type (single_select, numeric, multi_select), response options, and EO provenance chain. Fields inherit propagation from their parent form.
+
+### Interpretations — MEANT Frameworks
+
+Interpretations are the structures that derive institutional meaning from raw GIVEN data. They include authorities, assessments, and classification definitions.
+
+**Authorities** (`io.khora.schema.authority`): External institutional standards that interpretations reference (HUD definitions, CoC policies, local ordinances).
+
+**Assessments** (`io.khora.schema.assessment`): Provider-side structured observations. These are NOT forms — they are interpretation instruments. Providers use them to record professional assessments that classify or evaluate the GIVEN data collected from clients. Each assessment produces a MEANT event.
+
+```
+{
+  id: 'pprompt_assessment_score',
+  key: 'assessment_score',
+  question: 'Assessment Score',
+  type: 'numeric',
+  audience: 'provider',
+  source: { level: 'network', propagation: 'standard' },
+  range: { min: 0, max: 10 },
+  thresholds: [{ v: 0, l: 'Low' }, { v: 4, l: 'Medium' }, { v: 7, l: 'High' }]
+}
+```
+
+**Definitions** (`io.khora.schema.definition`): Classification rules that derive institutional categories from raw observation values. Each definition documents the epistemic crossing from GIVEN fields to MEANT categories.
 
 ```
 {
   key: 'priority_level',
   type: 'classification_rule',
   rules: [
-    { category: 'priority_a', criteria: 'current_status IN (active) AND assessment_score >= 7' },
-    { category: 'priority_b', criteria: 'intake_event=eligibility_confirmed AND engagement_type != none' }
+    { category: 'priority_a',
+      criteria: 'current_status IN (active) AND assessment_score >= 7',
+      eo: { chain: [{ op: 'SYN', ... }, { op: 'CON', context: { epistemic_crossing: 'GIVEN → MEANT' } }] }
+    }
   ]
 }
 ```
 
-**Authorities** (`io.khora.schema.authority`): External institutional standards that definitions reference (HUD definitions, CoC policies, local ordinances).
-
-**Bindings** (`io.khora.schema.binding`): Mappings from local prompt option values to framework-specific codes. A single observation value (e.g., "vehicle") may map to different classifications under different authorities (e.g., HUD: "Literally Homeless Category 1", CoC: "Priority 1 Immediate Outreach").
+**Bindings** (`io.khora.schema.binding`): Mappings from form field values to framework-specific codes. A single observation value (e.g., "vehicle") may map to different classifications under different authorities (e.g., HUD: "Literally Homeless Category 1", CoC: "Priority 1 Immediate Outreach").
 
 **Transforms** (`io.khora.schema.transform`): Anonymization rules for metrics (age bucketing, geohashing, field blocking).
 
-### Propagation Levels
+### Propagation Model
 
-When a network publishes schema, each element is tagged with a propagation level that controls how member organizations can interact with it:
+When a network publishes schema, forms and interpretations propagate to member organizations. Each element is tagged with a propagation level:
 
 | Level | Behavior |
 |-------|----------|
@@ -334,6 +364,12 @@ When a network publishes schema, each element is tagged with a propagation level
 | **Standard** | Auto-applied. Orgs can extend (additive changes only). |
 | **Recommended** | Org reviews and decides whether to adopt. |
 | **Optional** | Available in the network catalog. No expectation of adoption. |
+
+Propagation flow for forms:
+1. Network authors forms with propagation levels
+2. Member organizations receive forms according to their propagation level
+3. Providers within organizations deliver forms to their clients through bridge rooms
+4. Client responses flow back as GIVEN observations in the vault
 
 ---
 
