@@ -400,6 +400,7 @@ menu:<svg {...p}><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="2
 'more-v':<svg {...p}><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>,
 bell:<svg {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 filter:<svg {...p}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
+package:<svg {...p}><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
 };
 return <span style={{display:'inline-flex',alignItems:'center',flexShrink:0}}>{d[n]}</span>;
 };
@@ -7414,6 +7415,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
       <div style={{flex:1,overflow:'auto',padding:'6px 6px'}}>
         {[{id:'vault',icon:'folder',label:'My Vault'},{id:'inbox',icon:'msg',label:'Messages'},
           {id:'observations',icon:'clipboard',label:'Observations'},
+          {id:'resources',icon:'package',label:'My Resources'},
           {id:'providers',icon:'users',label:'People & Teams'},{id:'records',icon:'shield',label:'My Records'},
           {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null);if(item.id!=='inbox')setInboxConvo(null)}}
@@ -7561,6 +7563,110 @@ const ClientApp = ({session, onLogout, showToast}) => {
             )}
           </div>
         </div>}
+      </div>}
+
+      {/* MY RESOURCES VIEW (Client Vault Shadow Records) */}
+      {view==='resources'&&!activeBridge&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
+          <div><h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>My Resources</h2>
+            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Resources allocated to you — your sovereign record. This data is yours even if a provider leaves the network.</p></div>
+        </div>
+        {(()=>{
+          const [vaultResources, setVaultResources] = useState([]);
+          const [resLoading, setResLoading] = useState(true);
+          const [resFilter, setResFilter] = useState('all');
+
+          useEffect(()=>{
+            (async()=>{
+              setResLoading(true);
+              try {
+                const records = [];
+                if (svc.client && vaultRoom) {
+                  const room = svc.client.getRoom(vaultRoom);
+                  if (room) {
+                    const events = room.currentState.getStateEvents(EVT.RESOURCE_VAULT);
+                    if (events) {
+                      for (const ev of (Array.isArray(events) ? events : [events])) {
+                        if (ev && ev.getContent && ev.getContent().allocation_id) records.push(ev.getContent());
+                      }
+                    }
+                  }
+                }
+                setVaultResources(records.sort((a,b) => (b.allocated_at||0) - (a.allocated_at||0)));
+              } catch(e) { console.error('Failed to load vault resources:', e); }
+              setResLoading(false);
+            })();
+          }, [vaultRoom]);
+
+          const filtered = resFilter === 'all' ? vaultResources : vaultResources.filter(r => r.status === resFilter);
+          const activeCount = vaultResources.filter(r => r.status === 'active').length;
+
+          return resLoading ? <div style={{textAlign:'center',padding:40}}><div style={{width:20,height:20,border:'2px solid var(--border-1)',borderTopColor:'var(--gold)',borderRadius:'50%',margin:'0 auto',animation:'spin .6s linear infinite'}}/></div> : <>
+            {/* Summary cards */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginBottom:20}}>
+              <div className="card" style={{padding:14,textAlign:'center'}}>
+                <div style={{fontSize:28,fontWeight:700,fontFamily:'var(--mono)',color:'var(--gold)'}}>{vaultResources.length}</div>
+                <div style={{fontSize:11,color:'var(--tx-2)',marginTop:2}}>Total Allocations</div>
+              </div>
+              <div className="card" style={{padding:14,textAlign:'center'}}>
+                <div style={{fontSize:28,fontWeight:700,fontFamily:'var(--mono)',color:'var(--green)'}}>{activeCount}</div>
+                <div style={{fontSize:11,color:'var(--tx-2)',marginTop:2}}>Active</div>
+              </div>
+              <div className="card" style={{padding:14,textAlign:'center'}}>
+                <div style={{fontSize:28,fontWeight:700,fontFamily:'var(--mono)',color:'var(--tx-1)'}}>{vaultResources.filter(r=>r.status==='consumed').length}</div>
+                <div style={{fontSize:11,color:'var(--tx-2)',marginTop:2}}>Consumed</div>
+              </div>
+              <div className="card" style={{padding:14,textAlign:'center'}}>
+                <div style={{fontSize:28,fontWeight:700,fontFamily:'var(--mono)',color:'var(--red)'}}>{vaultResources.filter(r=>r.status==='expired'||r.status==='revoked').length}</div>
+                <div style={{fontSize:11,color:'var(--tx-2)',marginTop:2}}>Expired/Revoked</div>
+              </div>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="tabs" style={{marginBottom:16}}>
+              {[{id:'all',label:`All (${vaultResources.length})`},{id:'active',label:`Active (${activeCount})`},{id:'consumed',label:'Consumed'},{id:'expired',label:'Expired'},{id:'revoked',label:'Revoked'}]
+                .map(t=><div key={t.id} className={`tab${resFilter===t.id?' active':''}`} onClick={()=>setResFilter(t.id)}>{t.label}</div>)}
+            </div>
+
+            {/* Resource list */}
+            {filtered.length===0 ? <div className="card" style={{padding:'40px 20px',textAlign:'center'}}>
+              <I n="package" s={32} c="var(--tx-3)"/>
+              <p style={{color:'var(--tx-2)',fontSize:13,marginTop:12}}>{resFilter==='all' ? 'No resources allocated to you yet' : `No ${resFilter} resources`}</p>
+              <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:6}}>When a provider allocates resources like bus vouchers, emergency funds, or housing assistance, they will appear here as your sovereign record.</p>
+            </div> : <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {filtered.map(r => {
+                const catColor = RESOURCE_CATEGORY_COLORS[
+                  DEFAULT_RESOURCE_TYPES.find(t => t.id === r.resource_type_id)?.category
+                ] || 'teal';
+                const catLabel = RESOURCE_CATEGORY_LABELS[
+                  DEFAULT_RESOURCE_TYPES.find(t => t.id === r.resource_type_id)?.category
+                ] || '';
+                const statusColors = {active:'green',consumed:'teal',expired:'orange',revoked:'red'};
+                return <div key={r.allocation_id} className="card" style={{padding:16}}>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                        <span style={{fontSize:15,fontWeight:700}}>{r.resource_name}</span>
+                        <span className={`tag tag-${statusColors[r.status]||'teal'}`}>{r.status.toUpperCase()}</span>
+                        {catLabel && <span className={`tag tag-${catColor}`} style={{fontSize:9}}>{catLabel}</span>}
+                      </div>
+                      <div style={{display:'flex',gap:16,flexWrap:'wrap',fontSize:12,color:'var(--tx-1)'}}>
+                        <span><strong>{r.quantity}</strong> {r.unit}</span>
+                        <span>from <strong>{r.org_display_name}</strong></span>
+                        <span>by {r.provider_display_name?.split(':')[0]?.replace('@','')}</span>
+                      </div>
+                      {r.notes && <p style={{fontSize:11.5,color:'var(--tx-2)',marginTop:6,fontStyle:'italic'}}>{r.notes}</p>}
+                    </div>
+                    <div style={{textAlign:'right',flexShrink:0}}>
+                      <div style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{new Date(r.allocated_at).toLocaleDateString()}</div>
+                      <span className="tag tag-teal" style={{fontSize:8,marginTop:4}}>GIVEN</span>
+                    </div>
+                  </div>
+                </div>;
+              })}
+            </div>}
+          </>;
+        })()}
       </div>}
 
       {/* PROVIDERS / TEAMS / CONTACTS VIEW */}
@@ -8126,7 +8232,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [metrics, setMetrics] = useState([]);
   const [networkMembers, setNetworkMembers] = useState([]);
   const [activeCase, setActiveCase] = useState(null);
-  const [view, setView] = useState('dashboard'); // dashboard|inbox|case|metrics|schema|network|activity|staff|org-settings|org-inbox
+  const [view, setView] = useState('dashboard'); // dashboard|inbox|case|metrics|schema|network|activity|staff|org-settings|org-inbox|resources
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState('');
@@ -9387,6 +9493,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           {[
             {id:'org-settings',icon:'settings',label:'Org Settings',reqRole:'admin'},
             {id:'org-inbox',icon:'msg',label:`Messages${orgChannels.length?` (${orgChannels.length})`:''}`},
+            {id:'resources',icon:'package',label:'Resources'},
             {id:'staff',icon:'users',label:'Staff'},
             {id:'network',icon:'globe',label:'Network'},
           ].filter(item=>!item.reqRole||orgRole===item.reqRole).filter(item=>item.id!=='org-inbox'||hasOrgMsgPermission('read')).map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null)}}
@@ -10277,6 +10384,326 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             Email verification is disabled. Enable it to require staff members to confirm their identity with an organization email address before accessing cases.
           </p>}
         </div>
+      </div>}
+
+      {/* RESOURCES VIEW (Org Admin — Catalog, Relations, Inventory) */}
+      {view==='resources'&&orgRoom&&<div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
+        {(()=>{
+          const [resTab, setResTab] = useState('catalog');
+          const [resourceTypes, setResourceTypes] = useState([]);
+          const [resourceRelations, setResourceRelations] = useState([]);
+          const [inventories, setInventories] = useState([]);
+          const [resLoading, setResLoading] = useState(true);
+          const [catFilter, setCatFilter] = useState('all');
+          const [showAddTypeModal, setShowAddTypeModal] = useState(false);
+          const [newType, setNewType] = useState({name:'',category:'general',unit:'',fungible:true,perishable:false,ttl_days:'',tags:''});
+          const [showAddRelModal, setShowAddRelModal] = useState(false);
+          const [newRel, setNewRel] = useState({resource_type_id:'',relation_type:'operates',capacity:'',notes:''});
+          const [showRestockModal, setShowRestockModal] = useState(null);
+          const [restockQty, setRestockQty] = useState('');
+
+          // Load resource data from org room
+          useEffect(()=>{
+            (async()=>{
+              setResLoading(true);
+              try {
+                const types=[],rels=[],invs=[];
+                if (svc.client) {
+                  // Load from org room
+                  const room = svc.client.getRoom(orgRoom);
+                  if (room) {
+                    const typeEvts = room.currentState.getStateEvents(EVT.RESOURCE_TYPE);
+                    if (typeEvts) for (const ev of (Array.isArray(typeEvts)?typeEvts:[typeEvts])) { if(ev?.getContent?.()?.id) types.push(ev.getContent()); }
+                    const relEvts = room.currentState.getStateEvents(EVT.RESOURCE_RELATION);
+                    if (relEvts) for (const ev of (Array.isArray(relEvts)?relEvts:[relEvts])) { if(ev?.getContent?.()?.id) rels.push(ev.getContent()); }
+                    const invEvts = room.currentState.getStateEvents(EVT.RESOURCE_INVENTORY);
+                    if (invEvts) for (const ev of (Array.isArray(invEvts)?invEvts:[invEvts])) { if(ev?.getContent?.()?.relation_id) invs.push(ev.getContent()); }
+                  }
+                  // Also load from network room if available
+                  if (networkRoom) {
+                    const nRoom = svc.client.getRoom(networkRoom);
+                    if (nRoom) {
+                      const nTypeEvts = nRoom.currentState.getStateEvents(EVT.RESOURCE_TYPE);
+                      if (nTypeEvts) for (const ev of (Array.isArray(nTypeEvts)?nTypeEvts:[nTypeEvts])) {
+                        const t = ev?.getContent?.();
+                        if(t?.id && !types.some(x=>x.id===t.id)) types.push({...t, _from_network: true});
+                      }
+                    }
+                  }
+                }
+                setResourceTypes(types.sort((a,b)=>(a.category||'').localeCompare(b.category||'')||(a.name||'').localeCompare(b.name||'')));
+                setResourceRelations(rels);
+                setInventories(invs);
+              } catch(e) { console.error('Failed to load resources:', e); }
+              setResLoading(false);
+            })();
+          }, [orgRoom, networkRoom]);
+
+          const handleCreateType = async () => {
+            try {
+              const tags = newType.tags ? newType.tags.split(',').map(t=>t.trim()).filter(Boolean) : [];
+              await ResourceService.createResourceType(orgRoom, {
+                name: newType.name, category: newType.category, unit: newType.unit,
+                fungible: newType.fungible, perishable: newType.perishable,
+                ttl_days: newType.perishable && newType.ttl_days ? parseInt(newType.ttl_days) : null,
+                tags,
+              }, 'org');
+              setShowAddTypeModal(false);
+              setNewType({name:'',category:'general',unit:'',fungible:true,perishable:false,ttl_days:'',tags:''});
+              showToast('Resource type created','success');
+              // Reload
+              setResLoading(true);
+              setTimeout(()=>window.location.reload(), 500); // simple reload for now
+            } catch(e) { showToast(e.message,'error'); }
+          };
+
+          const handleEstablishRelation = async () => {
+            try {
+              await ResourceService.establishRelation(orgRoom, {
+                resource_type_id: newRel.resource_type_id,
+                relation_type: newRel.relation_type,
+                capacity: newRel.capacity ? parseInt(newRel.capacity) : 0,
+                notes: newRel.notes || null,
+              });
+              setShowAddRelModal(false);
+              setNewRel({resource_type_id:'',relation_type:'operates',capacity:'',notes:''});
+              showToast('Resource relation established','success');
+              setResLoading(true);
+              setTimeout(()=>window.location.reload(), 500);
+            } catch(e) { showToast(e.message,'error'); }
+          };
+
+          const handleRestock = async (relationId) => {
+            try {
+              const qty = parseInt(restockQty);
+              if (!qty || qty <= 0) { showToast('Enter a valid quantity','error'); return; }
+              await ResourceService.restockInventory(orgRoom, relationId, qty);
+              setShowRestockModal(null); setRestockQty('');
+              showToast(`Restocked ${qty} units`,'success');
+              setResLoading(true);
+              setTimeout(()=>window.location.reload(), 500);
+            } catch(e) { showToast(e.message,'error'); }
+          };
+
+          const filteredTypes = catFilter === 'all' ? resourceTypes : resourceTypes.filter(t => t.category === catFilter);
+          const catCounts = {};
+          for (const t of resourceTypes) { catCounts[t.category] = (catCounts[t.category]||0) + 1; }
+
+          return <>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
+              <div><h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Resources</h2>
+                <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Manage your resource catalog, relationships, and inventory levels.</p></div>
+              <div style={{display:'flex',gap:8}}>
+                {orgRole==='admin'&&<button onClick={()=>setShowAddRelModal(true)} className="b-gho b-sm" style={{display:'flex',alignItems:'center',gap:4}}><I n="link" s={12}/>Add Relation</button>}
+                {orgRole==='admin'&&<button onClick={()=>setShowAddTypeModal(true)} className="b-pri b-sm" style={{display:'flex',alignItems:'center',gap:4}}><I n="plus" s={12}/>New Type</button>}
+              </div>
+            </div>
+
+            {resLoading ? <div style={{textAlign:'center',padding:40}}><div style={{width:20,height:20,border:'2px solid var(--border-1)',borderTopColor:'var(--gold)',borderRadius:'50%',margin:'0 auto',animation:'spin .6s linear infinite'}}/></div> : <>
+
+            {/* Top-level tabs: Catalog | Inventory | Relations */}
+            <div className="tabs" style={{marginBottom:20}}>
+              <div className={`tab${resTab==='catalog'?' active':''}`} onClick={()=>setResTab('catalog')}>Catalog ({resourceTypes.length})</div>
+              <div className={`tab${resTab==='inventory'?' active':''}`} onClick={()=>setResTab('inventory')}>Inventory ({resourceRelations.length})</div>
+              <div className={`tab${resTab==='relations'?' active':''}`} onClick={()=>setResTab('relations')}>Relations ({resourceRelations.length})</div>
+            </div>
+
+            {/* ── CATALOG TAB ── */}
+            {resTab==='catalog'&&<>
+              {/* Category filter pills */}
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:16}}>
+                <span className={`tag${catFilter==='all'?' tag-gold':''}`} style={{cursor:'pointer',opacity:catFilter==='all'?1:0.6}} onClick={()=>setCatFilter('all')}>All ({resourceTypes.length})</span>
+                {RESOURCE_CATEGORIES.filter(c=>catCounts[c]).map(c=><span key={c} className={`tag tag-${RESOURCE_CATEGORY_COLORS[c]}`}
+                  style={{cursor:'pointer',opacity:catFilter===c?1:0.5}} onClick={()=>setCatFilter(catFilter===c?'all':c)}>
+                  {RESOURCE_CATEGORY_LABELS[c]} ({catCounts[c]})
+                </span>)}
+              </div>
+
+              {filteredTypes.length===0 ? <div className="card" style={{padding:'40px 20px',textAlign:'center'}}>
+                <I n="package" s={32} c="var(--tx-3)"/>
+                <p style={{color:'var(--tx-2)',fontSize:13,marginTop:12}}>No resource types in the catalog yet</p>
+                <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:6}}>Resource types define what kinds of resources your org tracks. Add types or load seed data from the network.</p>
+                {orgRole==='admin'&&networkRoom&&<button onClick={async()=>{
+                  try { const loaded = await ResourceService.loadSeedResourceTypes(networkRoom);
+                    showToast(`Loaded ${loaded.length} seed resource types`,'success');
+                    setResLoading(true); setTimeout(()=>window.location.reload(),500);
+                  } catch(e){ showToast(e.message,'error'); }
+                }} className="b-pri b-sm" style={{marginTop:12}}>Load Seed Types from Network</button>}
+              </div> : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:10}}>
+                {filteredTypes.map(t=><div key={t.id} className="card" style={{padding:14}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+                    <span className={`tag tag-${RESOURCE_CATEGORY_COLORS[t.category]||'teal'}`} style={{fontSize:9}}>{RESOURCE_CATEGORY_LABELS[t.category]||t.category}</span>
+                    <MaturityBadge maturity={t.maturity||'draft'}/>
+                    {t._from_network&&<span className="tag tag-green" style={{fontSize:8}}>NETWORK</span>}
+                    {t.source?.propagation&&<SourceBadge source={t.source}/>}
+                  </div>
+                  <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{t.name}</div>
+                  <div style={{display:'flex',gap:12,fontSize:11,color:'var(--tx-2)'}}>
+                    <span>Unit: <strong>{t.unit}</strong></span>
+                    <span>{t.fungible?'Fungible':'Unique'}</span>
+                    {t.perishable&&<span>TTL: {t.ttl_days}d</span>}
+                  </div>
+                  {t.tags?.length>0&&<div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:6}}>
+                    {t.tags.map(tag=><span key={tag} style={{fontSize:9,color:'var(--tx-3)',background:'var(--bg-3)',padding:'2px 6px',borderRadius:8}}>{tag}</span>)}
+                  </div>}
+                  <div style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)',marginTop:6}}>{t.id}</div>
+                </div>)}
+              </div>}
+            </>}
+
+            {/* ── INVENTORY TAB ── */}
+            {resTab==='inventory'&&<>
+              {resourceRelations.length===0 ? <div className="card" style={{padding:'40px 20px',textAlign:'center'}}>
+                <I n="package" s={32} c="var(--tx-3)"/>
+                <p style={{color:'var(--tx-2)',fontSize:13,marginTop:12}}>No resource relations established yet</p>
+                <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:6}}>Establish a relation to a resource type to begin tracking inventory.</p>
+              </div> : <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {resourceRelations.map(rel=>{
+                  const inv = inventories.find(i=>i.relation_id===rel.id);
+                  const rType = resourceTypes.find(t=>t.id===rel.resource_type_id);
+                  const pct = inv && inv.total_capacity > 0 ? Math.round((inv.available / inv.total_capacity) * 100) : 0;
+                  const barColor = pct > 50 ? 'var(--green)' : pct > 20 ? 'var(--gold)' : 'var(--red)';
+                  return <div key={rel.id} className="card" style={{padding:16}}>
+                    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                          <span style={{fontSize:14,fontWeight:700}}>{rType?.name||rel.resource_type_id}</span>
+                          <span className={`tag tag-${RESOURCE_CATEGORY_COLORS[rType?.category]||'teal'}`} style={{fontSize:9}}>{RESOURCE_RELATION_LABELS[rel.relation_type]||rel.relation_type}</span>
+                          <span className="tag" style={{fontSize:8,background:'var(--bg-3)',color:'var(--tx-2)'}}>{RESOURCE_OPACITY_LABELS[rel.opacity]||'Sovereign'}</span>
+                        </div>
+                        {/* Inventory bar */}
+                        {inv && <div style={{marginTop:8}}>
+                          <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--tx-1)',marginBottom:4}}>
+                            <span><strong>{inv.available}</strong> available of <strong>{inv.total_capacity}</strong> total</span>
+                            <span>{inv.allocated||0} allocated{inv.reserved?`, ${inv.reserved} reserved`:''}</span>
+                          </div>
+                          <div style={{height:6,background:'var(--bg-3)',borderRadius:3,overflow:'hidden'}}>
+                            <div style={{height:'100%',width:`${pct}%`,background:barColor,borderRadius:3,transition:'width .3s'}}/>
+                          </div>
+                          <div style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)',marginTop:4}}>
+                            Last restocked: {inv.last_restocked ? new Date(inv.last_restocked).toLocaleDateString() : 'never'}
+                          </div>
+                        </div>}
+                        {!inv && <div style={{fontSize:11,color:'var(--tx-3)',marginTop:4}}>No inventory data — restock to initialize</div>}
+                      </div>
+                      <button onClick={()=>{setShowRestockModal(rel.id);setRestockQty('')}} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:4}}><I n="plus" s={11}/>Restock</button>
+                    </div>
+                  </div>;
+                })}
+              </div>}
+            </>}
+
+            {/* ── RELATIONS TAB ── */}
+            {resTab==='relations'&&<>
+              {resourceRelations.length===0 ? <div className="card" style={{padding:'40px 20px',textAlign:'center'}}>
+                <I n="link" s={32} c="var(--tx-3)"/>
+                <p style={{color:'var(--tx-2)',fontSize:13,marginTop:12}}>No resource relations yet</p>
+                <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:6}}>A resource relation describes how your organization relates to a resource — whether you operate it, fund it, refer to it, or contribute to a shared pool.</p>
+              </div> : <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {resourceRelations.map(rel=>{
+                  const rType = resourceTypes.find(t=>t.id===rel.resource_type_id);
+                  return <div key={rel.id} className="card" style={{padding:16}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                      <span style={{fontSize:14,fontWeight:700}}>{rType?.name||rel.resource_type_id}</span>
+                      <span className={`tag tag-${RESOURCE_CATEGORY_COLORS[rType?.category]||'teal'}`} style={{fontSize:9}}>{RESOURCE_RELATION_LABELS[rel.relation_type]}</span>
+                      <span className="tag" style={{fontSize:8,background:rel.opacity>=2?'var(--green-dim)':rel.opacity>=1?'var(--blue-dim)':'var(--bg-3)',color:rel.opacity>=2?'var(--green)':rel.opacity>=1?'var(--blue)':'var(--tx-2)'}}>{RESOURCE_OPACITY_LABELS[rel.opacity]}</span>
+                    </div>
+                    <div style={{display:'flex',gap:16,fontSize:11.5,color:'var(--tx-1)',flexWrap:'wrap'}}>
+                      <span>Capacity: <strong>{rel.capacity||0}</strong></span>
+                      <span>Available: <strong>{rel.available??rel.capacity??0}</strong></span>
+                      {rel.funding_source&&<span>Funding: {rel.funding_source}</span>}
+                      {rel.target&&<span>Target: {rel.target.slice(0,20)}...</span>}
+                    </div>
+                    {rel.notes&&<p style={{fontSize:11,color:'var(--tx-2)',marginTop:6,fontStyle:'italic'}}>{rel.notes}</p>}
+                    {rel.dedup&&<div style={{marginTop:8,padding:'6px 10px',background:rel.dedup.link_status==='confirmed'?'var(--green-dim)':rel.dedup.link_status==='unresolved'?'var(--orange-dim)':'var(--blue-dim)',borderRadius:'var(--r)',fontSize:10}}>
+                      Dedup: <strong>{rel.dedup.link_status}</strong>{rel.dedup.linked_to&&<> — linked to {rel.dedup.linked_to.slice(0,16)}</>}
+                    </div>}
+                    <div style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)',marginTop:6}}>
+                      {rel.id} — est. {rel.established_at ? new Date(rel.established_at).toLocaleDateString() : 'unknown'} by {rel.established_by?.split(':')[0]?.replace('@','')||'unknown'}
+                    </div>
+                  </div>;
+                })}
+              </div>}
+            </>}
+
+            </>}
+
+            {/* ── ADD TYPE MODAL ── */}
+            {showAddTypeModal&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50}} onClick={()=>setShowAddTypeModal(false)}>
+              <div className="card" style={{width:480,maxHeight:'80vh',overflow:'auto'}} onClick={e=>e.stopPropagation()}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                  <h3 style={{fontFamily:'var(--serif)',fontSize:18}}>New Resource Type</h3>
+                  <button onClick={()=>setShowAddTypeModal(false)} className="b-gho b-xs"><I n="x" s={14}/></button>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Name</label>
+                    <input value={newType.name} onChange={e=>setNewType({...newType,name:e.target.value})} placeholder="e.g. Bus Voucher"/></div>
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Category</label>
+                    <select value={newType.category} onChange={e=>setNewType({...newType,category:e.target.value})}>
+                      {RESOURCE_CATEGORIES.map(c=><option key={c} value={c}>{RESOURCE_CATEGORY_LABELS[c]}</option>)}
+                    </select></div>
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Unit of measure</label>
+                    <input value={newType.unit} onChange={e=>setNewType({...newType,unit:e.target.value})} placeholder="e.g. voucher, night, dollars, hour"/></div>
+                  <div style={{display:'flex',gap:16}}>
+                    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer'}}>
+                      <div className={`toggle-track ${newType.fungible?'on':'off'}`} onClick={()=>setNewType({...newType,fungible:!newType.fungible})}>
+                        <div className="toggle-knob"/></div> Fungible</label>
+                    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,cursor:'pointer'}}>
+                      <div className={`toggle-track ${newType.perishable?'on':'off'}`} onClick={()=>setNewType({...newType,perishable:!newType.perishable})}>
+                        <div className="toggle-knob"/></div> Perishable</label>
+                  </div>
+                  {newType.perishable&&<div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>TTL (days)</label>
+                    <input type="number" value={newType.ttl_days} onChange={e=>setNewType({...newType,ttl_days:e.target.value})} placeholder="e.g. 30"/></div>}
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Tags (comma-separated)</label>
+                    <input value={newType.tags} onChange={e=>setNewType({...newType,tags:e.target.value})} placeholder="e.g. transit, emergency"/></div>
+                  <button onClick={handleCreateType} className="b-pri" disabled={!newType.name||!newType.unit}>Create Resource Type</button>
+                </div>
+              </div>
+            </div>}
+
+            {/* ── ADD RELATION MODAL ── */}
+            {showAddRelModal&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50}} onClick={()=>setShowAddRelModal(false)}>
+              <div className="card" style={{width:480,maxHeight:'80vh',overflow:'auto'}} onClick={e=>e.stopPropagation()}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                  <h3 style={{fontFamily:'var(--serif)',fontSize:18}}>Establish Resource Relation</h3>
+                  <button onClick={()=>setShowAddRelModal(false)} className="b-gho b-xs"><I n="x" s={14}/></button>
+                </div>
+                <p style={{fontSize:11.5,color:'var(--tx-2)',marginBottom:12}}>Define how your organization relates to a resource — whether you operate it, fund it, or refer clients to it.</p>
+                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Resource Type</label>
+                    <select value={newRel.resource_type_id} onChange={e=>setNewRel({...newRel,resource_type_id:e.target.value})}>
+                      <option value="">Select a type...</option>
+                      {resourceTypes.map(t=><option key={t.id} value={t.id}>{t.name} ({RESOURCE_CATEGORY_LABELS[t.category]})</option>)}
+                    </select></div>
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Relation Type</label>
+                    <select value={newRel.relation_type} onChange={e=>setNewRel({...newRel,relation_type:e.target.value})}>
+                      {RESOURCE_RELATION_TYPES.map(r=><option key={r} value={r}>{RESOURCE_RELATION_LABELS[r]}</option>)}
+                    </select></div>
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Capacity (initial stock)</label>
+                    <input type="number" value={newRel.capacity} onChange={e=>setNewRel({...newRel,capacity:e.target.value})} placeholder="e.g. 50"/></div>
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Notes</label>
+                    <textarea value={newRel.notes} onChange={e=>setNewRel({...newRel,notes:e.target.value})} placeholder="Optional context..." rows={2}/></div>
+                  <button onClick={handleEstablishRelation} className="b-pri" disabled={!newRel.resource_type_id}>Establish Relation</button>
+                </div>
+              </div>
+            </div>}
+
+            {/* ── RESTOCK MODAL ── */}
+            {showRestockModal&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50}} onClick={()=>setShowRestockModal(null)}>
+              <div className="card" style={{width:360}} onClick={e=>e.stopPropagation()}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                  <h3 style={{fontFamily:'var(--serif)',fontSize:18}}>Restock Inventory</h3>
+                  <button onClick={()=>setShowRestockModal(null)} className="b-gho b-xs"><I n="x" s={14}/></button>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div><label style={{fontSize:11,color:'var(--tx-2)',display:'block',marginBottom:4}}>Quantity to add</label>
+                    <input type="number" value={restockQty} onChange={e=>setRestockQty(e.target.value)} placeholder="e.g. 25" autoFocus/></div>
+                  <button onClick={()=>handleRestock(showRestockModal)} className="b-pri" disabled={!restockQty||parseInt(restockQty)<=0}>Restock</button>
+                </div>
+              </div>
+            </div>}
+          </>;
+        })()}
       </div>}
 
       {/* STAFF ROSTER VIEW */}
