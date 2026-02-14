@@ -246,6 +246,72 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .fb-preview-option{padding:10px 14px;border:1px solid var(--border-0);border-radius:var(--r);
   margin-bottom:6px;cursor:pointer;transition:all .12s;display:flex;align-items:center;gap:10px}
 .fb-preview-option:hover{border-color:var(--teal);background:var(--teal-dim)}
+
+/* ═══ Schema Inbox Layout ═══ */
+@keyframes siPulse{0%,100%{opacity:1}50%{opacity:.5}}
+.si-wrap{display:flex;height:calc(100vh - 104px);overflow:hidden;margin:-24px;border-radius:var(--r-lg);border:1px solid var(--border-0)}
+.si-sidebar{width:280px;min-width:280px;border-right:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2);overflow:hidden}
+.si-sidebar-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+.si-canvas{flex:1;min-width:0;overflow:auto;padding:20px}
+.si-context{width:260px;min-width:260px;border-left:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2);overflow-y:auto;transition:width 200ms ease-out,min-width 200ms ease-out,opacity 150ms}
+.si-context.collapsed{width:36px;min-width:36px;overflow:hidden}
+.si-header{padding:14px 16px 10px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between}
+.si-search{margin:8px 12px;position:relative}
+.si-search input{width:100%;padding:8px 12px 8px 30px;border-radius:6px;border:1px solid var(--border-0);background:var(--bg-0);color:var(--tx-0);font-size:12px;font-family:var(--sans);outline:none;transition:border .2s}
+.si-search input:focus{border-color:var(--border-2)}
+.si-search input::placeholder{color:var(--tx-3)}
+.si-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none}
+.si-group-header{padding:10px 16px 6px;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border-0);transition:background 150ms}
+.si-group-header:hover{background:var(--bg-3)}
+.si-group-label{font-size:10.5px;font-family:var(--mono);font-weight:600;color:var(--tx-1);letter-spacing:.08em;display:flex;align-items:center;gap:6px}
+.si-group-count{font-size:10px;font-family:var(--mono);color:var(--tx-2)}
+.si-group-count.alert{color:var(--teal);background:rgba(62,201,176,.12);padding:1px 6px;border-radius:8px;animation:siPulse 2s infinite}
+.si-form-item{padding:8px 16px 8px 12px;cursor:pointer;border-left:3px solid transparent;border-bottom:1px solid var(--border-0);transition:all 150ms;display:flex;gap:6px;align-items:flex-start}
+.si-form-item:hover{background:var(--bg-3)}
+.si-form-item.active{background:var(--bg-4);border-left-color:var(--teal)}
+.si-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.si-dot.unread{background:var(--teal);animation:siPulse 2s infinite}
+.si-dot.current{background:var(--tx-0);border-radius:2px}
+.si-dot.read{background:var(--tx-3);opacity:.4}
+.si-form-name{font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx-0)}
+.si-form-item.active .si-form-name{font-weight:600}
+.si-form-meta{font-size:10px;font-family:var(--mono);color:var(--tx-2);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.si-form-update{font-size:9px;font-family:var(--mono);font-weight:600;color:var(--gold);background:rgba(201,163,82,.10);padding:1px 5px;border-radius:3px;margin-top:2px;display:inline-block}
+.si-ctx-section{padding:12px 14px;border-bottom:1px solid var(--border-0)}
+.si-ctx-label{font-size:10px;font-family:var(--mono);font-weight:600;color:var(--tx-1);letter-spacing:.07em;margin-bottom:8px;display:block}
+.si-vt{position:relative;padding-left:20px}
+.si-vt::before{content:'';position:absolute;left:16px;top:0;bottom:0;width:1px;background:var(--border-0)}
+.si-vt-node{position:relative;padding:6px 0 12px 16px}
+.si-vt-dot{position:absolute;left:-8px;top:8px;width:9px;height:9px;border-radius:50%}
+.si-vt-dot.current{background:var(--teal);box-shadow:0 0 6px rgba(62,201,176,.3)}
+.si-vt-dot.past{background:transparent;border:2px solid var(--tx-3);cursor:pointer}
+.si-vt-dot.past:hover{border-color:var(--tx-1)}
+.si-lineage-node{padding:8px 12px;border-radius:6px;margin-bottom:0}
+.si-lineage-connector{display:flex;align-items:center;gap:6px;padding:2px 0 2px 20px}
+.si-lineage-connector::before{content:'';width:1px;height:14px;background:var(--border-1);flex-shrink:0}
+.si-adopt-bar{height:4px;border-radius:2px;background:var(--border-0);overflow:hidden;margin:6px 0 10px}
+.si-adopt-fill{height:100%;background:var(--teal);border-radius:2px;transition:width 300ms ease-out}
+.si-breadcrumb{display:flex;align-items:center;gap:0;font-size:12px;color:var(--tx-2);font-family:var(--sans)}
+.si-breadcrumb span.sep{color:var(--tx-3);padding:0 6px;font-size:10px}
+.si-breadcrumb span.current{color:var(--tx-0);font-weight:600}
+.si-empty{padding:20px 16px;text-align:center}
+.si-empty-icon{margin-bottom:6px;opacity:.5}
+.si-empty-title{font-size:12px;font-weight:600;color:var(--tx-1);margin-bottom:4px}
+.si-empty-desc{font-size:11px;color:var(--tx-3);line-height:1.5}
+.si-ctx-strip{display:flex;flex-direction:column;align-items:center;gap:12px;padding:12px 0}
+.si-ctx-strip button{background:none;border:none;color:var(--tx-3);cursor:pointer;padding:4px;transition:color .15s}
+.si-ctx-strip button:hover{color:var(--tx-1)}
+@media(max-width:1100px){
+  .si-sidebar{width:240px;min-width:240px}
+  .si-context:not(.collapsed){width:36px;min-width:36px}
+}
+@media(max-width:900px){
+  .si-sidebar{position:fixed;left:-300px;top:56px;bottom:0;width:300px;min-width:300px;z-index:40;transition:left 250ms ease-out;box-shadow:8px 0 32px rgba(0,0,0,.4)}
+  .si-sidebar.open{left:0}
+  .si-context{display:none}
+  .si-canvas{padding:14px}
+  .si-mobile-menu{display:inline-flex!important}
+}
 </style>
 </head>
 <body>
@@ -299,6 +365,14 @@ sun:<svg {...p}><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="
 moon:<svg {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>,
 'alert-triangle':<svg {...p}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
 'refresh-cw':<svg {...p}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>,
+layers:<svg {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
+chevronDown:<svg {...p}><polyline points="6 9 12 15 18 9"/></svg>,
+chevronRight:<svg {...p}><polyline points="9 18 15 12 9 6"/></svg>,
+chevronLeft:<svg {...p}><polyline points="15 18 9 12 15 6"/></svg>,
+gitBranch:<svg {...p}><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>,
+activity:<svg {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
+menu:<svg {...p}><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>,
+'more-v':<svg {...p}><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>,
 };
 return <span style={{display:'inline-flex',alignItems:'center',flexShrink:0}}>{d[n]}</span>;
 };
@@ -4819,6 +4893,387 @@ const FormBuilder = ({isOrg = false}) => {
   );
 };
 
+/* ═══════════════════ SCHEMA INBOX VIEW ═══════════════════ */
+
+/* ── Sidebar form list item ── */
+const SiFormItem = ({form, isActive, onClick, sourceType}) => {
+  const dotClass = isActive ? 'current' : (form._unread ? 'unread' : 'read');
+  const matColor = {draft:'var(--blue)',trial:'var(--gold)',normative:'var(--green)',deprecated:'var(--red)'}[form.maturity] || 'var(--tx-2)';
+  const srcColor = sourceType === 'network' ? 'var(--teal)' : sourceType === 'org' ? 'var(--blue)' : 'var(--tx-2)';
+  const srcLabel = sourceType === 'network' ? 'Network' : sourceType === 'org' ? 'Org' : 'Local';
+  return (
+    <div className={`si-form-item${isActive ? ' active' : ''}`} onClick={onClick}>
+      <div className={`si-dot ${dotClass}`}/>
+      <div style={{flex:1,minWidth:0}}>
+        <div className="si-form-name">{form.name}</div>
+        <div className="si-form-meta">
+          <span style={{color:srcColor}}>{srcLabel}</span>
+          <span style={{color:'var(--tx-3)'}}>·</span>
+          <span>v{form.version}</span>
+          <span style={{color:'var(--tx-3)'}}>·</span>
+          <span style={{color:matColor}}>{form.maturity || 'draft'}</span>
+        </div>
+        {form._hasUpdate && <div className="si-form-update">▲ new</div>}
+      </div>
+    </div>
+  );
+};
+
+/* ── Sidebar group header ── */
+const SiGroupHeader = ({label, icon, count, expanded, onToggle, alert}) => (
+  <div className="si-group-header" onClick={onToggle}>
+    <span className="si-group-label">
+      <I n={expanded ? "chevronDown" : "chevronRight"} s={10}/>
+      <I n={icon} s={11}/>
+      {label}
+    </span>
+    <span className={`si-group-count${alert ? ' alert' : ''}`}>{count}</span>
+  </div>
+);
+
+/* ── Context panel: version timeline ── */
+const SiVersionTimeline = ({form, onClickVersion}) => {
+  const history = (form.versionHistory || []).slice().reverse();
+  return (
+    <div className="si-vt">
+      <div className="si-vt-node">
+        <div className="si-vt-dot current"/>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <span style={{fontSize:11,fontFamily:'var(--mono)',fontWeight:600,color:'var(--tx-0)'}}>v{form.version}</span>
+          <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>current</span>
+        </div>
+        <div style={{fontSize:10,color:'var(--tx-2)',marginTop:2,fontFamily:'var(--mono)'}}>
+          {form.sections?.length || 0} sections · {(form.sections || []).flatMap(s => s.questions || []).length} questions
+        </div>
+      </div>
+      {history.map((h, i) => (
+        <div key={i} className="si-vt-node" onClick={() => onClickVersion && onClickVersion(h)} style={{cursor:'pointer'}}>
+          <div className="si-vt-dot past"/>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:11,fontFamily:'var(--mono)',fontWeight:600,color:'var(--tx-1)'}}>v{h.version}</span>
+            <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{h.bumpedAt ? new Date(h.bumpedAt).toLocaleDateString() : ''}</span>
+          </div>
+          {h.notes && <div style={{fontSize:10.5,color:'var(--tx-2)',marginTop:1,lineHeight:1.4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{h.notes}</div>}
+        </div>
+      ))}
+      {history.length === 0 && (
+        <div style={{fontSize:10.5,color:'var(--tx-3)',padding:'4px 0 0 16px'}}>No prior versions</div>
+      )}
+    </div>
+  );
+};
+
+/* ── Context panel: lineage ── */
+const SiLineage = ({form, orgMeta, networkMembers, isOrg}) => {
+  const isNetwork = form.source?.level === 'network' || form._sourceType === 'network';
+  const isOrgForm = form.source?.level === 'org' || form._sourceType === 'org';
+  return (
+    <div>
+      {isNetwork && <>
+        <div className="si-lineage-node" style={{background:'rgba(62,201,176,.06)',border:'1px solid rgba(62,201,176,.15)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <I n="globe" s={12} c="var(--teal)"/>
+            <span style={{fontSize:12,fontWeight:600,color:'var(--teal)'}}>Network</span>
+          </div>
+          <div style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)',marginTop:2}}>{form.source?.propagation || 'standard'}</div>
+        </div>
+        <div className="si-lineage-connector">
+          <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{form.source?.propagation || 'standard'}</span>
+        </div>
+      </>}
+      {(isNetwork || isOrgForm) && orgMeta?.name && <>
+        <div className="si-lineage-node" style={{background:'rgba(91,156,245,.06)',border:'1px solid rgba(91,156,245,.15)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <I n="shieldCheck" s={12} c="var(--blue)"/>
+            <span style={{fontSize:12,fontWeight:600,color:'var(--blue)'}}>{orgMeta.name}</span>
+          </div>
+        </div>
+        <div className="si-lineage-connector">
+          <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>active</span>
+        </div>
+      </>}
+      <div className="si-lineage-node" style={{background:'rgba(230,233,240,.06)',border:'1px solid var(--border-1)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          <I n="user" s={12} c="var(--tx-0)"/>
+          <span style={{fontSize:12,fontWeight:600,color:'var(--tx-0)'}}>You {isOrg ? '(provider)' : '(local)'}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── Context panel: related forms ── */
+const SiRelatedForms = ({currentForm, allForms, onNavigate}) => {
+  const currentFieldKeys = new Set((currentForm.sections || []).flatMap(s => (s.questions || []).map(q => q.key || q.id)));
+  const related = allForms.filter(f => {
+    if (f.id === currentForm.id || f.key === currentForm.key) return false;
+    const fKeys = new Set((f.sections || []).flatMap(s => (s.questions || []).map(q => q.key || q.id)));
+    let shared = 0;
+    for (const k of currentFieldKeys) if (fKeys.has(k)) shared++;
+    return shared > 0;
+  }).map(f => {
+    const fKeys = new Set((f.sections || []).flatMap(s => (s.questions || []).map(q => q.key || q.id)));
+    let shared = 0;
+    for (const k of currentFieldKeys) if (fKeys.has(k)) shared++;
+    return {...f, _sharedCount: shared};
+  });
+  if (related.length === 0) return (
+    <div style={{padding:12,border:'1px dashed var(--border-1)',borderRadius:6,textAlign:'center'}}>
+      <div style={{fontSize:11,color:'var(--tx-3)',lineHeight:1.5}}>No related forms detected. Forms sharing field keys will appear here.</div>
+    </div>
+  );
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+      {related.map(f => (
+        <div key={f.id} onClick={() => onNavigate && onNavigate(f)}
+          style={{padding:'8px 12px',borderRadius:6,border:'1px solid var(--border-0)',background:'var(--bg-0)',cursor:'pointer',transition:'all 150ms'}}
+          onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-2)'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-0)'}>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <I n="link" s={11} c="var(--tx-3)"/>
+            <span style={{fontSize:12,fontWeight:600,color:'var(--tx-0)'}}>{f.name}</span>
+          </div>
+          <div style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-2)',marginTop:2}}>
+            <span style={{color:'var(--teal)'}}>{f._sharedCount}</span> shared field{f._sharedCount !== 1 ? 's' : ''}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/* ── Context panel (right side) ── */
+const SiContextPanel = ({form, collapsed, onToggle, orgMeta, networkMembers, isOrg, allForms, onNavigateForm, onClickVersion}) => {
+  if (collapsed) return (
+    <div className="si-context collapsed">
+      <div className="si-ctx-strip">
+        <button onClick={onToggle} title="Expand context"><I n="chevronLeft" s={13}/></button>
+        <button onClick={onToggle} title="Lineage"><I n="gitBranch" s={14}/></button>
+        <button onClick={onToggle} title="Versions"><I n="clock" s={14}/></button>
+        <button onClick={onToggle} title="Related"><I n="link" s={14}/></button>
+        <button onClick={onToggle} title="Activity"><I n="activity" s={14}/></button>
+      </div>
+    </div>
+  );
+  if (!form) return <div className="si-context"><div className="si-ctx-section"><span className="si-ctx-label">No form selected</span></div></div>;
+  return (
+    <div className="si-context">
+      <div style={{padding:'12px 14px 8px',borderBottom:'1px solid var(--border-0)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <span className="si-ctx-label" style={{marginBottom:0}}>CONTEXT</span>
+        <button onClick={onToggle} style={{background:'none',border:'none',color:'var(--tx-3)',cursor:'pointer',padding:2}} title="Collapse"><I n="chevronRight" s={12}/></button>
+      </div>
+      <div className="si-ctx-section">
+        <span className="si-ctx-label">LINEAGE</span>
+        <SiLineage form={form} orgMeta={orgMeta} networkMembers={networkMembers} isOrg={isOrg}/>
+      </div>
+      <div className="si-ctx-section">
+        <span className="si-ctx-label">VERSION TIMELINE</span>
+        <SiVersionTimeline form={form} onClickVersion={onClickVersion}/>
+      </div>
+      <div className="si-ctx-section">
+        <span className="si-ctx-label">RELATED FORMS</span>
+        <SiRelatedForms currentForm={form} allForms={allForms} onNavigate={onNavigateForm}/>
+      </div>
+      <div className="si-ctx-section">
+        <span className="si-ctx-label">ACTIVITY</span>
+        <div style={{fontSize:10.5,color:'var(--tx-3)'}}>
+          {form.updatedAt && <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+            <div style={{width:5,height:5,borderRadius:'50%',background:'var(--teal)',flexShrink:0}}/>
+            <span style={{fontFamily:'var(--mono)'}}>{new Date(form.updatedAt).toLocaleDateString()}</span>
+            <span style={{color:'var(--tx-2)'}}>Last edited</span>
+          </div>}
+          {form.createdAt && <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <div style={{width:5,height:5,borderRadius:'50%',background:'var(--tx-3)',flexShrink:0}}/>
+            <span style={{fontFamily:'var(--mono)'}}>{new Date(form.createdAt).toLocaleDateString()}</span>
+            <span style={{color:'var(--tx-2)'}}>Created</span>
+          </div>}
+          {!form.updatedAt && !form.createdAt && <span>No activity recorded</span>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── Forms sidebar (left side) ── */
+const SiFormsSidebar = ({myForms, networkForms, orgForms, inboxForms, activeFormId, onSelectForm, onNewForm, searchQuery, onSearchChange, sidebarOpen, onToggleSidebar}) => {
+  const [expanded, setExpanded] = useState({inbox: true, my: true, org: false, network: false});
+  const toggle = (g) => setExpanded(prev => ({...prev, [g]: !prev[g]}));
+
+  const filterForms = (forms) => {
+    if (!searchQuery || searchQuery.length < 2) return forms;
+    const q = searchQuery.toLowerCase();
+    return forms.filter(f =>
+      f.name.toLowerCase().includes(q) ||
+      (f.key || '').toLowerCase().includes(q) ||
+      (f.description || '').toLowerCase().includes(q) ||
+      (f.sections || []).some(s => s.title.toLowerCase().includes(q) || (s.questions || []).some(qn => (qn.prompt || '').toLowerCase().includes(q)))
+    );
+  };
+
+  const filtInbox = filterForms(inboxForms);
+  const filtMy = filterForms(myForms);
+  const filtOrg = filterForms(orgForms);
+  const filtNet = filterForms(networkForms);
+
+  return (
+    <div className={`si-sidebar${sidebarOpen ? ' open' : ''}`}>
+      <div className="si-header">
+        <span className="si-group-label" style={{fontSize:11}}>
+          <I n="layers" s={13} c="var(--teal)"/> SCHEMA
+        </span>
+        <div style={{display:'flex',gap:4}}>
+          <button onClick={onNewForm} style={{width:24,height:24,borderRadius:6,background:'transparent',border:'1px solid var(--border-0)',color:'var(--tx-1)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}
+            onMouseEnter={e=>{e.currentTarget.style.background='var(--bg-3)';e.currentTarget.style.color='var(--tx-0)';}}
+            onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tx-1)';}}
+            title="New form"><I n="plus" s={12}/></button>
+        </div>
+      </div>
+      <div className="si-search">
+        <span className="si-search-icon"><I n="search" s={12} c="var(--tx-3)"/></span>
+        <input value={searchQuery} onChange={e => onSearchChange(e.target.value)} placeholder="Search forms..." />
+      </div>
+      <div className="si-sidebar-scroll">
+        {/* INBOX */}
+        <SiGroupHeader label="INBOX" icon="inbox" count={filtInbox.length} expanded={expanded.inbox} onToggle={() => toggle('inbox')} alert={filtInbox.length > 0}/>
+        {expanded.inbox && (filtInbox.length > 0 ? filtInbox.map(f => (
+          <SiFormItem key={f.id} form={f} isActive={f.id === activeFormId} onClick={() => onSelectForm(f)} sourceType={f._sourceType || 'network'}/>
+        )) : (
+          <div className="si-empty">
+            <div className="si-empty-icon"><I n="check" s={18} c="var(--teal)"/></div>
+            <div className="si-empty-title">All caught up</div>
+            <div className="si-empty-desc">No incoming form updates.</div>
+          </div>
+        ))}
+
+        {/* MY FORMS */}
+        <SiGroupHeader label="MY FORMS" icon="folder" count={filtMy.length} expanded={expanded.my} onToggle={() => toggle('my')}/>
+        {expanded.my && (filtMy.length > 0 ? filtMy.map(f => (
+          <SiFormItem key={f.id} form={f} isActive={f.id === activeFormId} onClick={() => onSelectForm(f)} sourceType="local"/>
+        )) : (
+          <div className="si-empty">
+            <div className="si-empty-title">No saved forms</div>
+            <div className="si-empty-desc">Use "Save" to save a form here.</div>
+          </div>
+        ))}
+
+        {/* ORG FORMS */}
+        <SiGroupHeader label="ORG FORMS" icon="shieldCheck" count={filtOrg.length} expanded={expanded.org} onToggle={() => toggle('org')}/>
+        {expanded.org && (filtOrg.length > 0 ? filtOrg.map(f => (
+          <SiFormItem key={f.id} form={f} isActive={f.id === activeFormId} onClick={() => onSelectForm(f)} sourceType="org"/>
+        )) : (
+          <div className="si-empty">
+            <div className="si-empty-desc">No org forms available.</div>
+          </div>
+        ))}
+
+        {/* NETWORK COMMONS */}
+        <SiGroupHeader label="NETWORK" icon="globe" count={filtNet.length} expanded={expanded.network} onToggle={() => toggle('network')}/>
+        {expanded.network && (filtNet.length > 0 ? filtNet.map(f => (
+          <SiFormItem key={f.id} form={f} isActive={f.id === activeFormId} onClick={() => onSelectForm(f)} sourceType="network"/>
+        )) : (
+          <div className="si-empty">
+            <div className="si-empty-desc">No network schema available.</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ── SchemaView — Three-zone layout wrapping FormBuilder ── */
+const SchemaView = ({isOrg, orgMeta, networkMembers}) => {
+  SWC = useSWC();
+  const [contextOpen, setContextOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // for mobile overlay
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sidebarSelectedId, setSidebarSelectedId] = useState(null);
+  const [sidebarForms, setSidebarForms] = useState([]); // all forms in sidebar across all groups
+
+  // Build sidebar form lists from DEFAULT_FORMS (network commons)
+  const networkForms = useMemo(() => DEFAULT_FORMS.map(f => ({
+    ...f, _sourceType: 'network', _unread: false, _hasUpdate: false,
+    sections: [{id: 'sec_' + f.id, title: f.name, questions: f.fields.map(fld => ({
+      id: fld.id || fld.key, key: fld.key, prompt: fld.question, type: fld.type,
+      options: (fld.options || []).map((o, oi) => ({id: `${fld.key}_opt_${oi}`, label: o}))
+    }))}]
+  })), []);
+
+  // Currently active form from FormBuilder (read from formBuilder's own state)
+  // We track which form is selected; FormBuilder manages its own full state
+  const activeForm = useMemo(() => {
+    if (sidebarSelectedId) {
+      const found = [...networkForms, ...sidebarForms].find(f => f.id === sidebarSelectedId);
+      if (found) return found;
+    }
+    return null;
+  }, [sidebarSelectedId, networkForms, sidebarForms]);
+
+  const allKnownForms = useMemo(() => [...networkForms, ...sidebarForms], [networkForms, sidebarForms]);
+
+  // Breadcrumb
+  const breadcrumbGroup = activeForm?._sourceType === 'network' ? 'Network' : activeForm?._sourceType === 'org' ? 'Org Forms' : 'My Forms';
+
+  return (
+    <div className="si-wrap anim-up">
+      {/* LEFT: Sidebar */}
+      <SiFormsSidebar
+        myForms={sidebarForms.filter(f => f._sourceType === 'local')}
+        networkForms={networkForms}
+        orgForms={sidebarForms.filter(f => f._sourceType === 'org')}
+        inboxForms={sidebarForms.filter(f => f._unread)}
+        activeFormId={sidebarSelectedId}
+        onSelectForm={(f) => setSidebarSelectedId(f.id)}
+        onNewForm={() => setSidebarSelectedId(null)}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+      />
+
+      {/* CENTER: Canvas with FormBuilder */}
+      <div className="si-canvas">
+        {/* Breadcrumb toolbar */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+          <div className="si-breadcrumb">
+            {/* Mobile hamburger */}
+            <button onClick={() => setSidebarOpen(true)}
+              style={{background:'none',border:'none',color:'var(--tx-1)',cursor:'pointer',padding:'2px 8px 2px 0',display:'none'}}
+              className="si-mobile-menu">
+              <I n="menu" s={16}/>
+            </button>
+            <I n="layers" s={13} c="var(--teal)"/>
+            <span className="sep">/</span>
+            <span>{breadcrumbGroup}</span>
+            {activeForm && <>
+              <span className="sep">/</span>
+              <span className="current">{activeForm.name}</span>
+              <span className="sep">/</span>
+              <span style={{fontFamily:'var(--mono)',fontSize:10}}>v{activeForm.version}</span>
+            </>}
+          </div>
+        </div>
+        {/* FormBuilder — owns its own internal form state */}
+        <FormBuilder isOrg={isOrg}/>
+      </div>
+
+      {/* RIGHT: Context panel */}
+      <SiContextPanel
+        form={activeForm}
+        collapsed={!contextOpen}
+        onToggle={() => setContextOpen(prev => !prev)}
+        orgMeta={orgMeta}
+        networkMembers={networkMembers}
+        isOrg={isOrg}
+        allForms={allKnownForms}
+        onNavigateForm={(f) => setSidebarSelectedId(f.id)}
+      />
+
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:39}}/>}
+    </div>
+  );
+};
+
 
 /* ═══════════════════ ACTIVITY STREAM ═══════════════════ */
 const ROOM_COLORS = {vault:'teal',bridge:'blue',roster:'gold',org:'blue',schema:'purple',metrics:'orange',network:'green',client_record:'teal',team:'purple',unknown:'orange'};
@@ -8277,8 +8732,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         </div>
       </div>}
 
-      {/* SCHEMA BUILDER — Form Builder UX with Compose/Wire/Preview modes */}
-      {view==='schema'&&<FormBuilder isOrg={!!orgRoom}/>}
+      {/* SCHEMA BUILDER — Form Inbox View with Sidebar + Canvas + Context Panel */}
+      {view==='schema'&&<SchemaView isOrg={!!orgRoom} orgMeta={orgMeta} networkMembers={networkMembers}/>}
 
       {/* ORG SETTINGS VIEW (admin only) */}
       {view==='org-settings'&&orgRoom&&orgRole==='admin'&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
