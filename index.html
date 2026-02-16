@@ -337,6 +337,17 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .nav-badge-gold{background:var(--gold);color:var(--bg-0)}
 .nav-badge-teal{background:rgba(62,201,176,.15);color:var(--teal)}
 .nav-badge-blue{background:rgba(91,156,245,.15);color:var(--blue)}
+.nav-badge-purple{background:rgba(167,139,250,.15);color:var(--purple)}
+/* ═══ Choreo Event Stream ═══ */
+.choreo-triad-card:hover{border-color:var(--border-2)!important;transform:translateY(-1px)}
+.choreo-op-row{transition:border-color .15s}
+.choreo-op-row:hover{border-color:var(--border-1)!important}
+@media(max-width:900px){
+  .choreo-triad-card{padding:10px!important}
+}
+@media(max-width:700px){
+  .choreo-op-row [style*="gridTemplateColumns: 100px"]{grid-template-columns:1fr!important}
+}
 </style>
 </head>
 <body>
@@ -6803,6 +6814,443 @@ const ActivityStream = ({session}) => {
   </div>;
 };
 
+/* ═══════════════════ CHOREO EVENT STREAM ═══════════════════
+ * Displays events in Choreo's EO operation grammar format.
+ * Each event is mapped to: { op, target, context, frame }
+ * aligned with the nine-operator Emergent Ontology model.
+ * See: https://github.com/clovenbradshaw-ctrl/Choreo
+ * ═══════════════════════════════════════════════════════════ */
+
+const OPERATOR_TRIADS = {
+  identity: { label: 'Identity', desc: 'What exists?', ops: ['NUL','DES','INS'], color: 'teal' },
+  structure: { label: 'Structure', desc: 'How do things relate?', ops: ['SEG','CON','SYN'], color: 'blue' },
+  time: { label: 'Time', desc: 'How do things change?', ops: ['ALT','SUP','REC'], color: 'purple' },
+};
+
+const OP_DESCRIPTIONS = {
+  NUL: { verb: 'Destroy', desc: 'Destruction / Absence' },
+  DES: { verb: 'Designate', desc: 'Designation / Naming' },
+  INS: { verb: 'Instantiate', desc: 'Instantiation / First observation' },
+  SEG: { verb: 'Segment', desc: 'Segmentation / Boundary' },
+  CON: { verb: 'Connect', desc: 'Connection / Joining' },
+  SYN: { verb: 'Synthesize', desc: 'Synthesis / Merging' },
+  ALT: { verb: 'Alternate', desc: 'Alternation / Transition' },
+  SUP: { verb: 'Superpose', desc: 'Superposition / Layering' },
+  REC: { verb: 'Reconfigure', desc: 'Reconfiguration / Recursion' },
+};
+
+const ABSENCE_MAP = {
+  NUL: { label: 'Destroyed', desc: 'Actually gone' },
+  DES: { label: 'Undesignated', desc: 'Exists but unnamed' },
+  INS: { label: 'Unknown', desc: 'Never observed' },
+  SEG: { label: 'Inapplicable', desc: 'Outside current boundary' },
+  CON: { label: 'Unconnected', desc: 'No relationships' },
+  SYN: { label: 'Unfused', desc: 'Components present but unmerged' },
+  ALT: { label: 'Pending', desc: 'Transition incomplete' },
+  SUP: { label: 'Withheld', desc: 'Uncollapsed superposition' },
+  REC: { label: 'Pre-recursive', desc: 'Not yet in feedback loop' },
+};
+
+// Map a Matrix event to Choreo operation grammar
+const toChoreoOp = (ev) => {
+  const content = ev.content || {};
+  const roomType = ev.roomInfo?.type || 'unknown';
+
+  // If it's a native EO operation, extract directly
+  if (ev.type === EVT.OP && content.op) {
+    return {
+      op: content.op,
+      target: content.target || {},
+      context: {
+        table: roomType,
+        type: content.context?.type || ev.type,
+        source: content.context?.source || 'khora',
+        ...(content.context?.auto_intermediate ? { auto_intermediate: true } : {}),
+      },
+      frame: {
+        epistemic: (content.frame?.epistemic || content.frame?.type || 'given').toLowerCase(),
+        authority: ev.sender,
+        confidence: content.frame?.confidence || 1.0,
+        ...(content.frame?.audit ? { audit: true } : {}),
+      },
+    };
+  }
+
+  // Map Matrix state/timeline events into Choreo grammar
+  const target = {};
+  const context = { table: roomType, type: ev.type, source: 'matrix' };
+  const frame = {
+    epistemic: (ev.epistemic || 'given').toLowerCase(),
+    authority: ev.sender,
+    confidence: 1.0,
+  };
+
+  // Extract meaningful target fields from content
+  if (content.account_type) target.type = content.account_type;
+  if (ev.stateKey) target.id = ev.stateKey;
+  if (content.name) target.name = content.name;
+  if (content.fields) target.fields = Object.keys(content.fields);
+  if (content.providers) target.providers = (content.providers || []).length;
+  if (content.status) target.status = content.status;
+  if (content.membership) target.membership = content.membership;
+  if (content.client) target.client = content.client;
+  if (content.provider) target.provider = content.provider;
+  if (content.question) target.question = content.question.slice(0, 60);
+  if (content.body) target.body = content.body.slice(0, 80);
+  if (content.quantity != null) target.quantity = content.quantity;
+  if (content.unit) target.unit = content.unit;
+  if (content.category) target.category = content.category;
+  if (content.relationship_type) context.relationship_type = content.relationship_type;
+  if (content.algorithm) target.algorithm = content.algorithm;
+  if (content.allocated_to) target.allocated_to = content.allocated_to;
+  if (content.event) target.lifecycle_event = content.event;
+  if (content.value != null) target.value = content.value;
+  if (content.prompt_id) target.prompt_id = content.prompt_id;
+
+  return { op: ev.op, target, context, frame };
+};
+
+const ChoreoEventStream = ({session}) => {
+  const [events, setEvents] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(new Set());
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [filter, setFilter] = useState({ triad: 'all', operator: 'all', roomType: 'all', epistemic: 'all' });
+  const [viewMode, setViewMode] = useState('stream'); // stream | table | triads
+  const [jsonExpanded, setJsonExpanded] = useState(new Set());
+
+  const loadEvents = useCallback(async () => {
+    setLoading(true);
+    try {
+      const scanned = await svc.scanRooms();
+      const roomIds = svc.client ? svc.client.getRooms().map(r => r.roomId) : Object.keys(scanned);
+      const allRooms = []; const allEvents = [];
+      for (const rid of roomIds) {
+        const roomInfo = await classifyRoom(rid, scanned[rid]);
+        allRooms.push({ id: rid, ...roomInfo });
+        if (svc.client) {
+          const room = svc.client.getRoom(rid);
+          if (room) {
+            for (const ev of room.getLiveTimeline().getEvents()) {
+              const cls = classifyEvent(ev, roomInfo);
+              allEvents.push({
+                id: ev.getId(), roomId: rid, roomInfo, sender: ev.getSender(),
+                ts: ev.getTs(), type: ev.getType(),
+                stateKey: (ev.isState && ev.isState()) ? ev.getStateKey() : null,
+                content: ev.getContent(), isState: ev.isState && ev.isState(), ...cls
+              });
+            }
+          }
+        }
+      }
+      allEvents.sort((a, b) => b.ts - a.ts);
+      setRooms(allRooms);
+      setEvents(allEvents);
+    } catch (e) { console.error('ChoreoEventStream error:', e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadEvents(); }, []);
+  useEffect(() => { if (!autoRefresh) return; const iv = setInterval(loadEvents, 5000); return () => clearInterval(iv); }, [autoRefresh]);
+
+  // Apply filters (including triad filter)
+  const filtered = useMemo(() => events.filter(ev => {
+    if (filter.roomType !== 'all' && ev.roomInfo.type !== filter.roomType) return false;
+    if (filter.operator !== 'all' && ev.op !== filter.operator) return false;
+    if (filter.epistemic !== 'all' && ev.epistemic !== filter.epistemic) return false;
+    if (filter.triad !== 'all') {
+      const triad = OPERATOR_TRIADS[filter.triad];
+      if (triad && !triad.ops.includes(ev.op)) return false;
+    }
+    return true;
+  }), [events, filter]);
+
+  // Stats per triad
+  const triadStats = useMemo(() => {
+    const stats = {};
+    Object.entries(OPERATOR_TRIADS).forEach(([key, triad]) => {
+      stats[key] = { ...triad, count: 0, ops: {} };
+      triad.ops.forEach(op => { stats[key].ops[op] = 0; });
+    });
+    events.forEach(ev => {
+      Object.entries(OPERATOR_TRIADS).forEach(([key, triad]) => {
+        if (triad.ops.includes(ev.op)) {
+          stats[key].count++;
+          stats[key].ops[ev.op] = (stats[key].ops[ev.op] || 0) + 1;
+        }
+      });
+    });
+    return stats;
+  }, [events]);
+
+  const toggle = (id) => setExpanded(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleJson = (id) => setJsonExpanded(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  if (loading) return <div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}><Spin s={28}/></div>;
+
+  return <div className="anim-up" style={{maxWidth:1060,margin:'0 auto'}}>
+    {/* Header */}
+    <div style={{marginBottom:24}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+        <I n="layers" s={20} c="var(--purple)"/>
+        <h2 style={{fontFamily:'var(--serif)',fontSize:24,fontWeight:700,letterSpacing:'-0.02em'}}>Event Stream</h2>
+        <span className="tag tag-purple">CHOREO</span>
+      </div>
+      <p style={{color:'var(--tx-1)',fontSize:13,lineHeight:1.6}}>
+        Operations displayed in Choreo's EO grammar: <span style={{fontFamily:'var(--mono)',color:'var(--purple)',fontSize:12}}>op / target / context / frame</span>.
+        Nine operators, three triads, append-only log with derived projections.
+      </p>
+    </div>
+
+    {/* Operator Triads Overview */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
+      {Object.entries(triadStats).map(([key, triad]) => (
+        <div key={key} className="card choreo-triad-card" onClick={() => setFilter(f => ({...f, triad: f.triad === key ? 'all' : key}))}
+          style={{padding:14,cursor:'pointer',borderColor:filter.triad===key?`var(--${triad.color})`:'var(--border-0)',transition:'border-color .2s'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <span style={{fontSize:10,fontFamily:'var(--mono)',fontWeight:600,color:`var(--${triad.color})`,letterSpacing:'.06em'}}>{triad.label.toUpperCase()}</span>
+            <span style={{fontSize:18,fontWeight:700,color:triad.count>0?`var(--${triad.color})`:'var(--tx-3)'}}>{triad.count}</span>
+          </div>
+          <div style={{fontSize:10,color:'var(--tx-2)',marginBottom:8}}>{triad.desc}</div>
+          <div style={{display:'flex',gap:4}}>
+            {Object.entries(triad.ops).map(([op, count]) => (
+              <div key={op} style={{flex:1,textAlign:'center',padding:'4px 0',borderRadius:'var(--r)',
+                background:`var(--${OP_COLORS[op]||'blue'}-dim)`,border:`1px solid var(--${OP_COLORS[op]||'blue'})18`}}>
+                <div style={{fontSize:9,fontFamily:'var(--mono)',fontWeight:600,color:`var(--${OP_COLORS[op]||'blue'})`}}>{op}</div>
+                <div style={{fontSize:11,fontWeight:700,color:count>0?'var(--tx-0)':'var(--tx-3)'}}>{count}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {/* View mode toggle + filters */}
+    <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+      <div className="tabs" style={{marginBottom:0,flex:'none'}}>
+        {[{id:'stream',label:'Stream'},{id:'table',label:'Table'},{id:'triads',label:'Triads'}].map(m =>
+          <div key={m.id} className={`tab${viewMode===m.id?' active':''}`} onClick={()=>setViewMode(m.id)}
+            style={{padding:'6px 14px',fontSize:11.5}}>{m.label}</div>
+        )}
+      </div>
+      <select value={filter.roomType} onChange={e=>setFilter({...filter,roomType:e.target.value})} style={{width:'auto',padding:'5px 8px',fontSize:11}}>
+        <option value="all">All Rooms</option>
+        {['vault','bridge','roster','org','schema','metrics','network','client_record','team'].map(t=><option key={t} value={t}>{t}</option>)}
+      </select>
+      <select value={filter.operator} onChange={e=>setFilter({...filter,operator:e.target.value})} style={{width:'auto',padding:'5px 8px',fontSize:11}}>
+        <option value="all">All Operators</option>
+        {OPERATORS.map(op=><option key={op} value={op}>{op} — {OP_DESCRIPTIONS[op]?.verb}</option>)}
+      </select>
+      <select value={filter.epistemic} onChange={e=>setFilter({...filter,epistemic:e.target.value})} style={{width:'auto',padding:'5px 8px',fontSize:11}}>
+        <option value="all">All Epistemic</option><option value="GIVEN">GIVEN</option><option value="MEANT">MEANT</option>
+      </select>
+      <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
+        <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>LIVE</span>
+        <Toggle on={autoRefresh} onChange={()=>setAutoRefresh(!autoRefresh)}/>
+        <button onClick={loadEvents} className="b-gho b-xs"><I n="refresh-cw" s={10}/></button>
+      </div>
+    </div>
+    <div style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)',marginBottom:10}}>
+      {filtered.length} operation{filtered.length!==1?'s':''} of {events.length} total
+      {filter.triad!=='all'&&<span> · triad: <span style={{color:`var(--${OPERATOR_TRIADS[filter.triad]?.color||'purple'})`}}>{OPERATOR_TRIADS[filter.triad]?.label}</span></span>}
+    </div>
+
+    {/* ═══ STREAM VIEW ═══ */}
+    {viewMode==='stream'&&<div style={{display:'flex',flexDirection:'column',gap:3}}>
+      {filtered.length===0&&<div className="card" style={{textAlign:'center',padding:'30px 20px',borderStyle:'dashed'}}><I n="layers" s={24} c="var(--tx-3)"/><p style={{color:'var(--tx-3)',marginTop:8,fontSize:12}}>No operations match filters</p></div>}
+      {filtered.slice(0,150).map((ev, idx) => {
+        const choreo = toChoreoOp(ev);
+        const isExp = expanded.has(ev.id);
+        const isJsonExp = jsonExpanded.has(ev.id);
+        const opC = OP_COLORS[ev.op] || 'blue';
+        const rmC = ROOM_COLORS[ev.roomInfo.type] || 'orange';
+        const triadKey = Object.entries(OPERATOR_TRIADS).find(([, t]) => t.ops.includes(ev.op))?.[0];
+        const triadColor = triadKey ? OPERATOR_TRIADS[triadKey].color : 'purple';
+        const seqId = filtered.length - idx;
+        return <div key={ev.id||idx} className="choreo-op-row" style={{background:'var(--bg-2)',border:'1px solid var(--border-0)',borderRadius:'var(--r)',overflow:'hidden'}}>
+          {/* Operation header row */}
+          <div onClick={()=>toggle(ev.id)} style={{padding:'8px 12px',display:'flex',alignItems:'center',gap:6,cursor:'pointer',transition:'background .1s'}}
+            onMouseEnter={e=>e.currentTarget.style.background='var(--bg-3)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+            <span style={{fontSize:9,fontFamily:'var(--mono)',color:'var(--tx-3)',minWidth:28,textAlign:'right'}}>{seqId}</span>
+            <div style={{width:2,height:16,borderRadius:1,background:`var(--${triadColor})`,flexShrink:0,opacity:.6}}/>
+            <span className={`tag tag-${opC}`} style={{fontSize:9.5,minWidth:30,textAlign:'center',fontFamily:'var(--mono)'}}>{ev.op}</span>
+            <span style={{fontSize:10,color:`var(--${triadColor})`,fontFamily:'var(--mono)',minWidth:22}}>{OP_DESCRIPTIONS[ev.op]?.verb?.slice(0,5)}</span>
+            <span className={`tag tag-${rmC}`} style={{fontSize:8.5}}>{ev.roomInfo.type}</span>
+            <span className={`tag ${ev.epistemic==='GIVEN'?'tag-teal':'tag-gold'}`} style={{fontSize:8.5}}>{ev.epistemic}</span>
+            <span style={{fontSize:11.5,fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.label}</span>
+            <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.desc}</span>
+            <span style={{fontSize:8.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{ev.ts?new Date(ev.ts).toLocaleTimeString():''}</span>
+            <I n={isExp?'x':'chevR'} s={10} c="var(--tx-3)"/>
+          </div>
+
+          {/* Expanded: Choreo operation grammar */}
+          {isExp&&<div className="anim-in" style={{borderTop:'1px solid var(--border-0)',background:'var(--bg-1)'}}>
+            {/* Four-column: op / target / context / frame */}
+            <div style={{display:'grid',gridTemplateColumns:'100px 1fr 1fr 1fr',gap:0,fontSize:11}}>
+              {/* op */}
+              <div style={{padding:'10px 12px',borderRight:'1px solid var(--border-0)'}}>
+                <span className="section-label" style={{fontSize:8}}>OPERATOR</span>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:`var(--${opC})`}}/>
+                  <span style={{fontFamily:'var(--mono)',fontWeight:700,fontSize:16,color:`var(--${opC})`}}>{choreo.op}</span>
+                </div>
+                <div style={{fontSize:9.5,color:'var(--tx-2)',marginTop:4}}>{OP_DESCRIPTIONS[choreo.op]?.desc}</div>
+                <div style={{marginTop:6}}>
+                  <span style={{fontSize:8,fontFamily:'var(--mono)',color:`var(--${triadColor})`,padding:'1px 5px',
+                    background:`var(--${triadColor}-dim)`,borderRadius:3}}>{OPERATOR_TRIADS[triadKey]?.label}</span>
+                </div>
+                <div style={{marginTop:6,fontSize:8.5,color:'var(--tx-3)'}}>
+                  Absence: {ABSENCE_MAP[choreo.op]?.label}
+                </div>
+              </div>
+              {/* target */}
+              <div style={{padding:'10px 12px',borderRight:'1px solid var(--border-0)'}}>
+                <span className="section-label" style={{fontSize:8}}>TARGET</span>
+                <pre style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-all',lineHeight:1.5,maxHeight:120,overflow:'auto'}}>
+{JSON.stringify(choreo.target, null, 2)}</pre>
+              </div>
+              {/* context */}
+              <div style={{padding:'10px 12px',borderRight:'1px solid var(--border-0)'}}>
+                <span className="section-label" style={{fontSize:8}}>CONTEXT</span>
+                <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:3}}>
+                  {Object.entries(choreo.context).map(([k,v]) => (
+                    <div key={k} style={{display:'flex',gap:6,alignItems:'baseline'}}>
+                      <span style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--tx-3)',minWidth:50}}>{k}:</span>
+                      <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',wordBreak:'break-all'}}>{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* frame */}
+              <div style={{padding:'10px 12px'}}>
+                <span className="section-label" style={{fontSize:8}}>FRAME</span>
+                <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:3}}>
+                  {Object.entries(choreo.frame).map(([k,v]) => (
+                    <div key={k} style={{display:'flex',gap:6,alignItems:'baseline'}}>
+                      <span style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--tx-3)',minWidth:60}}>{k}:</span>
+                      {k==='epistemic'
+                        ? <span className={`tag ${v==='given'?'tag-teal':'tag-gold'}`} style={{fontSize:8}}>{v.toUpperCase()}</span>
+                        : k==='confidence'
+                        ? <span style={{fontFamily:'var(--mono)',fontSize:10,color:v>=0.8?'var(--green)':v>=0.5?'var(--gold)':'var(--red)'}}>{v}</span>
+                        : <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',wordBreak:'break-all'}}>{String(v)}</span>
+                      }
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Metadata row */}
+            <div style={{borderTop:'1px solid var(--border-0)',padding:'8px 12px',display:'flex',gap:16,flexWrap:'wrap',fontSize:10,color:'var(--tx-2)'}}>
+              <span><span style={{color:'var(--tx-3)'}}>event_type:</span> <span style={{fontFamily:'var(--mono)'}}>{ev.type}</span></span>
+              <span><span style={{color:'var(--tx-3)'}}>sender:</span> <span style={{fontFamily:'var(--mono)'}}>{ev.sender}</span></span>
+              <span><span style={{color:'var(--tx-3)'}}>room:</span> <span style={{fontFamily:'var(--mono)'}}>{ev.roomId?.slice(0,24)}...</span></span>
+              <span><span style={{color:'var(--tx-3)'}}>ts:</span> <span style={{fontFamily:'var(--mono)'}}>{ev.ts?new Date(ev.ts).toISOString():'—'}</span></span>
+              <span onClick={()=>toggleJson(ev.id)} style={{cursor:'pointer',color:'var(--purple)',fontFamily:'var(--mono)',userSelect:'none'}}>
+                {isJsonExp?'hide':'show'} raw JSON
+              </span>
+            </div>
+
+            {/* Raw JSON (Choreo format) */}
+            {isJsonExp&&<div style={{borderTop:'1px solid var(--border-0)',padding:'10px 12px',background:'var(--bg-0)'}}>
+              <pre style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',whiteSpace:'pre-wrap',wordBreak:'break-all',lineHeight:1.5,maxHeight:300,overflow:'auto'}}>
+{JSON.stringify({ op: choreo.op, target: choreo.target, context: choreo.context, frame: choreo.frame, _meta: { id: ev.id, ts: ev.ts ? new Date(ev.ts).toISOString() : null, sender: ev.sender, room: ev.roomId, matrix_type: ev.type } }, null, 2)}</pre>
+            </div>}
+          </div>}
+        </div>;
+      })}
+    </div>}
+
+    {/* ═══ TABLE VIEW ═══ */}
+    {viewMode==='table'&&<div style={{overflowX:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:'var(--mono)'}}>
+        <thead>
+          <tr style={{borderBottom:'2px solid var(--border-1)'}}>
+            {['#','OP','TABLE','EPISTEMIC','TARGET','CONTEXT SOURCE','AUTHORITY','CONF','TIME'].map(h=>
+              <th key={h} style={{padding:'8px 6px',textAlign:'left',fontSize:9,fontWeight:600,color:'var(--tx-2)',letterSpacing:'.06em',whiteSpace:'nowrap'}}>{h}</th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.length===0&&<tr><td colSpan={9} style={{padding:20,textAlign:'center',color:'var(--tx-3)'}}>No operations match filters</td></tr>}
+          {filtered.slice(0,200).map((ev, idx) => {
+            const choreo = toChoreoOp(ev);
+            const opC = OP_COLORS[ev.op]||'blue';
+            const seqId = filtered.length - idx;
+            return <tr key={ev.id||idx} style={{borderBottom:'1px solid var(--border-0)'}}
+              onMouseEnter={e=>e.currentTarget.style.background='var(--bg-2)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+              <td style={{padding:'6px',color:'var(--tx-3)',fontSize:9}}>{seqId}</td>
+              <td style={{padding:'6px'}}><span className={`tag tag-${opC}`} style={{fontSize:9,fontFamily:'var(--mono)'}}>{ev.op}</span></td>
+              <td style={{padding:'6px',color:'var(--tx-1)'}}>{choreo.context.table}</td>
+              <td style={{padding:'6px'}}><span className={`tag ${ev.epistemic==='GIVEN'?'tag-teal':'tag-gold'}`} style={{fontSize:8.5}}>{choreo.frame.epistemic}</span></td>
+              <td style={{padding:'6px',color:'var(--tx-1)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.desc||ev.label}</td>
+              <td style={{padding:'6px',color:'var(--tx-2)'}}>{choreo.context.source}</td>
+              <td style={{padding:'6px',color:'var(--tx-2)',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{choreo.frame.authority}</td>
+              <td style={{padding:'6px',color:choreo.frame.confidence>=0.8?'var(--green)':choreo.frame.confidence>=0.5?'var(--gold)':'var(--red)'}}>{choreo.frame.confidence}</td>
+              <td style={{padding:'6px',color:'var(--tx-3)',fontSize:9,whiteSpace:'nowrap'}}>{ev.ts?new Date(ev.ts).toLocaleTimeString():''}</td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </div>}
+
+    {/* ═══ TRIADS VIEW ═══ */}
+    {viewMode==='triads'&&<div style={{display:'flex',flexDirection:'column',gap:16}}>
+      {Object.entries(OPERATOR_TRIADS).map(([triadKey, triad]) => {
+        const triadEvents = filtered.filter(ev => triad.ops.includes(ev.op));
+        return <div key={triadKey} className="card" style={{padding:0,overflow:'hidden',borderColor:`var(--${triad.color})20`}}>
+          <div style={{padding:'12px 16px',background:`var(--${triad.color}-dim)`,borderBottom:`1px solid var(--${triad.color})20`,
+            display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div>
+              <span style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:`var(--${triad.color})`}}>{triad.label.toUpperCase()} TRIAD</span>
+              <span style={{fontSize:11,color:'var(--tx-2)',marginLeft:10}}>{triad.desc}</span>
+            </div>
+            <span style={{fontFamily:'var(--mono)',fontSize:14,fontWeight:700,color:`var(--${triad.color})`}}>{triadEvents.length}</span>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:0}}>
+            {triad.ops.map((op, oi) => {
+              const opEvents = triadEvents.filter(ev => ev.op === op);
+              return <div key={op} style={{borderRight:oi<2?'1px solid var(--border-0)':'none',padding:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                  <div style={{width:6,height:6,borderRadius:'50%',background:`var(--${OP_COLORS[op]||'blue'})`}}/>
+                  <span style={{fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:`var(--${OP_COLORS[op]||'blue'})`}}>{op}</span>
+                  <span style={{fontSize:10,color:'var(--tx-2)'}}>{OP_DESCRIPTIONS[op]?.verb}</span>
+                  <span style={{marginLeft:'auto',fontFamily:'var(--mono)',fontSize:11,fontWeight:600,color:'var(--tx-1)'}}>{opEvents.length}</span>
+                </div>
+                <div style={{fontSize:9,color:'var(--tx-3)',marginBottom:8}}>{OP_DESCRIPTIONS[op]?.desc}</div>
+                <div style={{fontSize:8.5,color:'var(--tx-3)',fontFamily:'var(--mono)',marginBottom:6}}>
+                  Absence: {ABSENCE_MAP[op]?.label} — {ABSENCE_MAP[op]?.desc}
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:2,maxHeight:180,overflow:'auto'}}>
+                  {opEvents.slice(0,15).map((ev,i) => {
+                    const rmC = ROOM_COLORS[ev.roomInfo.type]||'orange';
+                    return <div key={ev.id||i} style={{padding:'4px 6px',borderRadius:3,background:'var(--bg-3)',display:'flex',alignItems:'center',gap:4,fontSize:10}}>
+                      <span className={`tag tag-${rmC}`} style={{fontSize:7.5,padding:'0px 4px'}}>{ev.roomInfo.type}</span>
+                      <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--tx-1)'}}>{ev.desc||ev.label}</span>
+                      <span style={{fontSize:8,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{ev.ts?new Date(ev.ts).toLocaleTimeString():''}</span>
+                    </div>;
+                  })}
+                  {opEvents.length===0&&<div style={{fontSize:10,color:'var(--tx-3)',fontStyle:'italic',padding:4}}>No operations</div>}
+                  {opEvents.length>15&&<div style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)',padding:4}}>+{opEvents.length-15} more</div>}
+                </div>
+              </div>;
+            })}
+          </div>
+        </div>;
+      })}
+    </div>}
+
+    {/* Choreo reference footer */}
+    <div style={{marginTop:20,padding:'12px 16px',background:'var(--bg-2)',border:'1px solid var(--border-0)',borderRadius:'var(--r)',
+      display:'flex',alignItems:'center',gap:10,fontSize:11,color:'var(--tx-2)'}}>
+      <I n="layers" s={14} c="var(--purple)"/>
+      <span>Aligned with <span style={{fontFamily:'var(--mono)',color:'var(--purple)',fontWeight:600}}>Choreo</span> — EO data store.
+        Nine operators, three triads, append-only log. Operations are facts.</span>
+    </div>
+  </div>;
+};
+
 /* ═══════════════════ WELCOME / INVITATION SCREEN ═══════════════════ */
 
 const WelcomeScreen = ({onContinue}) => (
@@ -7462,7 +7910,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
           {id:'observations',icon:'clipboard',label:'Observations'},
           {id:'resources',icon:'layers',label:`My Resources${myResources.length?` (${myResources.length})`:''}`},
           {id:'providers',icon:'users',label:'People & Teams'},{id:'records',icon:'shield',label:'My Records'},
-          {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'}
+          {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'},
+          {id:'event-stream',icon:'layers',label:'Event Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null);if(item.id!=='inbox')setInboxConvo(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:view===item.id&&!activeBridge?'var(--bg-4)':'transparent',
@@ -8110,6 +8559,9 @@ const ClientApp = ({session, onLogout, showToast}) => {
 
       {/* ACTIVITY STREAM */}
       {view==='activity'&&!activeBridge&&<ActivityStream session={session}/>}
+
+      {/* EVENT STREAM (Choreo-aligned) */}
+      {view==='event-stream'&&!activeBridge&&<ChoreoEventStream session={session}/>}
     </div>
 
     {/* EDIT VAULT MODAL */}
@@ -8229,7 +8681,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [metrics, setMetrics] = useState([]);
   const [networkMembers, setNetworkMembers] = useState([]);
   const [activeCase, setActiveCase] = useState(null);
-  const [view, setView] = useState('dashboard'); // dashboard|inbox|case|metrics|schema|resources|network|activity|staff|org-settings|org-inbox
+  const [view, setView] = useState('dashboard'); // dashboard|inbox|case|metrics|schema|resources|network|activity|event-stream|staff|org-settings|org-inbox
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState('');
@@ -9667,7 +10119,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           {id:'teams',icon:'users',label:`Teams${teams.length?` (${teams.length})`:''}`},
           {id:'schema',icon:'grid',label:'Schema',badge:schemaNotifCount,badgeClass:'nav-badge-teal'},
           {id:'resources',icon:'layers',label:`Resources${resourceTypes.length?` (${resourceTypes.length})`:''}`},
-          {id:'activity',icon:'zap',label:'Activity Stream',badge:activityNotifCount,badgeClass:'nav-badge-teal'}
+          {id:'activity',icon:'zap',label:'Activity Stream',badge:activityNotifCount,badgeClass:'nav-badge-teal'},
+          {id:'event-stream',icon:'layers',label:'Event Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null);if(item.id!=='inbox'){setInboxConvo(null);setInboxMessages([])}}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:view===item.id&&!activeCase?'var(--bg-4)':'transparent',
@@ -11117,6 +11570,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
 
       {/* ACTIVITY */}
       {view==='activity'&&<ActivityStream session={session}/>}
+
+      {/* EVENT STREAM (Choreo-aligned) */}
+      {view==='event-stream'&&<ChoreoEventStream session={session}/>}
     </div>
 
     {/* DISCOVER CLIENT MODAL */}
