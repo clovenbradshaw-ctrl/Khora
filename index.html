@@ -1152,11 +1152,48 @@ class KhoraService {
   }
 
   async restoreSession() {
+    const raw = localStorage.getItem('khora_session');
+    if (!raw) return null;
+    let saved;
+    try { saved = JSON.parse(raw); } catch { localStorage.removeItem('khora_session'); return null; }
+    const { homeserver, accessToken, userId, deviceId } = saved;
+    if (!homeserver || !accessToken || !userId || !deviceId) return null;
+
+    // Step 1: Validate token with the homeserver (lightweight /whoami check)
+    // Retry transient network failures with exponential backoff before giving up
+    let tokenValid = false;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const resp = await fetch(`${homeserver}/_matrix/client/v3/account/whoami`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        if (resp.ok) { tokenValid = true; break; }
+        if (resp.status === 401 || resp.status === 403) {
+          // Token expired or revoked — clear saved session, require fresh login
+          console.warn('Session token expired or revoked (HTTP ' + resp.status + ')');
+          localStorage.removeItem('khora_session');
+          return { expired: true };
+        }
+        // Server error (5xx) — treat as transient, retry
+        if (resp.status >= 500) { await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt))); continue; }
+        // Other client error — don't retry
+        break;
+      } catch (e) {
+        // Network error (offline, DNS failure, etc.) — retry with backoff
+        console.warn('Session restore network error (attempt ' + (attempt+1) + '):', e.message);
+        if (attempt < 3) { await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt))); continue; }
+        // All retries exhausted — keep the saved session intact for next app load
+        // but return a network error so the UI can offer retry
+        return { networkError: true, message: e.message };
+      }
+    }
+    if (!tokenValid) {
+      // Retries exhausted on server errors — preserve session for next load
+      return { networkError: true, message: 'Server unavailable' };
+    }
+
+    // Step 2: Token is valid — initialize the Matrix client and sync
     try {
-      const raw = localStorage.getItem('khora_session');
-      if (!raw) return null;
-      const { homeserver, accessToken, userId, deviceId } = JSON.parse(raw);
-      if (!homeserver || !accessToken || !userId || !deviceId) return null;
       this._baseUrl = homeserver;
       await LocalVaultCrypto.deriveKey(userId, accessToken, deviceId);
       if (typeof matrixcs !== 'undefined') {
@@ -1165,7 +1202,7 @@ class KhoraService {
         await this.client.startClient({ initialSyncLimit: 30 });
         await new Promise((resolve, reject) => {
           if (this.client.isInitialSyncComplete()) return resolve();
-          const timeout = setTimeout(() => reject(new Error('Sync timed out')), 60000);
+          const timeout = setTimeout(() => reject(new Error('Sync timed out')), 90000);
           this.client.on('sync', (state, prev, data) => {
             if (state === 'PREPARED') { clearTimeout(timeout); resolve(); }
             else if (state === 'ERROR') { clearTimeout(timeout); reject(new Error(data?.error?.message || 'Sync failed')); }
@@ -1175,11 +1212,13 @@ class KhoraService {
       this._userId = userId; this._token = accessToken;
       return { userId };
     } catch (e) {
-      console.warn('Session restore failed:', e.message);
-      localStorage.removeItem('khora_session');
+      console.warn('Session restore sync failed:', e.message);
+      // Sync failure after valid token — keep session, allow retry
+      // Clean up partial client state but preserve localStorage
+      if (this.client) { try { this.client.stopClient(); } catch {} }
       this.client = null; this._token = null; this._userId = null;
       LocalVaultCrypto.clear();
-      return null;
+      return { networkError: true, message: e.message };
     }
   }
 
@@ -12582,7 +12621,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
 
 /* ═══════════════════ MAIN APP ═══════════════════ */
 const App = () => {
-  const [welcomed, setWelcomed] = useState(false);
+  const [welcomed, setWelcomed] = useState(() => { try { return localStorage.getItem('khora_welcomed') === '1'; } catch { return false; } });
   const [session, setSession] = useState(null);
   const [availableContexts, setAvailableContexts] = useState([]);
   const [activeContext, setActiveContext] = useState(null);
@@ -12590,6 +12629,7 @@ const App = () => {
   const [toast, setToast] = useState(null);
   const [webhookData, setWebhookData] = useState(null);
   const [restoring, setRestoring] = useState(true);
+  const [restoreError, setRestoreError] = useState(null); // {type:'expired'|'network', message?:string}
   const [detectingRoles, setDetectingRoles] = useState(false);
 
   const showToast = (msg, type='info') => setToast({msg, type, k:Date.now()});
@@ -12638,22 +12678,28 @@ const App = () => {
   };
 
   // Attempt to restore previous session from localStorage on mount
-  React.useEffect(() => {
-    (async () => {
+  const attemptRestore = React.useCallback(async () => {
+    setRestoring(true); setRestoreError(null);
+    try {
+      const restored = await svc.restoreSession();
+      if (!restored) { setRestoring(false); return; }
+      if (restored.expired) {
+        setRestoreError({ type: 'expired' }); setRestoring(false); return;
+      }
+      if (restored.networkError) {
+        setRestoreError({ type: 'network', message: restored.message }); setRestoring(false); return;
+      }
+      setSession(restored);
+      // Hydrate webhook data in background
       try {
-        const restored = await svc.restoreSession();
-        if (restored) {
-          setSession(restored);
-          // Hydrate webhook data in background
-          try {
-            const tables = await hydrateFromWebhooks(svc._token);
-            setWebhookData(tables);
-          } catch (e) { console.warn('Webhook hydration failed:', e.message); }
-          await detectContexts();
-        }
-      } catch {} finally { setRestoring(false); }
-    })();
+        const tables = await hydrateFromWebhooks(svc._token);
+        setWebhookData(tables);
+      } catch (e) { console.warn('Webhook hydration failed:', e.message); }
+      await detectContexts();
+    } catch { } finally { setRestoring(false); }
   }, [detectContexts]);
+
+  React.useEffect(() => { attemptRestore(); }, [attemptRestore]);
 
   const handleLogin = async (s) => {
     setSession(s);
@@ -12671,15 +12717,44 @@ const App = () => {
   if (restoring || detectingRoles) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
     <div style={{textAlign:'center'}}><Spin s={32}/><p style={{color:'var(--tx-2)',fontSize:13,marginTop:16}}>{detectingRoles ? 'Detecting roles from room membership…' : 'Restoring session…'}</p></div>
   </div>;
-  if (!welcomed && !session) return <WelcomeScreen onContinue={() => setWelcomed(true)}/>;
+
+  // Network error during restore — offer retry without wiping the saved session
+  if (restoreError?.type === 'network' && !session) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div className="anim-up" style={{width:'100%',maxWidth:400,padding:20}}>
+      <div style={{background:'var(--bg-1)',border:'1px solid var(--border-0)',borderRadius:'var(--r-lg)',padding:'36px 32px',textAlign:'center'}}>
+        <div style={{width:48,height:48,borderRadius:'50%',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',margin:'0 auto 16px'}}><I n="wifi-off" s={22}/></div>
+        <h2 style={{fontSize:18,fontWeight:700,marginBottom:8}}>Connection issue</h2>
+        <p style={{color:'var(--tx-2)',fontSize:13,lineHeight:1.6,marginBottom:20}}>Could not reach the homeserver to restore your session. Your login is saved and will reconnect automatically.</p>
+        {restoreError.message && <p style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--tx-3)',marginBottom:16}}>{restoreError.message}</p>}
+        <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+          <button className="b-pri" onClick={() => attemptRestore()} style={{padding:'10px 24px',fontSize:13}}><I n="refresh-cw" s={14}/> Retry</button>
+          <button className="b-gho" onClick={() => { setRestoreError(null); }} style={{padding:'10px 24px',fontSize:13}}>Sign in manually</button>
+        </div>
+      </div>
+    </div>
+  </div>;
+
+  // Token expired — inform user and route to login
+  if (restoreError?.type === 'expired' && !session) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+    <div className="anim-up" style={{width:'100%',maxWidth:400,padding:20}}>
+      <div style={{background:'var(--bg-1)',border:'1px solid var(--border-0)',borderRadius:'var(--r-lg)',padding:'36px 32px',textAlign:'center'}}>
+        <div style={{width:48,height:48,borderRadius:'50%',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',margin:'0 auto 16px'}}><I n="clock" s={22}/></div>
+        <h2 style={{fontSize:18,fontWeight:700,marginBottom:8}}>Session expired</h2>
+        <p style={{color:'var(--tx-2)',fontSize:13,lineHeight:1.6,marginBottom:20}}>Your previous session has expired. Please sign in again to continue.</p>
+        <button className="b-pri" onClick={() => setRestoreError(null)} style={{padding:'10px 28px',fontSize:13}}><I n="lock" s={14}/> Sign in</button>
+      </div>
+    </div>
+  </div>;
+
+  if (!welcomed && !session) return <WelcomeScreen onContinue={() => { setWelcomed(true); try { localStorage.setItem('khora_welcomed', '1'); } catch {} }}/>;
   if (!session) return <LoginScreen onLogin={handleLogin}/>;
   if (!activeContext) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
     <div style={{textAlign:'center'}}><Spin s={28}/><p style={{color:'var(--tx-2)',fontSize:13,marginTop:16}}>Detecting role context…</p></div>
   </div>;
 
   const handleLogout = async () => {
-    try { localStorage.removeItem('khora_session'); localStorage.removeItem('khora_active_context'); } catch {}
-    await svc.logout(); setSession(null); setAvailableContexts([]); setActiveContext(null); setDetectedRoles(null); setWebhookData(null);
+    try { localStorage.removeItem('khora_session'); localStorage.removeItem('khora_active_context'); localStorage.removeItem('khora_welcomed'); } catch {}
+    await svc.logout(); setSession(null); setAvailableContexts([]); setActiveContext(null); setDetectedRoles(null); setWebhookData(null); setWelcomed(false);
   };
 
   return <>
