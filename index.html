@@ -7327,7 +7327,7 @@ const WelcomeScreen = ({onContinue}) => (
 /* ═══════════════════ LOGIN ═══════════════════ */
 const LoginScreen = ({onLogin}) => {
   const [mode,setMode] = useState('login'); // login | register
-  const [hs,setHs] = useState('matrix.org'); const [user,setUser] = useState(''); const [pass,setPass] = useState('');
+  const [hs,setHs] = useState('hyphae.social'); const [user,setUser] = useState(''); const [pass,setPass] = useState('');
   const [loading,setLoading] = useState(false); const [err,setErr] = useState('');
 
   // Extract host server from username if present (e.g. @user:matrix.org -> matrix.org)
@@ -7372,13 +7372,13 @@ const LoginScreen = ({onLogin}) => {
         </div>
 
         {mode==='register'&&<div style={{background:'var(--teal-dim)',border:'1px solid rgba(62,201,176,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:16,fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
-          <strong style={{color:'var(--teal)'}}>Pick any Matrix homeserver</strong> — we recommend <strong style={{color:'var(--tx-0)'}}>matrix.org</strong> for a free, general-purpose account. If your organization runs its own server, enter that homeserver URL instead.
+          <strong style={{color:'var(--teal)'}}>Choose a Matrix homeserver</strong> — we recommend <strong style={{color:'var(--tx-0)'}}>hyphae.social</strong> for a free account. You can also pick from the other servers below, or browse <a href="https://www.hello-matrix.net/public_servers.php" target="_blank" rel="noopener noreferrer" style={{color:'var(--teal)',textDecoration:'underline'}}>more public servers</a>.
         </div>}
 
         <form onSubmit={go}>
           <div style={{marginBottom:14}}><span className="section-label">USERNAME</span><input value={user} onChange={e=>setUser(e.target.value)} placeholder={mode==='register'?'choose a username':'@you:matrix.org'} autoComplete="username"/></div>
           <div style={{marginBottom:14}}><span className="section-label">PASSWORD</span><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" autoComplete={mode==='register'?'new-password':'current-password'}/></div>
-          {!hideHs&&<div style={{marginBottom:14}}><span className="section-label">HOMESERVER</span><input value={hs} onChange={e=>setHs(e.target.value)} placeholder="matrix.org"/></div>}
+          {!hideHs&&<div style={{marginBottom:14}}><span className="section-label">HOMESERVER</span>{mode==='register'?<select value={hs} onChange={e=>setHs(e.target.value)} style={{width:'100%',padding:'8px 10px',fontSize:13,background:'var(--bg-2)',color:'var(--tx-0)',border:'1px solid var(--border-0)',borderRadius:'var(--r)'}}><option value="hyphae.social">hyphae.social (recommended)</option><option value="matrix.org">matrix.org</option><option value="tchncs.de">tchncs.de</option><option value="envs.net">envs.net</option><option value="matrix.im">matrix.im</option></select>:<input value={hs} onChange={e=>setHs(e.target.value)} placeholder="matrix.org"/>}</div>}
           {err&&<div style={{background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.2)',borderRadius:'var(--r)',padding:'9px 14px',fontSize:12.5,color:'var(--red)',marginBottom:16}}>{err}</div>}
           <button type="submit" className="b-pri" disabled={loading} style={{width:'100%',padding:12,fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
             {loading?<Spin s={16}/>:<I n="lock" s={16}/>} {loading?'Connecting...':(mode==='register'?'Create Account & Connect':'Connect')}
