@@ -871,6 +871,7 @@ const EVT = {
   RESOURCE_POLICY:     `${NS}.resource.policy`,      // allocation rules / constraints
   RESOURCE_OPACITY:    `${NS}.resource.opacity`,     // per-relation visibility controls
   RESOURCE_VAULT:      `${NS}.resource.vault_record`,// client vault shadow record
+  RESOURCE_PERM:       `${NS}.resource.permissions`, // per-type permission grants
 };
 
 /* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */
@@ -1005,6 +1006,54 @@ const RESOURCE_DEDUP_STATUSES = ['confirmed', 'attested_non_additive', 'unresolv
 
 /** Dedup link types */
 const RESOURCE_DEDUP_LINK_TYPES = ['subset', 'same', 'overlaps'];
+
+/**
+ * Resource permission abilities. Each resource type carries a `permissions` object
+ * mapping these abilities to arrays of grants (role-based or user-specific).
+ *
+ * Grant shape: { type: 'role'|'user', id: string }
+ *   type:'role'  → id is an ORG_ROLE (e.g. 'admin', 'case_manager')
+ *   type:'user'  → id is a Matrix user ID (e.g. '@alice:matrix.org')
+ *
+ * Abilities:
+ *   controllers — can edit, delete, and configure the resource type
+ *   allocators  — can allocate this resource to clients
+ *   viewers     — can see this resource in the catalog (empty array = everyone)
+ */
+const RESOURCE_PERMISSION_ABILITIES = ['controllers', 'allocators', 'viewers'];
+
+const RESOURCE_PERMISSION_LABELS = {
+  controllers: 'Controllers',
+  allocators:  'Allocators',
+  viewers:     'Viewers',
+};
+
+const RESOURCE_PERMISSION_DESCRIPTIONS = {
+  controllers: 'Can edit, configure, and delete this resource type',
+  allocators:  'Can allocate this resource to clients',
+  viewers:     'Can see this resource in the catalog (empty = everyone)',
+};
+
+const RESOURCE_PERMISSION_ICONS = {
+  controllers: 'settings',
+  allocators:  'send',
+  viewers:     'eye',
+};
+
+const RESOURCE_PERMISSION_COLORS = {
+  controllers: 'gold',
+  allocators:  'blue',
+  viewers:     'teal',
+};
+
+/** Default permissions for a newly created resource type (creator is admin → full control) */
+function buildDefaultResourcePermissions() {
+  return {
+    controllers: [{ type: 'role', id: 'admin' }],
+    allocators:  [{ type: 'role', id: 'admin' }, { type: 'role', id: 'case_manager' }, { type: 'role', id: 'provider' }],
+    viewers:     [], // empty = everyone in the org
+  };
+}
 
 /* ═══════════════════ ROLE INFERENCE (MVP §Screen 1) ═══════════════════ */
 /* Roles are detected from room memberships — no account-type selector.
@@ -2478,6 +2527,72 @@ async function emitMetric(metricsRoom, clientId, observation, demographics, prog
   return metric;
 }
 
+/* ═══════════════════ RESOURCE PERMISSION UTILITIES ═══════════════════ */
+
+/**
+ * Check whether a user matches a permission grant.
+ * @param {string} userId  – Matrix user ID (e.g. '@alice:matrix.org')
+ * @param {string} userRole – org role (e.g. 'admin', 'case_manager')
+ * @param {Array} grants   – array of {type:'role'|'user', id:string}
+ * @returns {boolean}
+ */
+function matchesPermissionGrant(userId, userRole, grants) {
+  if (!grants || grants.length === 0) return false;
+  return grants.some(g => {
+    if (g.type === 'user') return g.id === userId;
+    if (g.type === 'role') return g.id === userRole;
+    return false;
+  });
+}
+
+/**
+ * Check whether a user has a specific permission ability on a resource type.
+ * @param {string} ability – one of RESOURCE_PERMISSION_ABILITIES
+ * @param {object} permissions – the resource type's permissions object
+ * @param {string} userId
+ * @param {string} userRole
+ * @returns {boolean}
+ */
+function hasResourcePermission(ability, permissions, userId, userRole) {
+  if (!permissions) return true; // no permissions set → unrestricted
+  const grants = permissions[ability];
+  // viewers: empty array means everyone can see
+  if (ability === 'viewers' && (!grants || grants.length === 0)) return true;
+  // controllers/allocators: empty means only admin
+  if (!grants || grants.length === 0) return userRole === 'admin';
+  return matchesPermissionGrant(userId, userRole, grants);
+}
+
+/**
+ * Check if user can view a resource type.
+ */
+function canViewResource(resourceType, userId, userRole) {
+  return hasResourcePermission('viewers', resourceType.permissions, userId, userRole);
+}
+
+/**
+ * Check if user can control (edit/delete/configure) a resource type.
+ */
+function canControlResource(resourceType, userId, userRole) {
+  return hasResourcePermission('controllers', resourceType.permissions, userId, userRole);
+}
+
+/**
+ * Check if user can allocate a resource type.
+ */
+function canAllocateResource(resourceType, userId, userRole) {
+  return hasResourcePermission('allocators', resourceType.permissions, userId, userRole);
+}
+
+/**
+ * Format a permission grant for display.
+ */
+function formatPermissionGrant(grant) {
+  if (grant.type === 'role') return ORG_ROLE_LABELS[grant.id] || grant.id;
+  if (grant.type === 'user') return grant.id;
+  return grant.id;
+}
+
 /* ═══════════════════ RESOURCE TRACKING SERVICE (§Resource Build) ═══════════════════
  * Core resource tracking infrastructure. Resources (beds, vouchers, funds, services) are
  * tracked across three levels — network, org, individual — using the existing room topology.
@@ -2603,6 +2718,18 @@ const ResourceService = {
       throw new Error('Network-level resource types require a propagation level');
     }
 
+    // Build permissions — merge caller-provided with defaults, add creator as explicit controller
+    const defaultPerms = buildDefaultResourcePermissions();
+    const permissions = typeData.permissions ? {
+      controllers: typeData.permissions.controllers || defaultPerms.controllers,
+      allocators:  typeData.permissions.allocators  || defaultPerms.allocators,
+      viewers:     typeData.permissions.viewers      || defaultPerms.viewers,
+    } : defaultPerms;
+    // Ensure creator is always a controller
+    if (svc.userId && !permissions.controllers.some(g => g.type === 'user' && g.id === svc.userId)) {
+      permissions.controllers.push({ type: 'user', id: svc.userId });
+    }
+
     const resourceType = {
       id: typeData.id || genResourceId('rtype'),
       name: typeData.name,
@@ -2615,6 +2742,7 @@ const ResourceService = {
       source: typeData.source || buildResourceSource(level, typeData.propagation),
       maturity: typeData.maturity || 'draft',
       constraints: typeData.constraints || null,
+      permissions,
     };
 
     // Validate category
@@ -2625,10 +2753,18 @@ const ResourceService = {
     // Write state event
     await svc.setState(roomId, EVT.RESOURCE_TYPE, resourceType, resourceType.id);
 
+    // Write permissions as separate state event for efficient lookups
+    await svc.setState(roomId, EVT.RESOURCE_PERM, {
+      resource_type_id: resourceType.id,
+      ...permissions,
+      updated_by: svc.userId,
+      updated_at: Date.now(),
+    }, resourceType.id);
+
     // Emit DES operation
     await emitOp(roomId, 'DES',
       { entity: resourceType.id, designation: resourceType.name },
-      { category: resourceType.category, unit: resourceType.unit, source_level: level },
+      { category: resourceType.category, unit: resourceType.unit, source_level: level, permissions },
       { type: roomType === 'network' ? 'network' : 'org', room: roomId, epistemic: 'GIVEN' }
     );
 
@@ -2638,10 +2774,16 @@ const ResourceService = {
   /**
    * Update an existing resource type. Emits ALT for each changed field.
    * If propagation level changes, requires adopted_via reference (governance action).
+   * Caller must have controller permission.
    */
-  async updateResourceType(roomId, typeId, changes, roomType) {
+  async updateResourceType(roomId, typeId, changes, roomType, callerRole) {
     const existing = await svc.getState(roomId, EVT.RESOURCE_TYPE, typeId);
     if (!existing) throw new Error(`Resource type ${typeId} not found`);
+
+    // Check controller permission
+    if (!canControlResource(existing, svc.userId, callerRole || 'admin')) {
+      throw new Error('You do not have controller permission on this resource type');
+    }
 
     // Check if propagation is changing (governance action)
     if (changes.source?.propagation && changes.source.propagation !== existing.source?.propagation) {
@@ -2665,6 +2807,53 @@ const ResourceService = {
     }
 
     return updated;
+  },
+
+  /**
+   * Update permissions on a resource type. Caller must be a current controller.
+   * Writes to both the resource type state and a dedicated RESOURCE_PERM state event.
+   */
+  async updateResourcePermissions(roomId, typeId, newPermissions, callerRole) {
+    const existing = await svc.getState(roomId, EVT.RESOURCE_TYPE, typeId);
+    if (!existing) throw new Error(`Resource type ${typeId} not found`);
+
+    // Only controllers can change permissions
+    if (!canControlResource(existing, svc.userId, callerRole || 'admin')) {
+      throw new Error('You do not have controller permission on this resource type');
+    }
+
+    // Merge with existing, validate structure
+    const permissions = {
+      controllers: newPermissions.controllers || existing.permissions?.controllers || [],
+      allocators:  newPermissions.allocators  || existing.permissions?.allocators  || [],
+      viewers:     newPermissions.viewers      || existing.permissions?.viewers     || [],
+    };
+
+    // Safety: ensure at least one controller exists
+    if (permissions.controllers.length === 0) {
+      permissions.controllers = [{ type: 'role', id: 'admin' }];
+    }
+
+    // Update the resource type
+    existing.permissions = permissions;
+    await svc.setState(roomId, EVT.RESOURCE_TYPE, existing, typeId);
+
+    // Update the dedicated permissions event
+    await svc.setState(roomId, EVT.RESOURCE_PERM, {
+      resource_type_id: typeId,
+      ...permissions,
+      updated_by: svc.userId,
+      updated_at: Date.now(),
+    }, typeId);
+
+    // Emit ALT for permissions change
+    await emitOp(roomId, 'ALT',
+      { field: 'resource_type.permissions', entity: typeId },
+      { permissions },
+      { type: 'org', room: roomId, epistemic: 'MEANT' }
+    );
+
+    return existing;
   },
 
   /**
@@ -2920,6 +3109,11 @@ const ResourceService = {
     const orgRoster = await svc.getState(orgRoomId, EVT.ORG_ROSTER);
     const staffEntry = orgRoster?.staff?.find(s => s.userId === svc.userId);
     const callerRole = staffEntry?.role || 'provider';
+
+    // Check allocator permission from resource type permissions
+    if (!canAllocateResource(resourceType, svc.userId, callerRole)) {
+      return { valid: false, violations: [{ check: 'allocator_permission', message: `Your role (${ORG_ROLE_LABELS[callerRole] || callerRole}) does not have allocator permission for "${resourceType.name}".` }] };
+    }
 
     const validation = validateAllocation(allocationData, resourceType, policies, existingAllocations, callerRole);
     if (!validation.valid) {
@@ -8776,7 +8970,13 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [resourceRelations, setResourceRelations] = useState([]); // org's relations to resource types
   const [resourceInventory, setResourceInventory] = useState({}); // { [relationId]: inventory object }
   const [createResourceModal, setCreateResourceModal] = useState(false);
-  const [resourceDraft, setResourceDraft] = useState({name:'',category:'general',unit:'unit',fungible:true,perishable:false,ttl_days:'',tags:''});
+  const [resourceDraft, setResourceDraft] = useState({name:'',category:'general',unit:'unit',fungible:true,perishable:false,ttl_days:'',tags:'',permissions:buildDefaultResourcePermissions()});
+  // ─── Resource permission management state ───
+  const [permModal, setPermModal] = useState(null); // resource type object or null
+  const [permDraft, setPermDraft] = useState({controllers:[],allocators:[],viewers:[]});
+  const [permGrantType, setPermGrantType] = useState('role'); // 'role' or 'user'
+  const [permGrantId, setPermGrantId] = useState('');
+  const [permGrantAbility, setPermGrantAbility] = useState('controllers');
   // ─── Resource allocation state (case-level) ───
   const [allocModal, setAllocModal] = useState(false);
   const [allocDraft, setAllocDraft] = useState({resource_type_id:'',quantity:1,notes:''});
@@ -9433,13 +9633,53 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         perishable: resourceDraft.perishable,
         ttl_days: resourceDraft.perishable && resourceDraft.ttl_days ? parseInt(resourceDraft.ttl_days) : null,
         tags: resourceDraft.tags ? resourceDraft.tags.split(',').map(t=>t.trim()).filter(Boolean) : [],
+        permissions: resourceDraft.permissions || buildDefaultResourcePermissions(),
       };
       await ResourceService.createResourceType(targetRoom, typeData, orgRoom ? 'org' : 'network');
       setCreateResourceModal(false);
-      setResourceDraft({name:'',category:'general',unit:'unit',fungible:true,perishable:false,ttl_days:'',tags:''});
+      setResourceDraft({name:'',category:'general',unit:'unit',fungible:true,perishable:false,ttl_days:'',tags:'',permissions:buildDefaultResourcePermissions()});
       showToast(`Resource type "${typeData.name}" created`,'success');
       await loadResources(orgRoom, networkRoom);
     } catch(e) { showToast('Error creating resource: '+e.message,'error'); }
+  };
+
+  // ─── Update resource permissions ───
+  const handleSavePermissions = async () => {
+    if (!permModal || !orgRoom) return;
+    try {
+      await ResourceService.updateResourcePermissions(orgRoom, permModal.id, permDraft, orgRole);
+      setPermModal(null);
+      showToast(`Permissions updated for "${permModal.name}"`,'success');
+      await loadResources(orgRoom, networkRoom);
+    } catch(e) { showToast('Error updating permissions: '+e.message,'error'); }
+  };
+
+  const handleAddPermGrant = () => {
+    if (!permGrantId) return;
+    const grant = { type: permGrantType, id: permGrantId };
+    // Avoid duplicates
+    if (permDraft[permGrantAbility].some(g => g.type === grant.type && g.id === grant.id)) {
+      showToast('This grant already exists','warn');
+      return;
+    }
+    setPermDraft({...permDraft, [permGrantAbility]: [...permDraft[permGrantAbility], grant]});
+    setPermGrantId('');
+  };
+
+  const handleRemovePermGrant = (ability, index) => {
+    setPermDraft({...permDraft, [ability]: permDraft[ability].filter((_,i) => i !== index)});
+  };
+
+  const openPermModal = (rt) => {
+    setPermDraft({
+      controllers: rt.permissions?.controllers || [],
+      allocators: rt.permissions?.allocators || [],
+      viewers: rt.permissions?.viewers || [],
+    });
+    setPermGrantAbility('controllers');
+    setPermGrantType('role');
+    setPermGrantId('');
+    setPermModal(rt);
   };
 
   const handleEstablishRelation = async (resourceTypeId) => {
@@ -11483,23 +11723,27 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Resources</h2>
           <div style={{display:'flex',gap:6}}>
             <button onClick={()=>loadResources(orgRoom,networkRoom)} className="b-gho b-sm" style={{display:'flex',alignItems:'center',gap:4}}><I n="refresh-cw" s={12}/>Refresh</button>
-            {(orgRoom||networkRoom)&&<button onClick={()=>{setResourceDraft({name:'',category:'general',unit:'unit',fungible:true,perishable:false,ttl_days:'',tags:''});setCreateResourceModal(true)}} className="b-pri b-sm" style={{display:'flex',alignItems:'center',gap:4}}><I n="plus" s={12}/>New Resource Type</button>}
+            {(orgRoom||networkRoom)&&<button onClick={()=>{setResourceDraft({name:'',category:'general',unit:'unit',fungible:true,perishable:false,ttl_days:'',tags:'',permissions:buildDefaultResourcePermissions()});setCreateResourceModal(true)}} className="b-pri b-sm" style={{display:'flex',alignItems:'center',gap:4}}><I n="plus" s={12}/>New Resource Type</button>}
           </div>
         </div>
         <p style={{color:'var(--tx-1)',fontSize:12.5,marginBottom:24,lineHeight:1.6}}>Resource types define what your organization can allocate to {T.client_term_plural.toLowerCase()} — beds, vouchers, funds, services. Each resource has a category, unit of measure, and inventory tracking.</p>
 
         {/* Summary cards */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10,marginBottom:24}}>
-          {[
-            {l:'Total Types',v:resourceTypes.length,c:'teal',i:'layers'},
-            {l:'Relations',v:resourceRelations.length,c:'blue',i:'link'},
-            {l:'Categories',v:[...new Set(resourceTypes.map(r=>r.category))].length,c:'gold',i:'grid'},
-            {l:'Perishable',v:resourceTypes.filter(r=>r.perishable).length,c:'orange',i:'clock'},
-          ].map((s,i)=><div key={i} className="card" style={{padding:14}}><span className="section-label">{s.l.toUpperCase()}</span>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
-              <span style={{fontSize:18,fontWeight:700}}>{s.v}</span>
-              <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span></div></div>)}
-        </div>
+        {(()=>{
+          const visible = resourceTypes.filter(rt => canViewResource(rt, svc.userId, orgRole));
+          const controllable = resourceTypes.filter(rt => canControlResource(rt, svc.userId, orgRole));
+          return <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10,marginBottom:24}}>
+            {[
+              {l:'Visible Types',v:visible.length,c:'teal',i:'layers'},
+              {l:'You Control',v:controllable.length,c:'gold',i:'settings'},
+              {l:'Relations',v:resourceRelations.length,c:'blue',i:'link'},
+              {l:'Categories',v:[...new Set(visible.map(r=>r.category))].length,c:'green',i:'grid'},
+            ].map((s,i)=><div key={i} className="card" style={{padding:14}}><span className="section-label">{s.l.toUpperCase()}</span>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
+                <span style={{fontSize:18,fontWeight:700}}>{s.v}</span>
+                <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span></div></div>)}
+          </div>;
+        })()}
 
         {/* Resource types by category */}
         {resourceTypes.length===0?
@@ -11507,63 +11751,97 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             <div style={{width:48,height:48,borderRadius:'var(--r-lg)',background:'var(--teal-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--teal)',margin:'0 auto 16px'}}><I n="layers" s={24}/></div>
             <h3 style={{fontSize:16,fontWeight:700,marginBottom:8}}>No Resource Types Yet</h3>
             <p style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6,marginBottom:16}}>Resource types define the services and goods your organization can track and allocate. Create your first resource type to get started, or join a network to inherit shared resource definitions.</p>
-            {(orgRoom||networkRoom)&&<button onClick={()=>{setResourceDraft({name:'',category:'general',unit:'unit',fungible:true,perishable:false,ttl_days:'',tags:''});setCreateResourceModal(true)}} className="b-pri" style={{display:'flex',alignItems:'center',gap:4,margin:'0 auto'}}><I n="plus" s={13}/>Create Resource Type</button>}
+            {(orgRoom||networkRoom)&&<button onClick={()=>{setResourceDraft({name:'',category:'general',unit:'unit',fungible:true,perishable:false,ttl_days:'',tags:'',permissions:buildDefaultResourcePermissions()});setCreateResourceModal(true)}} className="b-pri" style={{display:'flex',alignItems:'center',gap:4,margin:'0 auto'}}><I n="plus" s={13}/>Create Resource Type</button>}
           </div>
         :
           <>
-            <span className="section-label">RESOURCE CATALOG ({resourceTypes.length})</span>
-            {RESOURCE_CATEGORIES.filter(cat=>resourceTypes.some(r=>r.category===cat)).map(cat=><div key={cat} style={{marginBottom:20}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-                <span className={`tag tag-${RESOURCE_CATEGORY_COLORS[cat]||'teal'}`} style={{fontSize:9}}>{RESOURCE_CATEGORY_LABELS[cat]||cat}</span>
-                <span style={{fontSize:11,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{resourceTypes.filter(r=>r.category===cat).length} type{resourceTypes.filter(r=>r.category===cat).length!==1?'s':''}</span>
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:8}}>
-                {resourceTypes.filter(r=>r.category===cat).map(rt=>{
-                  const relation = resourceRelations.find(rel=>rel.resource_type_id===rt.id);
-                  const inv = relation ? resourceInventory[relation.id] : null;
-                  return <div key={rt.id} className="card" style={{padding:14}}>
-                    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
-                      <div>
-                        <span style={{fontSize:13.5,fontWeight:600,display:'block'}}>{rt.name}</span>
-                        <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{rt.unit}{rt.fungible?' · fungible':' · non-fungible'}{rt.perishable?` · expires ${rt.ttl_days}d`:''}</span>
-                      </div>
-                      <span className={`tag tag-${rt._source==='network'?'green':'blue'}`} style={{fontSize:8,flexShrink:0}}>{rt._source==='network'?'NETWORK':'ORG'}</span>
-                    </div>
-                    {rt.tags&&rt.tags.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:3,marginBottom:8}}>
-                      {rt.tags.map(tag=><span key={tag} style={{fontSize:9,padding:'1px 6px',borderRadius:99,background:'var(--bg-3)',color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{tag}</span>)}
-                    </div>}
-                    {rt.maturity&&<div style={{display:'flex',alignItems:'center',gap:4,marginBottom:8}}>
-                      <span style={{fontSize:9,color:'var(--tx-2)'}}>Maturity:</span>
-                      <span className={`tag tag-${MATURITY_LEVELS[rt.maturity]?.color||'blue'}`} style={{fontSize:8}}>{MATURITY_LEVELS[rt.maturity]?.label||rt.maturity}</span>
-                    </div>}
-                    {relation ? <div style={{padding:'8px 10px',background:'var(--bg-2)',borderRadius:'var(--r)',border:'1px solid var(--border-0)'}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-                        <span style={{fontSize:10,fontWeight:600,color:'var(--blue)'}}>{RESOURCE_RELATION_LABELS[relation.relation_type]||relation.relation_type}</span>
-                        {relation.opacity!==undefined&&<span className={`tag tag-${['teal','blue','green','gold'][relation.opacity]||'teal'}`} style={{fontSize:7.5}}>{RESOURCE_OPACITY_LABELS[relation.opacity]||'Sovereign'}</span>}
-                      </div>
-                      {inv&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        <div style={{display:'flex',gap:12}}>
-                          <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>Cap: {inv.total_capacity||inv.capacity||0}</span>
-                          <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>Avail: {inv.available||0}</span>
-                          <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>Alloc: {inv.allocated||0}</span>
+            {(()=>{
+              const visibleTypes = resourceTypes.filter(rt => canViewResource(rt, svc.userId, orgRole));
+              const hiddenCount = resourceTypes.length - visibleTypes.length;
+              return <>
+                <span className="section-label">RESOURCE CATALOG ({visibleTypes.length}{hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ''})</span>
+                {RESOURCE_CATEGORIES.filter(cat=>visibleTypes.some(r=>r.category===cat)).map(cat=><div key={cat} style={{marginBottom:20}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                    <span className={`tag tag-${RESOURCE_CATEGORY_COLORS[cat]||'teal'}`} style={{fontSize:9}}>{RESOURCE_CATEGORY_LABELS[cat]||cat}</span>
+                    <span style={{fontSize:11,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{visibleTypes.filter(r=>r.category===cat).length} type{visibleTypes.filter(r=>r.category===cat).length!==1?'s':''}</span>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:8}}>
+                    {visibleTypes.filter(r=>r.category===cat).map(rt=>{
+                      const relation = resourceRelations.find(rel=>rel.resource_type_id===rt.id);
+                      const inv = relation ? resourceInventory[relation.id] : null;
+                      const isController = canControlResource(rt, svc.userId, orgRole);
+                      const isAllocator = canAllocateResource(rt, svc.userId, orgRole);
+                      return <div key={rt.id} className="card" style={{padding:14}}>
+                        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:8}}>
+                          <div>
+                            <span style={{fontSize:13.5,fontWeight:600,display:'block'}}>{rt.name}</span>
+                            <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{rt.unit}{rt.fungible?' · fungible':' · non-fungible'}{rt.perishable?` · expires ${rt.ttl_days}d`:''}</span>
+                          </div>
+                          <div style={{display:'flex',gap:3,flexShrink:0}}>
+                            <span className={`tag tag-${rt._source==='network'?'green':'blue'}`} style={{fontSize:8}}>{rt._source==='network'?'NETWORK':'ORG'}</span>
+                          </div>
                         </div>
-                        <button onClick={()=>{setRestockModal(relation);setRestockQty('');setRestockNote('')}} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}><I n="plus" s={9}/>Restock</button>
-                      </div>}
-                      {!inv&&<button onClick={()=>{setRestockModal(relation);setRestockQty('');setRestockNote('')}} className="b-gho b-xs" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:3,marginTop:4}}><I n="plus" s={9}/>Add Initial Stock</button>}
-                    </div>
-                    : orgRoom&&<button onClick={()=>handleEstablishRelation(rt.id)} className="b-gho b-xs" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:4}}><I n="link" s={10}/>Establish Relation</button>}
-                  </div>;
-                })}
-              </div>
-            </div>)}
 
-            {/* Unrelated resources info */}
-            {resourceRelations.length===0&&resourceTypes.length>0&&<div style={{background:'var(--teal-dim)',border:'1px solid rgba(94,234,212,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:12,display:'flex',gap:10,alignItems:'flex-start'}}>
-              <I n="alert" s={16} c="var(--teal)"/>
-              <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
-                <strong style={{color:'var(--teal)'}}>No resource relations established.</strong> Click "Establish Relation" on a resource type to indicate your organization operates, funds, or refers clients to that resource. Relations enable inventory tracking and client allocation.
-              </span>
-            </div>}
+                        {/* Permission badges */}
+                        <div style={{display:'flex',flexWrap:'wrap',gap:3,marginBottom:8}}>
+                          {isController && <span className="tag tag-gold" style={{fontSize:7.5}}><I n="settings" s={8}/> CONTROLLER</span>}
+                          {isAllocator && <span className="tag tag-blue" style={{fontSize:7.5}}><I n="send" s={8}/> ALLOCATOR</span>}
+                          {rt.permissions?.viewers?.length > 0 && <span className="tag tag-teal" style={{fontSize:7.5}}><I n="eye" s={8}/> RESTRICTED</span>}
+                        </div>
+
+                        {/* Permission summary */}
+                        {rt.permissions && <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8}}>
+                          {rt.permissions.controllers?.length > 0 && <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
+                            Controlled by: {rt.permissions.controllers.slice(0,3).map(g => g.type==='role' ? (ORG_ROLE_LABELS[g.id]||g.id) : g.id).join(', ')}{rt.permissions.controllers.length > 3 ? ` +${rt.permissions.controllers.length-3}` : ''}
+                          </span>}
+                        </div>}
+
+                        {rt.tags&&rt.tags.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:3,marginBottom:8}}>
+                          {rt.tags.map(tag=><span key={tag} style={{fontSize:9,padding:'1px 6px',borderRadius:99,background:'var(--bg-3)',color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{tag}</span>)}
+                        </div>}
+                        {rt.maturity&&<div style={{display:'flex',alignItems:'center',gap:4,marginBottom:8}}>
+                          <span style={{fontSize:9,color:'var(--tx-2)'}}>Maturity:</span>
+                          <span className={`tag tag-${MATURITY_LEVELS[rt.maturity]?.color||'blue'}`} style={{fontSize:8}}>{MATURITY_LEVELS[rt.maturity]?.label||rt.maturity}</span>
+                        </div>}
+                        {relation ? <div style={{padding:'8px 10px',background:'var(--bg-2)',borderRadius:'var(--r)',border:'1px solid var(--border-0)'}}>
+                          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                            <span style={{fontSize:10,fontWeight:600,color:'var(--blue)'}}>{RESOURCE_RELATION_LABELS[relation.relation_type]||relation.relation_type}</span>
+                            {relation.opacity!==undefined&&<span className={`tag tag-${['teal','blue','green','gold'][relation.opacity]||'teal'}`} style={{fontSize:7.5}}>{RESOURCE_OPACITY_LABELS[relation.opacity]||'Sovereign'}</span>}
+                          </div>
+                          {inv&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                            <div style={{display:'flex',gap:12}}>
+                              <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>Cap: {inv.total_capacity||inv.capacity||0}</span>
+                              <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>Avail: {inv.available||0}</span>
+                              <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>Alloc: {inv.allocated||0}</span>
+                            </div>
+                            {isController&&<button onClick={()=>{setRestockModal(relation);setRestockQty('');setRestockNote('')}} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}><I n="plus" s={9}/>Restock</button>}
+                          </div>}
+                          {!inv&&isController&&<button onClick={()=>{setRestockModal(relation);setRestockQty('');setRestockNote('')}} className="b-gho b-xs" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:3,marginTop:4}}><I n="plus" s={9}/>Add Initial Stock</button>}
+                        </div>
+                        : orgRoom&&isController&&<button onClick={()=>handleEstablishRelation(rt.id)} className="b-gho b-xs" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:4}}><I n="link" s={10}/>Establish Relation</button>}
+
+                        {/* Permissions button — visible to controllers */}
+                        {isController&&<button onClick={()=>openPermModal(rt)} className="b-gho b-xs" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:6}}><I n="shield" s={10}/>Permissions</button>}
+                      </div>;
+                    })}
+                  </div>
+                </div>)}
+
+                {/* Unrelated resources info */}
+                {resourceRelations.length===0&&visibleTypes.length>0&&<div style={{background:'var(--teal-dim)',border:'1px solid rgba(94,234,212,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:12,display:'flex',gap:10,alignItems:'flex-start'}}>
+                  <I n="alert" s={16} c="var(--teal)"/>
+                  <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
+                    <strong style={{color:'var(--teal)'}}>No resource relations established.</strong> Click "Establish Relation" on a resource type to indicate your organization operates, funds, or refers clients to that resource. Relations enable inventory tracking and client allocation.
+                  </span>
+                </div>}
+
+                {/* Hidden resources notice */}
+                {hiddenCount > 0 && <div style={{background:'var(--gold-dim)',border:'1px solid rgba(234,179,8,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginTop:12,display:'flex',gap:8,alignItems:'center'}}>
+                  <I n="eye-off" s={14} c="var(--gold)"/>
+                  <span style={{fontSize:11.5,color:'var(--gold)'}}>{hiddenCount} resource type{hiddenCount!==1?'s':''} hidden based on your permissions. Contact a controller to request access.</span>
+                </div>}
+              </>;
+            })()}
           </>
         }
       </div>}
@@ -11618,6 +11896,61 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         <span className="section-label">TAGS (comma-separated)</span>
         <input value={resourceDraft.tags} onChange={e=>setResourceDraft({...resourceDraft,tags:e.target.value})} placeholder="e.g. transit, emergency, shelter"/>
       </div>
+
+      {/* ── Permissions Section ── */}
+      <div style={{borderTop:'1px solid var(--border-0)',paddingTop:16,marginBottom:20}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
+          <I n="shield" s={14} c="var(--gold)"/>
+          <span style={{fontSize:13,fontWeight:600}}>Permissions</span>
+        </div>
+        <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:12,lineHeight:1.5}}>Control who can manage, allocate, and see this resource. Defaults are pre-filled; adjust as needed.</p>
+
+        {RESOURCE_PERMISSION_ABILITIES.map(ability => {
+          const grants = resourceDraft.permissions?.[ability] || [];
+          return <div key={ability} style={{marginBottom:12}}>
+            <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:4}}>
+              <I n={RESOURCE_PERMISSION_ICONS[ability]} s={11} c={`var(--${RESOURCE_PERMISSION_COLORS[ability]})`}/>
+              <span style={{fontSize:11,fontWeight:600,color:`var(--${RESOURCE_PERMISSION_COLORS[ability]})`}}>{RESOURCE_PERMISSION_LABELS[ability]}</span>
+              <span style={{fontSize:9.5,color:'var(--tx-3)',fontStyle:'italic'}}>{RESOURCE_PERMISSION_DESCRIPTIONS[ability]}</span>
+            </div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:6}}>
+              {grants.length === 0 && ability === 'viewers' && <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)',padding:'2px 8px',background:'var(--bg-3)',borderRadius:10}}>Everyone in org</span>}
+              {grants.map((g,gi) => <span key={gi} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10,padding:'2px 8px',borderRadius:10,background:`var(--${RESOURCE_PERMISSION_COLORS[ability]}-dim)`,color:`var(--${RESOURCE_PERMISSION_COLORS[ability]})`}}>
+                <I n={g.type==='role'?'users':'user'} s={9}/>
+                {g.type==='role' ? (ORG_ROLE_LABELS[g.id]||g.id) : g.id}
+                <span onClick={()=>{const updated = [...grants]; updated.splice(gi,1); setResourceDraft({...resourceDraft,permissions:{...resourceDraft.permissions,[ability]:updated}})}} style={{cursor:'pointer',marginLeft:2,opacity:.7}}>&times;</span>
+              </span>)}
+            </div>
+            <div style={{display:'flex',gap:4}}>
+              <select style={{flex:'0 0 90px',fontSize:11}} value="role" onChange={e=>{
+                const type = e.target.value;
+                if (type === 'role') {
+                  // Show role picker
+                } else {
+                  // Will use text input
+                }
+              }}>
+                <option value="role">Role</option>
+                <option value="user">User</option>
+              </select>
+              <select style={{flex:1,fontSize:11}} onChange={e=>{
+                if (!e.target.value) return;
+                const parts = e.target.value.split(':');
+                const grant = {type:parts[0],id:parts[1]};
+                if (!grants.some(g=>g.type===grant.type&&g.id===grant.id)) {
+                  setResourceDraft({...resourceDraft,permissions:{...resourceDraft.permissions,[ability]:[...grants,grant]}});
+                }
+                e.target.value='';
+              }}>
+                <option value="">Add...</option>
+                {ORG_ROLES.map(r=><option key={r} value={`role:${r}`}>{ORG_ROLE_LABELS[r]}</option>)}
+                {staff.filter(s=>!grants.some(g=>g.type==='user'&&g.id===s.userId)).map(s=><option key={s.userId} value={`user:${s.userId}`}>{s.userId}</option>)}
+              </select>
+            </div>
+          </div>;
+        })}
+      </div>
+
       <button onClick={handleCreateResourceType} className="b-pri" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:4}}><I n="plus" s={13}/>Create Resource Type</button>
     </Modal>
 
@@ -11628,7 +11961,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         <span className="section-label">RESOURCE TYPE</span>
         <select value={allocDraft.resource_type_id} onChange={e=>setAllocDraft({...allocDraft,resource_type_id:e.target.value})}>
           <option value="">Select a resource...</option>
-          {resourceTypes.map(rt=>{
+          {resourceTypes.filter(rt => canAllocateResource(rt, svc.userId, orgRole)).map(rt=>{
             const relation = resourceRelations.find(r=>r.resource_type_id===rt.id);
             const inv = relation ? resourceInventory[relation.id] : null;
             return <option key={rt.id} value={rt.id}>{rt.name} ({rt.unit}){inv ? ` — ${inv.available||0} available` : ''}</option>;
@@ -11671,6 +12004,62 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           <input value={restockNote} onChange={e=>setRestockNote(e.target.value)} placeholder="e.g. Grant #2024-A quarterly restock"/>
         </div>
         <button onClick={handleRestock} className="b-pri" disabled={!restockQty||parseInt(restockQty)<=0} style={{width:'100%'}}>Restock</button>
+      </>}
+    </Modal>
+
+    {/* MANAGE RESOURCE PERMISSIONS MODAL */}
+    <Modal open={permModal!==null} onClose={()=>setPermModal(null)} title="Resource Permissions" w={520}>
+      {permModal && <>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+          <span style={{fontSize:15,fontWeight:700}}>{permModal.name}</span>
+          <span className={`tag tag-${RESOURCE_CATEGORY_COLORS[permModal.category]||'teal'}`} style={{fontSize:8.5}}>{RESOURCE_CATEGORY_LABELS[permModal.category]||permModal.category}</span>
+        </div>
+        <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:18,lineHeight:1.6}}>Control who can manage, allocate, and view this resource type. Changes apply immediately to all org members.</p>
+
+        {RESOURCE_PERMISSION_ABILITIES.map(ability => {
+          const grants = permDraft[ability] || [];
+          return <div key={ability} style={{marginBottom:18,padding:'12px 14px',background:'var(--bg-2)',borderRadius:'var(--r)',border:'1px solid var(--border-0)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+              <I n={RESOURCE_PERMISSION_ICONS[ability]} s={13} c={`var(--${RESOURCE_PERMISSION_COLORS[ability]})`}/>
+              <span style={{fontSize:12.5,fontWeight:600,color:`var(--${RESOURCE_PERMISSION_COLORS[ability]})`}}>{RESOURCE_PERMISSION_LABELS[ability]}</span>
+            </div>
+            <p style={{fontSize:10.5,color:'var(--tx-2)',marginBottom:8,lineHeight:1.4}}>{RESOURCE_PERMISSION_DESCRIPTIONS[ability]}</p>
+
+            {/* Current grants */}
+            <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:10}}>
+              {grants.length === 0 && ability === 'viewers' && <span style={{fontSize:10,color:'var(--teal)',fontFamily:'var(--mono)',padding:'3px 10px',background:'var(--teal-dim)',borderRadius:10}}>Everyone in org (default)</span>}
+              {grants.length === 0 && ability !== 'viewers' && <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)',padding:'3px 10px',background:'var(--bg-3)',borderRadius:10}}>Admin only (default)</span>}
+              {grants.map((g,gi) => <span key={gi} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,padding:'3px 10px',borderRadius:10,background:`var(--${RESOURCE_PERMISSION_COLORS[ability]}-dim)`,color:`var(--${RESOURCE_PERMISSION_COLORS[ability]})`}}>
+                <I n={g.type==='role'?'users':'user'} s={10}/>
+                {g.type==='role' ? (ORG_ROLE_LABELS[g.id]||g.id) : g.id}
+                <span onClick={()=>handleRemovePermGrant(ability,gi)} style={{cursor:'pointer',marginLeft:3,fontSize:12,fontWeight:700,opacity:.6,lineHeight:1}}>&times;</span>
+              </span>)}
+            </div>
+
+            {/* Add grant */}
+            <div style={{display:'flex',gap:4}}>
+              <select style={{flex:1,fontSize:11}} defaultValue="" onChange={e=>{
+                if (!e.target.value) return;
+                const parts = e.target.value.split(':');
+                const grant = {type:parts[0],id:parts.slice(1).join(':')};
+                if (!grants.some(g=>g.type===grant.type&&g.id===grant.id)) {
+                  setPermDraft({...permDraft,[ability]:[...grants,grant]});
+                }
+                e.target.value='';
+              }}>
+                <option value="">Add role or user...</option>
+                <optgroup label="Roles">
+                  {ORG_ROLES.map(r=><option key={r} value={`role:${r}`} disabled={grants.some(g=>g.type==='role'&&g.id===r)}>{ORG_ROLE_LABELS[r]}</option>)}
+                </optgroup>
+                <optgroup label="Staff Members">
+                  {staff.map(s=><option key={s.userId} value={`user:${s.userId}`} disabled={grants.some(g=>g.type==='user'&&g.id===s.userId)}>{s.userId}</option>)}
+                </optgroup>
+              </select>
+            </div>
+          </div>;
+        })}
+
+        <button onClick={handleSavePermissions} className="b-pri" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:4,padding:12}}><I n="check" s={14}/>Save Permissions</button>
       </>}
     </Modal>
 
