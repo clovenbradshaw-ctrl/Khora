@@ -1,0 +1,19 @@
+# /etc/systemd/system/khora-escrow-bot.service
+#
+# Install: sudo cp khora-escrow-bot.service /etc/systemd/system/
+# Enable:  sudo systemctl daemon-reload && sudo systemctl enable --now khora-escrow-bot
+
+[Unit]
+Description=Khora Escrow Bot
+After=matrix-synapse.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/khora-escrow-bot
+ExecStart=/usr/bin/node index.js -p 9555 -c config.yaml
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

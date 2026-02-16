@@ -1,0 +1,19 @@
+# /etc/systemd/system/khora-backup-bot.service
+#
+# Install: sudo cp khora-backup-bot.service /etc/systemd/system/
+# Enable:  sudo systemctl daemon-reload && sudo systemctl enable --now khora-backup-bot
+
+[Unit]
+Description=Khora Backup Presence Bot
+After=matrix-synapse.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/khora-backup-bot
+ExecStart=/usr/bin/node index.js -p 9556 -c config.yaml
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

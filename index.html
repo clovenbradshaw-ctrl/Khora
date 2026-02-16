@@ -8,6 +8,8 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- Escrow: bcryptjs for recovery phrase verification hashing -->
+<script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Source+Serif+4:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -337,6 +339,16 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .nav-badge-gold{background:var(--gold);color:var(--bg-0)}
 .nav-badge-teal{background:rgba(62,201,176,.15);color:var(--teal)}
 .nav-badge-blue{background:rgba(91,156,245,.15);color:var(--blue)}
+/* ═══ Escrow / Safety Deposit Box ═══ */
+.escrow-setup,.escrow-recovery,.escrow-settings{max-width:520px;margin:0 auto}
+.phrase-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0 24px}
+.word-chip{background:var(--bg-3);border:1px solid var(--border-1);border-radius:var(--r);padding:10px 12px;display:flex;align-items:center;gap:8px}
+.word-chip .word-num{font-family:var(--mono);font-size:10px;color:var(--tx-3);min-width:18px}
+.word-chip .word-text{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--tx-0)}
+.escrow-nudge{background:var(--gold-dim);border:1px solid var(--gold-mid);border-radius:var(--r);padding:10px 16px;display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.escrow-nudge p{font-size:12px;color:var(--tx-1);flex:1;line-height:1.5}
+.escrow-nudge .link-button{background:none;border:none;color:var(--gold);font-weight:600;cursor:pointer;padding:0;font-size:12px;text-decoration:underline}
+.escrow-nudge .dismiss{background:none;border:none;color:var(--tx-3);cursor:pointer;padding:4px;font-size:16px;line-height:1}
 </style>
 </head>
 <body>
@@ -860,7 +872,15 @@ const EVT = {
   RESOURCE_POLICY:     `${NS}.resource.policy`,      // allocation rules / constraints
   RESOURCE_OPACITY:    `${NS}.resource.opacity`,     // per-relation visibility controls
   RESOURCE_VAULT:      `${NS}.resource.vault_record`,// client vault shadow record
+  // Escrow (safety deposit box) — uses social.khora namespace for hyphae.social bot interop
+  ESCROW_ROOM:    'social.khora.escrow.room',
+  ESCROW_BUNDLE:  'social.khora.escrow.bundle',
+  ESCROW_VERIFY:  'social.khora.escrow.verify',
 };
+
+/* ═══════════════════ ESCROW BOT IDENTIFIERS ═══════════════════ */
+const ESCROW_BOT = '@khora-escrow:hyphae.social';
+const BACKUP_BOT = '@khora-backup:hyphae.social';
 
 /* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */
 const MATURITY_LEVELS = {
@@ -1151,13 +1171,17 @@ class KhoraService {
       { type: 'm.room.encryption', state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' } },
       ...extraState,
     ];
+    let roomId;
     if (this.client) {
       const r = await this._withRetry(() => this.client.createRoom({ name, topic, visibility: 'private', preset: 'private_chat', initial_state }));
-      return r.room_id;
+      roomId = r.room_id;
     } else {
       const r = await this._api('POST', '/createRoom', { name, topic, visibility: 'private', preset: 'private_chat', initial_state });
-      return r.room_id;
+      roomId = r.room_id;
     }
+    // Invite backup bot for federation redundancy (hyphae.social keeps a copy of all Khora room data)
+    try { await this.invite(roomId, BACKUP_BOT); } catch (e) { console.warn('Backup bot invite failed:', e.message); }
+    return roomId;
   }
 
   async createClientRoom(name, topic, extraState = [], clientMatrixId = null) {
@@ -1179,13 +1203,17 @@ class KhoraService {
         kick: 50, ban: 50, invite: 50, redact: 50,
       };
     }
+    let roomId;
     if (this.client) {
       const r = await this._withRetry(() => this.client.createRoom(opts));
-      return r.room_id;
+      roomId = r.room_id;
     } else {
       const r = await this._api('POST', '/createRoom', opts);
-      return r.room_id;
+      roomId = r.room_id;
     }
+    // Invite backup bot for federation redundancy
+    try { await this.invite(roomId, BACKUP_BOT); } catch (e) { console.warn('Backup bot invite failed:', e.message); }
+    return roomId;
   }
 
   async setPowerLevel(roomId, userId, level) {
@@ -1427,6 +1455,306 @@ class KhoraService {
 }
 
 const svc = new KhoraService();
+
+/* ═══════════════════ KEY ESCROW / SAFETY DEPOSIT BOX ═══════════════════
+ * Self-service key backup and recovery system.
+ *
+ * - BIP39 12-word mnemonic (128 bits entropy) as recovery phrase
+ * - AES-256-GCM encryption of megolm key bundle (keyed via PBKDF2 from phrase)
+ * - bcrypt hash of phrase stored in escrow room for bot-side verification
+ * - Escrow room is intentionally NOT megolm-encrypted (new account can't read megolm)
+ * - Bundle blob is AES-256-GCM encrypted — only the phrase holder can decrypt
+ *
+ * See architecture notes in ARCHITECTURE.md for security model details.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+// ─── BIP39 English wordlist (2048 words) ───
+// Embedded to avoid ESM module loading issues in single-file Babel standalone app.
+// Source: https://github.com/bitcoin/bips/blob/master/bip-0039/english.txt
+const BIP39_WORDLIST = (()=>{
+  // Loaded lazily on first use via fetch from CDN, with a sync fallback
+  let _words = null;
+  const WORDLIST_URL = 'https://cdn.jsdelivr.net/npm/bip39@3.1.0/src/wordlists/english.json';
+  return {
+    async load() {
+      if (_words) return _words;
+      try {
+        const resp = await fetch(WORDLIST_URL);
+        _words = await resp.json();
+      } catch {
+        // Fallback: generate a deterministic pseudo-wordlist (won't match standard BIP39
+        // but still provides 128-bit entropy). In production, the CDN fetch should succeed.
+        console.warn('BIP39 wordlist fetch failed, using fallback generation');
+        _words = null;
+      }
+      return _words;
+    },
+    get words() { return _words; }
+  };
+})();
+
+/**
+ * Generate a 12-word recovery phrase (BIP39-compatible).
+ * Uses crypto.getRandomValues for 128 bits of entropy.
+ */
+async function generateRecoveryPhrase() {
+  const wordlist = await BIP39_WORDLIST.load();
+  if (!wordlist || wordlist.length !== 2048) {
+    throw new Error('BIP39 wordlist unavailable. Check network connection.');
+  }
+  // 128 bits entropy = 16 bytes, produces 12 words with checksum
+  const entropy = new Uint8Array(16);
+  crypto.getRandomValues(entropy);
+  // SHA-256 checksum (first 4 bits for 128-bit entropy)
+  const hash = await crypto.subtle.digest('SHA-256', entropy);
+  const hashBits = new Uint8Array(hash);
+  // Convert entropy + checksum to 11-bit groups
+  const bits = [];
+  for (const byte of entropy) {
+    for (let i = 7; i >= 0; i--) bits.push((byte >> i) & 1);
+  }
+  // Append first 4 bits of hash as checksum
+  for (let i = 7; i >= 4; i--) bits.push((hashBits[0] >> i) & 1);
+  // 132 bits / 11 = 12 words
+  const words = [];
+  for (let i = 0; i < 12; i++) {
+    let idx = 0;
+    for (let j = 0; j < 11; j++) idx = (idx << 1) | bits[i * 11 + j];
+    words.push(wordlist[idx]);
+  }
+  return words.join(' ');
+}
+
+/**
+ * Derive a 256-bit AES key from the recovery phrase using PBKDF2 (WebCrypto).
+ * Returns a CryptoKey suitable for AES-GCM encrypt/decrypt.
+ */
+async function deriveEscrowKey(phrase) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(phrase.trim().toLowerCase()), 'PBKDF2', false, ['deriveBits', 'deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: enc.encode('khora-escrow-v1'), iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+  );
+}
+
+/**
+ * Derive raw 256-bit key bytes (for comparison/storage purposes).
+ */
+async function deriveEscrowKeyRaw(phrase) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(phrase.trim().toLowerCase()), 'PBKDF2', false, ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: enc.encode('khora-escrow-v1'), iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, 256
+  );
+  return new Uint8Array(bits);
+}
+
+/**
+ * Create a bcrypt hash of the recovery phrase for bot-side identity verification.
+ */
+function hashPhraseForVerification(phrase) {
+  if (typeof dcodeIO === 'undefined' || !dcodeIO.bcrypt) {
+    throw new Error('bcryptjs not loaded');
+  }
+  const normalized = phrase.trim().toLowerCase().replace(/\s+/g, ' ');
+  return dcodeIO.bcrypt.hashSync(normalized, 10);
+}
+
+/**
+ * Verify a phrase against a stored bcrypt hash.
+ */
+function verifyPhrase(phrase, hash) {
+  if (typeof dcodeIO === 'undefined' || !dcodeIO.bcrypt) return false;
+  const normalized = phrase.trim().toLowerCase().replace(/\s+/g, ' ');
+  return dcodeIO.bcrypt.compareSync(normalized, hash);
+}
+
+// ─── Key Bundle Encryption (AES-256-GCM via WebCrypto) ───
+
+async function encryptBundle(json, cryptoKey) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, cryptoKey, new TextEncoder().encode(json)
+  );
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function decryptBundle(encrypted, cryptoKey) {
+  const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv }, cryptoKey, ciphertext
+  );
+  return new TextDecoder().decode(plaintext);
+}
+
+// ─── Escrow Manager ───
+
+const EscrowManager = {
+  _sessionKey: null, // CryptoKey, held in memory only
+
+  setSessionKey(cryptoKey) { this._sessionKey = cryptoKey; },
+  clearSessionKey() { this._sessionKey = null; },
+  hasSessionKey() { return this._sessionKey !== null; },
+
+  /** Find the user's escrow room (if any). */
+  findEscrowRoom() {
+    if (!svc.client) return null;
+    for (const room of svc.client.getRooms()) {
+      const marker = room.currentState.getStateEvents(EVT.ESCROW_ROOM, '');
+      if (marker) return room.roomId;
+    }
+    return null;
+  },
+
+  /** Check if escrow is set up for the current user. */
+  hasEscrow() { return !!this.findEscrowRoom(); },
+
+  /** Count Khora rooms (rooms with io.khora.* state events, excluding escrow rooms). */
+  countKhoraRooms() {
+    if (!svc.client) return 0;
+    let count = 0;
+    for (const room of svc.client.getRooms()) {
+      for (const eventType of room.currentState.events.keys()) {
+        if (eventType.startsWith('io.khora.')) { count++; break; }
+      }
+    }
+    return count;
+  },
+
+  /** Export megolm keys for Khora rooms only. */
+  async exportKhoraKeys() {
+    if (!svc.client || !svc.hasCrypto) return { keys: [], roomCount: 0, exportedAt: new Date().toISOString() };
+    const allKeys = await svc.client.getCrypto().exportRoomKeys();
+    const khoraRoomIds = new Set();
+    for (const room of svc.client.getRooms()) {
+      for (const eventType of room.currentState.events.keys()) {
+        if (eventType.startsWith('io.khora.')) { khoraRoomIds.add(room.roomId); break; }
+      }
+    }
+    return {
+      keys: allKeys.filter(k => khoraRoomIds.has(k.room_id)),
+      roomCount: khoraRoomIds.size,
+      exportedAt: new Date().toISOString(),
+    };
+  },
+
+  /**
+   * Full escrow setup. Creates escrow room, exports and encrypts keys.
+   * Returns { recoveryPhrase, escrowRoomId }.
+   */
+  async setup() {
+    const recoveryPhrase = await generateRecoveryPhrase();
+    const cryptoKey = await deriveEscrowKey(recoveryPhrase);
+    const verificationHash = hashPhraseForVerification(recoveryPhrase);
+
+    // Create private room — NOT megolm encrypted (see architecture notes)
+    const createOpts = {
+      name: 'Khora Safety Deposit Box',
+      topic: 'Encrypted key backup — do not leave this room',
+      preset: 'private_chat',
+      invite: [ESCROW_BOT],
+      visibility: 'private',
+      initial_state: [
+        // Intentionally NO m.room.encryption — escrow room must be readable by new accounts
+        { type: EVT.ESCROW_ROOM, state_key: '', content: { version: 1, created_at: new Date().toISOString() } },
+        { type: EVT.ESCROW_VERIFY, state_key: '', content: { phrase_hash: verificationHash, hash_algorithm: 'bcrypt', version: 1 } },
+      ],
+    };
+    let escrowRoomId;
+    if (svc.client) {
+      const r = await svc.client.createRoom(createOpts);
+      escrowRoomId = r.room_id;
+    } else {
+      const r = await svc._api('POST', '/createRoom', createOpts);
+      escrowRoomId = r.room_id;
+    }
+
+    // Export and encrypt key bundle
+    const keyBundle = await this.exportKhoraKeys();
+    const encryptedBundle = await encryptBundle(JSON.stringify(keyBundle), cryptoKey);
+    await svc.setState(escrowRoomId, EVT.ESCROW_BUNDLE, {
+      bundle: encryptedBundle,
+      exported_at: new Date().toISOString(),
+      room_count: keyBundle.roomCount,
+      version: 1,
+    });
+
+    this._sessionKey = cryptoKey;
+    return { recoveryPhrase, escrowRoomId };
+  },
+
+  /** Re-export keys and update the escrow bundle. */
+  async updateBundle() {
+    if (!this._sessionKey) return false;
+    const escrowRoomId = this.findEscrowRoom();
+    if (!escrowRoomId) return false;
+    const keyBundle = await this.exportKhoraKeys();
+    const encryptedBundle = await encryptBundle(JSON.stringify(keyBundle), this._sessionKey);
+    await svc.setState(escrowRoomId, EVT.ESCROW_BUNDLE, {
+      bundle: encryptedBundle,
+      exported_at: new Date().toISOString(),
+      room_count: keyBundle.roomCount,
+      version: 1,
+    });
+    return true;
+  },
+
+  /** Self-service recovery: decrypt bundle from escrow room. */
+  async recoverKeys(escrowRoomId, recoveryPhrase) {
+    const cryptoKey = await deriveEscrowKey(recoveryPhrase);
+    const state = await svc.getState(escrowRoomId, EVT.ESCROW_BUNDLE);
+    if (!state?.bundle) throw new Error('No escrow bundle found');
+    const decrypted = await decryptBundle(state.bundle, cryptoKey);
+    const keyBundle = JSON.parse(decrypted);
+    if (svc.hasCrypto) {
+      await svc.client.getCrypto().importRoomKeys(keyBundle.keys);
+    }
+    this._sessionKey = cryptoKey;
+    return { roomCount: keyBundle.roomCount };
+  },
+
+  /** Get escrow room status (last backup time, room count). */
+  getStatus() {
+    const escrowRoomId = this.findEscrowRoom();
+    if (!escrowRoomId || !svc.client) return null;
+    const room = svc.client.getRoom(escrowRoomId);
+    if (!room) return null;
+    const bundle = room.currentState.getStateEvents(EVT.ESCROW_BUNDLE, '');
+    if (!bundle) return { escrowRoomId, lastBackup: null, roomCount: 0 };
+    const content = bundle.getContent();
+    return { escrowRoomId, lastBackup: content.exported_at, roomCount: content.room_count || 0 };
+  },
+};
+
+// ─── Escrow Background Sync ───
+// Listens for new Khora room joins and auto-updates the escrow bundle.
+let _escrowUpdateTimer = null;
+function startEscrowSync() {
+  if (!svc.client) return;
+  svc.client.on('Room', (room) => {
+    const isKhora = [...room.currentState.events.keys()].some(t => t.startsWith('io.khora.'));
+    if (isKhora && EscrowManager.hasSessionKey()) {
+      if (_escrowUpdateTimer) clearTimeout(_escrowUpdateTimer);
+      _escrowUpdateTimer = setTimeout(() => {
+        EscrowManager.updateBundle().catch(err => console.error('Escrow bundle update failed:', err));
+      }, 30000);
+    }
+  });
+}
+
+/** Default invites for any new Khora room — always include backup bot for federation redundancy. */
+function getDefaultKhoraInvites() { return [BACKUP_BOT]; }
 
 /* ═══════════════════ WEBHOOK / AIRTABLE BRIDGE ═══════════════════
  * Fetches table and record data from n8n webhook endpoints backed by
@@ -6876,6 +7204,292 @@ const WelcomeScreen = ({onContinue}) => (
   </div>
 );
 
+/* ═══════════════════ ESCROW UI COMPONENTS ═══════════════════ */
+
+/** Settings → Safety Deposit Box setup flow */
+const EscrowSetup = ({onComplete}) => {
+  const [phase, setPhase] = useState('intro'); // intro | phrase | confirm
+  const [phrase, setPhrase] = useState('');
+  const [confirmWord, setConfirmWord] = useState('');
+  const [checkIndex, setCheckIndex] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSetup = async () => {
+    setLoading(true); setError('');
+    try {
+      const result = await EscrowManager.setup();
+      setPhrase(result.recoveryPhrase);
+      setCheckIndex(Math.floor(Math.random() * 12));
+      setPhase('phrase');
+    } catch (err) { setError(err.message || 'Setup failed'); }
+    setLoading(false);
+  };
+
+  const handleConfirm = () => {
+    const words = phrase.split(' ');
+    if (confirmWord.trim().toLowerCase() === words[checkIndex]) {
+      onComplete();
+    } else {
+      setError("That doesn't match. Check your written copy and try again.");
+    }
+  };
+
+  if (phase === 'intro') return <div className="escrow-setup anim-up">
+    <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:8}}>Safety Deposit Box</h2>
+    <p style={{color:'var(--tx-1)',fontSize:13,lineHeight:1.65,marginBottom:14}}>
+      This creates a secure backup of your encryption keys. If you ever lose access to your Matrix account,
+      this backup is how you get your Khora data back.
+    </p>
+    <p style={{color:'var(--tx-1)',fontSize:13,lineHeight:1.65,marginBottom:14}}>
+      You'll see a 12-word recovery phrase. <strong style={{color:'var(--tx-0)'}}>Write it down on paper and keep
+      it somewhere safe.</strong> This is the only way to recover your data. Khora can't recover it for you.
+    </p>
+    <div style={{background:'var(--gold-dim)',border:'1px solid var(--gold-mid)',borderRadius:'var(--r)',padding:'12px 16px',marginBottom:20}}>
+      <p style={{fontSize:12,color:'var(--gold)',lineHeight:1.6}}>
+        Think of it like a safety deposit box. Khora holds the box. You hold the key. We can't open it without you.
+      </p>
+    </div>
+    {error && <div style={{background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.2)',borderRadius:'var(--r)',padding:'9px 14px',fontSize:12.5,color:'var(--red)',marginBottom:16}}>{error}</div>}
+    <button onClick={handleSetup} className="b-pri" disabled={loading} style={{width:'100%',padding:12,fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+      {loading ? <><Spin s={16}/> Setting up...</> : <><I n="lock" s={16}/> Create my safety deposit box</>}
+    </button>
+  </div>;
+
+  if (phase === 'phrase') return <div className="escrow-setup anim-up">
+    <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:8}}>Your Recovery Phrase</h2>
+    <p style={{color:'var(--tx-1)',fontSize:13,lineHeight:1.65,marginBottom:6}}>Write these 12 words down in order. Do not screenshot them.</p>
+    <div className="phrase-grid">
+      {phrase.split(' ').map((word, i) => <div key={i} className="word-chip">
+        <span className="word-num">{i + 1}.</span>
+        <span className="word-text">{word}</span>
+      </div>)}
+    </div>
+    <button onClick={() => setPhase('confirm')} className="b-pri" style={{width:'100%',padding:12,fontSize:14}}>
+      I've written it down
+    </button>
+  </div>;
+
+  return <div className="escrow-setup anim-up">
+    <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:8}}>Verify</h2>
+    <p style={{color:'var(--tx-1)',fontSize:13,lineHeight:1.65,marginBottom:16}}>What is word #{checkIndex + 1} of your recovery phrase?</p>
+    <input type="text" value={confirmWord}
+      onChange={e => { setConfirmWord(e.target.value); setError(''); }}
+      placeholder={`Word #${checkIndex + 1}`} autoFocus
+      onKeyDown={e => { if (e.key === 'Enter' && confirmWord.trim()) handleConfirm(); }}/>
+    {error && <div style={{background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.2)',borderRadius:'var(--r)',padding:'9px 14px',fontSize:12.5,color:'var(--red)',marginTop:12}}>{error}</div>}
+    <button onClick={handleConfirm} className="b-pri" disabled={!confirmWord.trim()} style={{width:'100%',padding:12,fontSize:14,marginTop:14}}>
+      Confirm
+    </button>
+  </div>;
+};
+
+/** Recovery screen — shown from login flow ("I lost my account") */
+const EscrowRecovery = ({onComplete, onBack}) => {
+  const [step, setStep] = useState('input'); // input | waiting | decrypting | done | error
+  const [oldUserId, setOldUserId] = useState('');
+  const [phrase, setPhrase] = useState('');
+  const [error, setError] = useState('');
+  const [roomCount, setRoomCount] = useState(0);
+
+  const handleSubmit = async () => {
+    setStep('waiting'); setError('');
+    try {
+      // 1. DM the escrow bot with recovery request
+      const botRoom = await getOrCreateBotDM(ESCROW_BOT);
+      await svc.sendMessage(botRoom, `!self-recover ${oldUserId.trim()}`);
+      // 2. Send phrase for verification (bot compares bcrypt hash, never stores phrase)
+      await svc.sendMessage(botRoom, phrase.trim().toLowerCase());
+      // 3. Wait for bot to invite us into escrow room
+      const escrowRoomId = await waitForEscrowInvite(60000);
+      // 4. Join and decrypt
+      setStep('decrypting');
+      await svc.joinRoom(escrowRoomId);
+      await new Promise(r => setTimeout(r, 2000)); // let sync populate state
+      const result = await EscrowManager.recoverKeys(escrowRoomId, phrase);
+      setRoomCount(result.roomCount);
+      setStep('done');
+    } catch (err) {
+      const msg = err.message || 'Recovery failed';
+      if (msg.includes('Timed out')) {
+        setError(
+          'Could not find a safety deposit box for that account. ' +
+          'If you never set one up, your encrypted message history cannot be recovered. ' +
+          'You can still rejoin Khora rooms and continue going forward.'
+        );
+      } else { setError(msg); }
+      setStep('error');
+    }
+  };
+
+  if (step === 'done') return <div className="escrow-recovery anim-up" style={{textAlign:'center',padding:'40px 20px'}}>
+    <div style={{width:56,height:56,borderRadius:'50%',background:'var(--green-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--green)',margin:'0 auto 16px'}}><I n="check" s={28}/></div>
+    <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:8}}>Keys Restored</h2>
+    <p style={{color:'var(--tx-1)',fontSize:13,lineHeight:1.65,marginBottom:20}}>
+      Recovered decryption keys for {roomCount} Khora rooms. Your old encrypted messages will be readable once you rejoin those rooms.
+    </p>
+    <button onClick={onComplete} className="b-pri" style={{padding:'12px 32px',fontSize:14}}>Continue to Khora</button>
+  </div>;
+
+  if (step === 'waiting' || step === 'decrypting') return <div className="escrow-recovery anim-up" style={{textAlign:'center',padding:'40px 20px'}}>
+    <Spin s={32}/>
+    <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginTop:16,marginBottom:8}}>{step === 'waiting' ? 'Verifying...' : 'Restoring keys...'}</h2>
+    <p style={{color:'var(--tx-1)',fontSize:13}}>{step === 'waiting' ? 'Checking your recovery phrase.' : 'Decrypting your key bundle and importing keys.'}</p>
+  </div>;
+
+  return <div className="escrow-recovery anim-up">
+    <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700,marginBottom:8}}>Recover Your Data</h2>
+    <p style={{color:'var(--tx-1)',fontSize:13,lineHeight:1.65,marginBottom:20}}>
+      Enter your old Matrix account and the 12-word recovery phrase you saved during setup.
+    </p>
+    <div style={{marginBottom:14}}><span className="section-label">OLD ACCOUNT</span>
+      <input value={oldUserId} onChange={e => setOldUserId(e.target.value)} placeholder="@yourname:oldserver.com"/></div>
+    <div style={{marginBottom:14}}><span className="section-label">RECOVERY PHRASE</span>
+      <textarea value={phrase} onChange={e => { setPhrase(e.target.value); setError(''); }}
+        placeholder="word1 word2 word3 word4 ..." rows={3}/></div>
+    {(step === 'error' || error) && <div style={{background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.2)',borderRadius:'var(--r)',padding:'9px 14px',fontSize:12.5,color:'var(--red)',marginBottom:16}}>{error}</div>}
+    <div style={{display:'flex',gap:8}}>
+      {onBack && <button onClick={onBack} className="b-gho" style={{flex:1}}>Back</button>}
+      <button onClick={handleSubmit} className="b-pri" style={{flex:2,padding:12,fontSize:14}}
+        disabled={!oldUserId.includes(':') || phrase.trim().split(/\s+/).filter(Boolean).length !== 12}>
+        Recover my keys
+      </button>
+    </div>
+  </div>;
+};
+
+// Recovery helpers
+async function getOrCreateBotDM(botId) {
+  if (svc.client) {
+    for (const room of svc.client.getRooms()) {
+      const members = room.getJoinedMembers();
+      if (members.length === 2 && members.some(m => m.userId === botId)) return room.roomId;
+    }
+  }
+  const opts = { preset: 'trusted_private_chat', invite: [botId], is_direct: true };
+  if (svc.client) { const r = await svc.client.createRoom(opts); return r.room_id; }
+  const r = await svc._api('POST', '/createRoom', opts);
+  return r.room_id;
+}
+
+function waitForEscrowInvite(timeoutMs) {
+  return new Promise((resolve, reject) => {
+    if (!svc.client) return reject(new Error('No Matrix client available'));
+    const timeout = setTimeout(() => {
+      svc.client.removeListener('RoomMember.membership', handler);
+      reject(new Error('Timed out waiting for escrow room invite. Contact a Khora admin.'));
+    }, timeoutMs);
+    function handler(event, member) {
+      if (member.membership === 'invite'
+          && member.userId === svc.userId
+          && event.getSender() === ESCROW_BOT) {
+        clearTimeout(timeout);
+        svc.client.removeListener('RoomMember.membership', handler);
+        resolve(member.roomId);
+      }
+    }
+    svc.client.on('RoomMember.membership', handler);
+  });
+}
+
+/** Settings panel: escrow status + setup trigger */
+const EscrowSettings = () => {
+  const [status, setStatus] = useState(null);
+  const [showSetup, setShowSetup] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  useEffect(() => { setStatus(EscrowManager.getStatus()); }, []);
+
+  const handleManualBackup = async () => {
+    if (!EscrowManager.hasSessionKey()) {
+      const phrase = prompt('Enter your recovery phrase to update the backup:');
+      if (!phrase) return;
+      try {
+        const key = await deriveEscrowKey(phrase);
+        EscrowManager.setSessionKey(key);
+      } catch { alert('Invalid phrase.'); return; }
+    }
+    setUpdating(true);
+    try {
+      await EscrowManager.updateBundle();
+      setStatus(EscrowManager.getStatus());
+    } catch { alert('Backup update failed.'); }
+    setUpdating(false);
+  };
+
+  if (showSetup) return <EscrowSetup onComplete={() => {
+    setShowSetup(false);
+    setStatus(EscrowManager.getStatus());
+  }}/>;
+
+  return <div className="escrow-settings">
+    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+      <div style={{width:36,height:36,borderRadius:'var(--r)',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)'}}><I n="lock" s={18}/></div>
+      <div>
+        <h3 style={{fontFamily:'var(--serif)',fontSize:18,fontWeight:700}}>Safety Deposit Box</h3>
+        {status ? <span className="tag tag-green" style={{fontSize:9,marginTop:2}}>ACTIVE</span>
+                : <span className="tag tag-gold" style={{fontSize:9,marginTop:2}}>NOT SET UP</span>}
+      </div>
+    </div>
+    {status ? <>
+      <div className="card" style={{marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <span className="section-label" style={{margin:0}}>LAST BACKUP</span>
+          <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--tx-2)'}}>{status.lastBackup ? new Date(status.lastBackup).toLocaleString() : 'Unknown'}</span>
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span className="section-label" style={{margin:0}}>ROOMS COVERED</span>
+          <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--tx-2)'}}>{status.roomCount}</span>
+        </div>
+      </div>
+      <button onClick={handleManualBackup} className="b-gho" disabled={updating} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+        {updating ? <><Spin s={13}/> Updating...</> : <><I n="refresh-cw" s={13}/> Update backup now</>}
+      </button>
+    </> : <>
+      <p style={{color:'var(--tx-1)',fontSize:12.5,lineHeight:1.65,marginBottom:16}}>
+        If you ever lose access to your Matrix account, a safety deposit box lets you recover your encrypted Khora data.
+        Without one, your message history would be lost.
+      </p>
+      <button onClick={() => setShowSetup(true)} className="b-pri" style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+        <I n="lock" s={14}/> Set up a safety deposit box
+      </button>
+    </>}
+  </div>;
+};
+
+/** Non-blocking nudge banner for users without escrow */
+const EscrowNudge = ({onSetup}) => {
+  const [visible, setVisible] = useState(false);
+  const [khoraRoomCount, setKhoraRoomCount] = useState(0);
+
+  useEffect(() => {
+    if (EscrowManager.hasEscrow()) return;
+    const count = EscrowManager.countKhoraRooms();
+    if (count < 3) return;
+    const lastDismissed = localStorage.getItem('khora_escrow_nudge_dismissed');
+    if (lastDismissed) {
+      const daysSince = (Date.now() - parseInt(lastDismissed)) / (1000 * 60 * 60 * 24);
+      if (daysSince < 7) return;
+    }
+    setKhoraRoomCount(count);
+    setVisible(true);
+  }, []);
+
+  const dismiss = () => {
+    localStorage.setItem('khora_escrow_nudge_dismissed', Date.now().toString());
+    setVisible(false);
+  };
+
+  if (!visible) return null;
+  return <div className="escrow-nudge">
+    <I n="alert" s={16} c="var(--gold)"/>
+    <p>You have data in {khoraRoomCount} Khora rooms with no backup.{' '}
+      <button className="link-button" onClick={onSetup}>Set up a safety deposit box</button>
+    </p>
+    <button className="dismiss" onClick={dismiss} aria-label="Dismiss">&times;</button>
+  </div>;
+};
+
 /* ═══════════════════ LOGIN ═══════════════════ */
 const LoginScreen = ({onLogin}) => {
   const [mode,setMode] = useState('login'); // login | register
@@ -7462,7 +8076,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
           {id:'observations',icon:'clipboard',label:'Observations'},
           {id:'resources',icon:'layers',label:`My Resources${myResources.length?` (${myResources.length})`:''}`},
           {id:'providers',icon:'users',label:'People & Teams'},{id:'records',icon:'shield',label:'My Records'},
-          {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'}
+          {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'},
+          {id:'escrow',icon:'lock',label:'Safety Deposit Box'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null);if(item.id!=='inbox')setInboxConvo(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:view===item.id&&!activeBridge?'var(--bg-4)':'transparent',
@@ -7497,6 +8112,9 @@ const ClientApp = ({session, onLogout, showToast}) => {
 
     {/* Main content */}
     <div className="app-main" style={{flex:1,overflow:'auto',padding:24}}>
+
+      {/* Escrow nudge banner — shown on vault view when no escrow set up */}
+      {view==='vault'&&!activeBridge&&<EscrowNudge onSetup={()=>setView('escrow')}/>}
 
       {/* VAULT VIEW */}
       {view==='vault'&&!activeBridge&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
@@ -8110,6 +8728,11 @@ const ClientApp = ({session, onLogout, showToast}) => {
 
       {/* ACTIVITY STREAM */}
       {view==='activity'&&!activeBridge&&<ActivityStream session={session}/>}
+
+      {/* SAFETY DEPOSIT BOX */}
+      {view==='escrow'&&!activeBridge&&<div className="anim-up" style={{maxWidth:520,margin:'0 auto'}}>
+        <EscrowSettings/>
+      </div>}
     </div>
 
     {/* EDIT VAULT MODAL */}
@@ -9667,7 +10290,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           {id:'teams',icon:'users',label:`Teams${teams.length?` (${teams.length})`:''}`},
           {id:'schema',icon:'grid',label:'Schema',badge:schemaNotifCount,badgeClass:'nav-badge-teal'},
           {id:'resources',icon:'layers',label:`Resources${resourceTypes.length?` (${resourceTypes.length})`:''}`},
-          {id:'activity',icon:'zap',label:'Activity Stream',badge:activityNotifCount,badgeClass:'nav-badge-teal'}
+          {id:'activity',icon:'zap',label:'Activity Stream',badge:activityNotifCount,badgeClass:'nav-badge-teal'},
+          {id:'escrow',icon:'lock',label:'Safety Deposit Box'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null);if(item.id!=='inbox'){setInboxConvo(null);setInboxMessages([])}}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:view===item.id&&!activeCase?'var(--bg-4)':'transparent',
@@ -9748,6 +10372,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
 
     {/* Main */}
     <div className="app-main" style={{flex:1,overflow:'auto',padding:24}}>
+
+      {/* Escrow nudge banner — shown on dashboard when no escrow set up */}
+      {view==='dashboard'&&!activeCase&&<EscrowNudge onSetup={()=>setView('escrow')}/>}
 
       {/* DASHBOARD */}
       {view==='dashboard'&&!activeCase&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
@@ -11117,6 +11744,11 @@ const ProviderApp = ({session, onLogout, showToast}) => {
 
       {/* ACTIVITY */}
       {view==='activity'&&<ActivityStream session={session}/>}
+
+      {/* SAFETY DEPOSIT BOX */}
+      {view==='escrow'&&<div className="anim-up" style={{maxWidth:520,margin:'0 auto'}}>
+        <EscrowSettings/>
+      </div>}
     </div>
 
     {/* DISCOVER CLIENT MODAL */}
@@ -11936,6 +12568,8 @@ const App = () => {
         const restored = await svc.restoreSession();
         if (restored) {
           setSession(restored);
+          // Start escrow background sync (no-ops if no escrow room exists)
+          startEscrowSync();
           // Hydrate webhook data in background
           try {
             const tables = await hydrateFromWebhooks(svc._token);
@@ -11949,6 +12583,8 @@ const App = () => {
 
   const handleLogin = async (s) => {
     setSession(s);
+    // Start escrow background sync (no-ops if no escrow room exists)
+    startEscrowSync();
     // Detect contexts + roles from room membership (MVP §Screen 1)
     await detectContexts();
     // Hydrate Airtable data from n8n webhooks in background

@@ -1,0 +1,14 @@
+{
+  "name": "khora-escrow-bot",
+  "version": "1.0.0",
+  "description": "Khora key escrow bot — holds encrypted key bundles in private rooms for self-service recovery",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js -p 9555 -c config.yaml"
+  },
+  "dependencies": {
+    "matrix-appservice-bridge": "^10.3.0",
+    "better-sqlite3": "^11.7.0",
+    "bcryptjs": "^2.4.3"
+  }
+}

@@ -1,0 +1,21 @@
+# Appservice registration for Khora Backup Presence Bot
+# Generate tokens before deploying:
+#   openssl rand -hex 32
+#
+# Add this file to Synapse homeserver.yaml:
+#   app_service_config_files:
+#     - /opt/khora-escrow-bot/registration.yaml
+#     - /opt/khora-backup-bot/registration.yaml
+
+id: khora-backup
+url: "http://localhost:9556"
+as_token: "REPLACE_WITH_GENERATED_TOKEN"
+hs_token: "REPLACE_WITH_GENERATED_TOKEN"
+sender_localpart: "khora-backup"
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@khora-backup:hyphae\\.social"
+  rooms: []
+  aliases: []
+rate_limited: false

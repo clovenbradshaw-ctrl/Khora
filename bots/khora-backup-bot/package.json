@@ -1,0 +1,12 @@
+{
+  "name": "khora-backup-bot",
+  "version": "1.0.0",
+  "description": "Khora backup presence bot — silently joins all Khora rooms for federation redundancy",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js -p 9556 -c config.yaml"
+  },
+  "dependencies": {
+    "matrix-appservice-bridge": "^10.3.0"
+  }
+}

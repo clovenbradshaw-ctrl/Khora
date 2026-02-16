@@ -1,0 +1,20 @@
+# Appservice registration for Khora Escrow Bot
+# Generate tokens before deploying:
+#   openssl rand -hex 32
+#
+# Add this file to Synapse homeserver.yaml:
+#   app_service_config_files:
+#     - /opt/khora-escrow-bot/registration.yaml
+
+id: khora-escrow
+url: "http://localhost:9555"
+as_token: "REPLACE_WITH_GENERATED_TOKEN"
+hs_token: "REPLACE_WITH_GENERATED_TOKEN"
+sender_localpart: "khora-escrow"
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@khora-escrow:hyphae\\.social"
+  rooms: []
+  aliases: []
+rate_limited: false
