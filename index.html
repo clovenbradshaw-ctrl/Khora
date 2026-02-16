@@ -338,7 +338,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .nav-badge-teal{background:rgba(62,201,176,.15);color:var(--teal)}
 .nav-badge-blue{background:rgba(91,156,245,.15);color:var(--blue)}
 .nav-badge-purple{background:rgba(167,139,250,.15);color:var(--purple)}
-/* ═══ Choreo Event Stream ═══ */
+/* ═══ Activity Stream ═══ */
 .choreo-triad-card:hover{border-color:var(--border-2)!important;transform:translateY(-1px)}
 .choreo-op-row{transition:border-color .15s}
 .choreo-op-row:hover{border-color:var(--border-1)!important}
@@ -6646,6 +6646,8 @@ const classifyEvent = (ev, roomInfo) => {
       case EVT.SCHEMA_PROMPT: return {op:'DES',epistemic:'GIVEN',label:'Form Field',desc:content.question?.slice(0,40)};
       case EVT.SCHEMA_DEF: return {op:'DES',epistemic:'MEANT',label:'Classification Rule',desc:content.name?.slice(0,40)};
       case EVT.SCHEMA_TRANSFORM: return {op:'REC',epistemic:'MEANT',label:'Transform Rule',desc:`${Object.keys(content.transforms||{}).length} transforms`};
+      case EVT.TEAM_META: return {op:'DES',epistemic:'MEANT',label:'Team Metadata',desc:content.name||'team'};
+      case EVT.TEAM_MEMBERS: return {op:'CON',epistemic:'MEANT',label:'Team Members',desc:`${(content.members||[]).length} member${(content.members||[]).length!==1?'s':''}`};
       case EVT.NET_MEMBERS: return {op:'CON',epistemic:'MEANT',label:'Network Members',desc:`${(content.organizations||[]).length} orgs`};
       case EVT.GOV_PROPOSAL: return {op:'INS',epistemic:'MEANT',label:'Governance Proposal',desc:content.summary?.slice(0,50)};
       case EVT.GOV_RHYTHM: return {op:'REC',epistemic:'MEANT',label:'Governance Rhythm',desc:content.name};
@@ -6683,143 +6685,12 @@ const classifyEvent = (ev, roomInfo) => {
   return {op:'INS',epistemic:'GIVEN',label:type,desc:'Timeline event'};
 };
 
-const ActivityStream = ({session}) => {
-  const [events,setEvents] = useState([]); const [rooms,setRooms] = useState([]);
-  const [loading,setLoading] = useState(true); const [filter,setFilter] = useState({roomType:'all',operator:'all',epistemic:'all'});
-  const [expanded,setExpanded] = useState(new Set()); const [autoRefresh,setAutoRefresh] = useState(false);
-
-  const loadEvents = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Single scan: classify all rooms without per-room HTTP calls
-      const scanned = await svc.scanRooms();
-      const roomIds = svc.client ? svc.client.getRooms().map(r=>r.roomId) : Object.keys(scanned);
-      const allRooms=[]; const allEvents=[];
-      for (const rid of roomIds) {
-        const roomInfo = await classifyRoom(rid, scanned[rid]); allRooms.push({id:rid,...roomInfo});
-        if (svc.client) {
-          const room = svc.client.getRoom(rid);
-          if (room) {
-            for (const ev of room.getLiveTimeline().getEvents()) {
-              const cls = classifyEvent(ev, roomInfo);
-              allEvents.push({ id:ev.getId(),roomId:rid,roomInfo,sender:ev.getSender(),ts:ev.getTs(),type:ev.getType(),
-                stateKey:(ev.isState&&ev.isState())?ev.getStateKey():null,content:ev.getContent(),isState:ev.isState&&ev.isState(),...cls });
-            }
-          }
-        }
-      }
-      allEvents.sort((a,b)=>b.ts-a.ts); setRooms(allRooms); setEvents(allEvents);
-    } catch(e){console.error('Activity error:',e);}
-    setLoading(false);
-  },[]);
-
-  useEffect(()=>{loadEvents();},[]);
-  useEffect(()=>{if(!autoRefresh)return;const iv=setInterval(loadEvents,5000);return()=>clearInterval(iv);},[autoRefresh]);
-
-  const filtered = useMemo(()=>events.filter(ev=>{
-    if(filter.roomType!=='all'&&ev.roomInfo.type!==filter.roomType)return false;
-    if(filter.operator!=='all'&&ev.op!==filter.operator)return false;
-    if(filter.epistemic!=='all'&&ev.epistemic!==filter.epistemic)return false;
-    return true;
-  }),[events,filter]);
-
-  const stats = useMemo(()=>{const s={total:events.length,byOp:{},byRoom:{},given:0,meant:0};
-    events.forEach(ev=>{s.byOp[ev.op]=(s.byOp[ev.op]||0)+1;s.byRoom[ev.roomInfo.type]=(s.byRoom[ev.roomInfo.type]||0)+1;if(ev.epistemic==='GIVEN')s.given++;else s.meant++;});
-    return s;
-  },[events]);
-
-  const toggle=(id)=>setExpanded(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
-
-  if(loading)return<div style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}><Spin s={28}/></div>;
-
-  return <div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
-    <div style={{marginBottom:24}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
-        <I n="zap" s={20} c="var(--orange)"/>
-        <h2 style={{fontFamily:'var(--serif)',fontSize:24,fontWeight:700,letterSpacing:'-0.02em'}}>Activity Stream</h2>
-        <span className="tag tag-orange">DEV</span>
-      </div>
-      <p style={{color:'var(--tx-1)',fontSize:13}}>Live EO event stream across all rooms. Operator classification, epistemic layer, and room topology.</p>
-    </div>
-
-    {/* Room topology */}
-    <div className="card" style={{marginBottom:16,padding:16}}>
-      <span className="section-label">ROOM TOPOLOGY ({rooms.length} rooms)</span>
-      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:8}}>
-        {rooms.map(r=><div key={r.id} style={{padding:'6px 10px',borderRadius:'var(--r)',background:`var(--${r.color}-dim)`,border:`1px solid var(--${r.color})20`,display:'flex',alignItems:'center',gap:6}}>
-          <div style={{width:7,height:7,borderRadius:'50%',background:`var(--${r.color})`}}/>
-          <span style={{fontSize:10,fontWeight:600,color:`var(--${r.color})`}}>{r.label}</span>
-          <span style={{fontSize:8,fontFamily:'var(--mono)',color:'var(--tx-3)'}}>{r.id.slice(0,20)}…</span>
-        </div>)}
-      </div>
-    </div>
-
-    {/* Stats */}
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8,marginBottom:16}}>
-      {[{l:'TOTAL',v:stats.total},{l:'GIVEN',v:stats.given,c:'teal'},{l:'MEANT',v:stats.meant,c:'gold'},{l:'ROOMS',v:rooms.length}].map((s,i)=>
-        <div key={i} className="card" style={{padding:12}}><span className="section-label">{s.l}</span>
-          <span style={{fontSize:20,fontWeight:700,color:s.c?`var(--${s.c})`:'var(--tx-0)'}}>{s.v}</span></div>)}
-    </div>
-
-    {/* Filters */}
-    <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
-      <select value={filter.roomType} onChange={e=>setFilter({...filter,roomType:e.target.value})} style={{width:'auto',padding:'5px 8px',fontSize:11}}>
-        <option value="all">All Rooms</option>
-        {['vault','bridge','roster','schema','metrics','network'].map(t=><option key={t} value={t}>{t}</option>)}
-      </select>
-      <select value={filter.operator} onChange={e=>setFilter({...filter,operator:e.target.value})} style={{width:'auto',padding:'5px 8px',fontSize:11}}>
-        <option value="all">All Operators</option>
-        {OPERATORS.map(op=><option key={op} value={op}>{op}</option>)}
-      </select>
-      <select value={filter.epistemic} onChange={e=>setFilter({...filter,epistemic:e.target.value})} style={{width:'auto',padding:'5px 8px',fontSize:11}}>
-        <option value="all">All Epistemic</option><option value="GIVEN">GIVEN</option><option value="MEANT">MEANT</option>
-      </select>
-      <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
-        <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>AUTO</span>
-        <Toggle on={autoRefresh} onChange={()=>setAutoRefresh(!autoRefresh)}/>
-        <button onClick={loadEvents} className="b-gho b-xs"><I n="search" s={10}/></button>
-      </div>
-    </div>
-    <div style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)',marginBottom:8}}>Showing {filtered.length} of {events.length}</div>
-
-    {/* Events */}
-    <div style={{display:'flex',flexDirection:'column',gap:3}}>
-      {filtered.length===0&&<div className="card" style={{textAlign:'center',padding:'30px 20px',borderStyle:'dashed'}}><I n="search" s={24}/><p style={{color:'var(--tx-3)',marginTop:8,fontSize:12}}>No events match filters</p></div>}
-      {filtered.slice(0,100).map((ev,i)=>{
-        const isExp=expanded.has(ev.id);const opC=OP_COLORS[ev.op]||'blue';const rmC=ROOM_COLORS[ev.roomInfo.type]||'orange';
-        return <div key={ev.id||i} style={{background:'var(--bg-2)',border:'1px solid var(--border-0)',borderRadius:'var(--r)',overflow:'hidden'}}>
-          <div onClick={()=>toggle(ev.id)} style={{padding:'8px 12px',display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}
-            onMouseEnter={e=>e.currentTarget.style.background='var(--bg-3)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-            <div style={{width:7,height:7,borderRadius:'50%',background:`var(--${opC})`,flexShrink:0}}/>
-            <span className={`tag tag-${opC}`} style={{fontSize:9,minWidth:26,textAlign:'center'}}>{ev.op}</span>
-            <span className={`tag tag-${rmC}`} style={{fontSize:8.5}}>{ev.roomInfo.type.toUpperCase()}</span>
-            <span className={`tag ${ev.epistemic==='GIVEN'?'tag-teal':'tag-gold'}`} style={{fontSize:8.5}}>{ev.epistemic}</span>
-            <span style={{fontSize:11.5,fontWeight:500,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.label}</span>
-            <span style={{fontSize:10,color:'var(--tx-2)',fontFamily:'var(--mono)',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.desc}</span>
-            <span style={{fontSize:8.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{ev.ts?new Date(ev.ts).toLocaleTimeString():''}</span>
-            <I n={isExp?'x':'chevR'} s={10} c="var(--tx-3)"/>
-          </div>
-          {isExp&&<div className="anim-in" style={{borderTop:'1px solid var(--border-0)',padding:'12px 14px',background:'var(--bg-1)'}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-              {[['EVENT TYPE',ev.type],['SENDER',ev.sender],['ROOM',ev.roomId],['TIMESTAMP',ev.ts?new Date(ev.ts).toISOString():'—']].map(([l,v])=>
-                <div key={l}><span className="section-label">{l}</span><span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',display:'block',wordBreak:'break-all'}}>{v}</span></div>)}
-            </div>
-            <span className="section-label">RAW CONTENT</span>
-            <pre style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',background:'var(--bg-0)',border:'1px solid var(--border-0)',borderRadius:'var(--r)',padding:10,overflow:'auto',maxHeight:200,whiteSpace:'pre-wrap',wordBreak:'break-all',marginTop:4}}>
-{JSON.stringify(ev.content,null,2)}</pre>
-          </div>}
-        </div>;
-      })}
-    </div>
-  </div>;
-};
-
-/* ═══════════════════ CHOREO EVENT STREAM ═══════════════════
+/* ═══════════════════ ACTIVITY STREAM (Choreo-aligned) ═══════════════════
  * Displays events in Choreo's EO operation grammar format.
  * Each event is mapped to: { op, target, context, frame }
  * aligned with the nine-operator Emergent Ontology model.
  * See: https://github.com/clovenbradshaw-ctrl/Choreo
- * ═══════════════════════════════════════════════════════════ */
+ * ═══════════════════════════════════════════════════════════════════════ */
 
 const OPERATOR_TRIADS = {
   identity: { label: 'Identity', desc: 'What exists?', ops: ['NUL','DES','INS'], color: 'teal' },
@@ -6910,7 +6781,7 @@ const toChoreoOp = (ev) => {
   return { op: ev.op, target, context, frame };
 };
 
-const ChoreoEventStream = ({session}) => {
+const ActivityStream = ({session}) => {
   const [events, setEvents] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -6947,7 +6818,7 @@ const ChoreoEventStream = ({session}) => {
       allEvents.sort((a, b) => b.ts - a.ts);
       setRooms(allRooms);
       setEvents(allEvents);
-    } catch (e) { console.error('ChoreoEventStream error:', e); }
+    } catch (e) { console.error('ActivityStream error:', e); }
     setLoading(false);
   }, []);
 
@@ -6994,7 +6865,7 @@ const ChoreoEventStream = ({session}) => {
     <div style={{marginBottom:24}}>
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
         <I n="layers" s={20} c="var(--purple)"/>
-        <h2 style={{fontFamily:'var(--serif)',fontSize:24,fontWeight:700,letterSpacing:'-0.02em'}}>Event Stream</h2>
+        <h2 style={{fontFamily:'var(--serif)',fontSize:24,fontWeight:700,letterSpacing:'-0.02em'}}>Activity Stream</h2>
         <span className="tag tag-purple">CHOREO</span>
       </div>
       <p style={{color:'var(--tx-1)',fontSize:13,lineHeight:1.6}}>
@@ -7910,8 +7781,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
           {id:'observations',icon:'clipboard',label:'Observations'},
           {id:'resources',icon:'layers',label:`My Resources${myResources.length?` (${myResources.length})`:''}`},
           {id:'providers',icon:'users',label:'People & Teams'},{id:'records',icon:'shield',label:'My Records'},
-          {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'zap',label:'Activity Stream'},
-          {id:'event-stream',icon:'layers',label:'Event Stream'}
+          {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'layers',label:'Activity Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null);if(item.id!=='inbox')setInboxConvo(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:view===item.id&&!activeBridge?'var(--bg-4)':'transparent',
@@ -8557,11 +8427,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
         </div>
       </div>}
 
-      {/* ACTIVITY STREAM */}
+      {/* ACTIVITY STREAM (Choreo-aligned) */}
       {view==='activity'&&!activeBridge&&<ActivityStream session={session}/>}
-
-      {/* EVENT STREAM (Choreo-aligned) */}
-      {view==='event-stream'&&!activeBridge&&<ChoreoEventStream session={session}/>}
     </div>
 
     {/* EDIT VAULT MODAL */}
@@ -8681,7 +8548,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [metrics, setMetrics] = useState([]);
   const [networkMembers, setNetworkMembers] = useState([]);
   const [activeCase, setActiveCase] = useState(null);
-  const [view, setView] = useState('dashboard'); // dashboard|inbox|case|metrics|schema|resources|network|activity|event-stream|staff|org-settings|org-inbox
+  const [view, setView] = useState('dashboard'); // dashboard|inbox|case|metrics|schema|resources|network|activity|staff|org-settings|org-inbox
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState('');
@@ -10119,8 +9986,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           {id:'teams',icon:'users',label:`Teams${teams.length?` (${teams.length})`:''}`},
           {id:'schema',icon:'grid',label:'Schema',badge:schemaNotifCount,badgeClass:'nav-badge-teal'},
           {id:'resources',icon:'layers',label:`Resources${resourceTypes.length?` (${resourceTypes.length})`:''}`},
-          {id:'activity',icon:'zap',label:'Activity Stream',badge:activityNotifCount,badgeClass:'nav-badge-teal'},
-          {id:'event-stream',icon:'layers',label:'Event Stream'}
+          {id:'activity',icon:'layers',label:'Activity Stream',badge:activityNotifCount,badgeClass:'nav-badge-teal'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null);if(item.id!=='inbox'){setInboxConvo(null);setInboxMessages([])}}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:view===item.id&&!activeCase?'var(--bg-4)':'transparent',
@@ -11568,11 +11434,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         }
       </div>}
 
-      {/* ACTIVITY */}
+      {/* ACTIVITY STREAM (Choreo-aligned) */}
       {view==='activity'&&<ActivityStream session={session}/>}
-
-      {/* EVENT STREAM (Choreo-aligned) */}
-      {view==='event-stream'&&<ChoreoEventStream session={session}/>}
     </div>
 
     {/* DISCOVER CLIENT MODAL */}

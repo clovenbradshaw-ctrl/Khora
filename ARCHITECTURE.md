@@ -497,12 +497,13 @@ Given a history of EO operations, the system can **project the current state** o
 
 ### Activity Stream
 
-The Activity Stream view renders all EO events across the user's rooms with:
+The Activity Stream view renders all EO events across the user's rooms using Choreo's formal operation grammar (`op / target / context / frame`). Features:
 
-- Filters by room type, operator, and epistemic frame
-- Color-coded room types (vault: teal, bridge: gold, org: blue, schema: purple, metrics: orange, network: green)
-- Expandable event cards with raw operation content
-- Running statistics (total events, GIVEN count, MEANT count)
+- Three visualization modes: Stream (sequential cards), Table (columnar), and Triads (grouped by Identity / Structure / Time)
+- Filters by triad, operator, room type, and epistemic frame
+- Operator triads overview with per-operator counts (Identity: NUL/DES/INS, Structure: SEG/CON/SYN, Time: ALT/SUP/REC)
+- Expanded view shows the full 4-tuple (operator, target, context, frame) with absence semantics
+- Live auto-refresh and raw JSON inspection
 
 ---
 
