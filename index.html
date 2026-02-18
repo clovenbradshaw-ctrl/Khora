@@ -2820,7 +2820,7 @@ const ResourceService = {
     if (!existing) throw new Error(`Resource type ${typeId} not found`);
 
     // Check controller permission
-    if (!canControlResource(existing, svc.userId, callerRole || 'admin')) {
+    if (!callerRole || !canControlResource(existing, svc.userId, callerRole)) {
       throw new Error('You do not have controller permission on this resource type');
     }
 
@@ -2857,7 +2857,7 @@ const ResourceService = {
     if (!existing) throw new Error(`Resource type ${typeId} not found`);
 
     // Only controllers can change permissions
-    if (!canControlResource(existing, svc.userId, callerRole || 'admin')) {
+    if (!callerRole || !canControlResource(existing, svc.userId, callerRole)) {
       throw new Error('You do not have controller permission on this resource type');
     }
 
@@ -10801,8 +10801,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
                 {assignment.staff?.length > 1 && <span style={{fontSize:10,color:'var(--tx-2)'}}>
                   +{assignment.staff.length - 1} additional staff with access
                 </span>}
-                {assignment.transferred_from && <span style={{fontSize:9.5,color:'var(--tx-2)',fontFamily:'var(--mono)',display:'block',marginTop:2}}>
-                  Transferred from {assignment.transferred_from.split(':')[0]?.replace('@','')} on {new Date(assignment.transferred_at).toLocaleDateString()}
+                {assignment?.transferred_from && <span style={{fontSize:9.5,color:'var(--tx-2)',fontFamily:'var(--mono)',display:'block',marginTop:2}}>
+                  Transferred from {assignment.transferred_from.split(':')[0]?.replace('@','')}{assignment.transferred_at ? ` on ${new Date(assignment.transferred_at).toLocaleDateString()}` : ''}
                 </span>}
               </div>
               {assignment.primary === svc.userId && <span className="tag tag-gold" style={{fontSize:8}}>YOU</span>}
@@ -11007,7 +11007,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           metrics.forEach(m => {
             if (!m.demographics) return;
             for (const [k,v] of Object.entries(m.demographics)) {
-              if (!v) return;
+              if (!v) continue;
               if (!demoAgg[k]) demoAgg[k] = {};
               demoAgg[k][v] = (demoAgg[k][v]||0) + 1;
             }
@@ -12370,7 +12370,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         </div>
         <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:8}}>
           {['Team Member','Provider','Counselor','Therapist','Advocate','Case Worker','Coordinator','Staff'].map(t=>
-            <span key={t} onClick={()=>setTerminologyDraft({...terminologyDraft,provider_term:t,provider_term_plural:t+(t.endsWith('f')?'s':t.endsWith('or')?'s':'s')})}
+            <span key={t} onClick={()=>setTerminologyDraft({...terminologyDraft,provider_term:t,provider_term_plural:t.endsWith('f')?t.slice(0,-1)+'ves':t.endsWith('s')||t.endsWith('x')||t.endsWith('ch')||t.endsWith('sh')?t+'es':t+'s'})}
               className={`tag ${terminologyDraft.provider_term===t?'tag-gold':'tag-blue'}`}
               style={{fontSize:9,cursor:'pointer',transition:'all .15s'}}>{t}</span>)}
         </div>
@@ -12550,7 +12550,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         <p style={{fontSize:10.5,color:'var(--tx-3)',marginBottom:8}}>Select roles that can send messages on behalf of your organization. These roles can also read.</p>
         <div style={{display:'flex',flexDirection:'column',gap:4}}>
           {ORG_ROLES.map(role=><div key={role} onClick={()=>{
-            setMsgAccessDraft(prev=>({...prev,respond:prev.respond.includes(role)?prev.respond.filter(r=>r!==role):[...prev.respond,role]}));
+            setMsgAccessDraft(prev=>({...prev,respond:(prev.respond||[]).includes(role)?(prev.respond||[]).filter(r=>r!==role):[...(prev.respond||[]),role]}));
           }} style={{padding:'10px 14px',borderRadius:'var(--r)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',
             border:`1px solid ${msgAccessDraft.respond?.includes(role)?'var(--gold)':'var(--border-1)'}`,
             background:msgAccessDraft.respond?.includes(role)?'var(--gold-dim)':'var(--bg-3)',transition:'all .15s'}}>
