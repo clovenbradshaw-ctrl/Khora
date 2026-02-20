@@ -7590,7 +7590,7 @@ const WelcomeScreen = ({onContinue}) => (
           You've been invited to access Khora — a system where <em>you</em> own your data.
         </p>
         <p style={{color:'var(--tx-1)',fontSize:13.5,marginTop:12,lineHeight:1.7}}>
-          Khora runs on the <strong style={{color:'var(--tx-0)'}}>Matrix protocol</strong>, which means your information lives on a server you choose — not locked inside a single company's platform. To get started you'll need a free Matrix account.
+          Khora works like email — you create a free account on a provider you trust, and you can connect with anyone on the network. Your data is never locked inside a single company. To get started, you'll create a free account (it takes less than a minute).
         </p>
 
         <div style={{background:'var(--bg-2)',border:'1px solid var(--border-1)',borderRadius:'var(--r-lg)',padding:'20px 22px',marginTop:24}}>
@@ -7598,30 +7598,30 @@ const WelcomeScreen = ({onContinue}) => (
           <div style={{display:'flex',gap:14,marginBottom:16}}>
             <div style={{width:24,height:24,borderRadius:'50%',background:'var(--teal-dim)',color:'var(--teal)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,fontFamily:'var(--mono)',flexShrink:0,marginTop:1}}>1</div>
             <div>
-              <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Create a Matrix account</div>
+              <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Create your account</div>
               <div style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6}}>
-                You can register with any Matrix homeserver. For a free, general-purpose account we recommend <a href="https://app.element.io/#/register" target="_blank" rel="noopener noreferrer" style={{color:'var(--teal)',textDecoration:'none',fontWeight:600}}>matrix.org</a> — sign up takes under a minute.
+                Click "Get Started" below, then use the "Create Account" tab. Pick a username and password — that's it. We'll set you up on a recommended server automatically.
               </div>
               <div style={{fontSize:11.5,color:'var(--tx-2)',lineHeight:1.5,marginTop:6}}>
-                If your organization runs its own server, use that address instead. Your admin will know the homeserver URL.
+                If your organization gave you a specific server address, you can choose it from the dropdown instead.
               </div>
             </div>
           </div>
           <div style={{display:'flex',gap:14,marginBottom:16}}>
             <div style={{width:24,height:24,borderRadius:'50%',background:'var(--teal-dim)',color:'var(--teal)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,fontFamily:'var(--mono)',flexShrink:0,marginTop:1}}>2</div>
             <div>
-              <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Sign in here</div>
+              <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Sign in</div>
               <div style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6}}>
-                Use your Matrix username (e.g. <span style={{fontFamily:'var(--mono)',color:'var(--tx-0)',fontSize:12}}>@you:matrix.org</span>) and password to connect.
+                Enter the username and password you just created. If you already have an account from another app on this network (like Element), that works too.
               </div>
             </div>
           </div>
           <div style={{display:'flex',gap:14}}>
             <div style={{width:24,height:24,borderRadius:'50%',background:'var(--teal-dim)',color:'var(--teal)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,fontFamily:'var(--mono)',flexShrink:0,marginTop:1}}>3</div>
             <div>
-              <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Roles are detected automatically</div>
+              <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Your role appears automatically</div>
               <div style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6}}>
-                Khora infers your <strong style={{color:'var(--teal)'}}>Client</strong>, <strong style={{color:'var(--gold)'}}>Provider</strong>, Org Admin, and Network roles from room membership. If you hold multiple roles, you can switch contexts without signing out.
+                Khora figures out whether you're a <strong style={{color:'var(--teal)'}}>Client</strong>, <strong style={{color:'var(--gold)'}}>Provider</strong>, Org Admin, or Network member based on the groups you belong to. If you have more than one role, you can switch between them without signing out.
               </div>
             </div>
           </div>
@@ -7637,7 +7637,7 @@ const WelcomeScreen = ({onContinue}) => (
         </button>
 
         <p style={{textAlign:'center',marginTop:16,fontSize:11.5,color:'var(--tx-3)',fontFamily:'var(--mono)',letterSpacing:'.03em'}}>
-          Already have an account? Click above to sign in.
+          Already have an account? Click "Get Started" to sign in.
         </p>
       </div>
     </div>
@@ -7683,7 +7683,7 @@ const LoginScreen = ({onLogin}) => {
             <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-2)',letterSpacing:'.08em'}}>SOVEREIGN CASE MANAGEMENT</span></div>
         </div>
         <p style={{color:'var(--tx-1)',fontSize:13,marginTop:18,marginBottom:24,lineHeight:1.65}}>
-          Client-owned data vaults on Matrix. Per-field encryption. Providers see only what clients share. Each tile is yours to place.
+          Your data, your control. Every piece of information is encrypted separately — providers see only what you choose to share.
         </p>
 
         <div className="tabs" style={{marginBottom:20}}>
@@ -7692,13 +7692,13 @@ const LoginScreen = ({onLogin}) => {
         </div>
 
         {mode==='register'&&<div style={{background:'var(--teal-dim)',border:'1px solid rgba(62,201,176,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:16,fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
-          <strong style={{color:'var(--teal)'}}>Choose a Matrix homeserver</strong> — we recommend <strong style={{color:'var(--tx-0)'}}>hyphae.social</strong> for a free account. You can also pick from the other servers below, or browse <a href="https://www.hello-matrix.net/public_servers.php" target="_blank" rel="noopener noreferrer" style={{color:'var(--teal)',textDecoration:'underline'}}>more public servers</a>.
+          Your account will be created on a secure server. We recommend <strong style={{color:'var(--tx-0)'}}>hyphae.social</strong> (selected below) — it's free and works great with Khora. You can also choose a different server from the list if your organization uses one.
         </div>}
 
         <form onSubmit={go}>
-          <div style={{marginBottom:14}}><span className="section-label">USERNAME</span><input value={user} onChange={e=>setUser(e.target.value)} placeholder={mode==='register'?'choose a username':'@you:matrix.org'} autoComplete="username"/></div>
+          <div style={{marginBottom:14}}><span className="section-label">USERNAME</span><input value={user} onChange={e=>setUser(e.target.value)} placeholder={mode==='register'?'choose a username':'your username'} autoComplete="username"/></div>
           <div style={{marginBottom:14}}><span className="section-label">PASSWORD</span><input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" autoComplete={mode==='register'?'new-password':'current-password'}/></div>
-          {!hideHs&&<div style={{marginBottom:14}}><span className="section-label">HOMESERVER</span>{mode==='register'?<select value={hs} onChange={e=>setHs(e.target.value)} style={{width:'100%',padding:'8px 10px',fontSize:13,background:'var(--bg-2)',color:'var(--tx-0)',border:'1px solid var(--border-0)',borderRadius:'var(--r)'}}><option value="hyphae.social">hyphae.social (recommended)</option><option value="matrix.org">matrix.org</option><option value="tchncs.de">tchncs.de</option><option value="envs.net">envs.net</option><option value="matrix.im">matrix.im</option></select>:<input value={hs} onChange={e=>setHs(e.target.value)} placeholder="matrix.org"/>}</div>}
+          {!hideHs&&<div style={{marginBottom:14}}><span className="section-label">SERVER</span>{mode==='register'?<select value={hs} onChange={e=>setHs(e.target.value)} style={{width:'100%',padding:'8px 10px',fontSize:13,background:'var(--bg-2)',color:'var(--tx-0)',border:'1px solid var(--border-0)',borderRadius:'var(--r)'}}><option value="hyphae.social">hyphae.social (recommended)</option><option value="matrix.org">matrix.org</option><option value="tchncs.de">tchncs.de</option><option value="envs.net">envs.net</option><option value="matrix.im">matrix.im</option></select>:<input value={hs} onChange={e=>setHs(e.target.value)} placeholder="e.g. matrix.org"/>}</div>}
           {err&&<div style={{background:'var(--red-dim)',border:'1px solid rgba(232,93,93,.2)',borderRadius:'var(--r)',padding:'9px 14px',fontSize:12.5,color:'var(--red)',marginBottom:16}}>{err}</div>}
           <button type="submit" className="b-pri" disabled={loading} style={{width:'100%',padding:12,fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
             {loading?<Spin s={16}/>:<I n="lock" s={16}/>} {loading?'Connecting...':(mode==='register'?'Create Account & Connect':'Connect')}
@@ -7707,7 +7707,7 @@ const LoginScreen = ({onLogin}) => {
         <div style={{marginTop:16,display:'flex',alignItems:'center',gap:8,justifyContent:'center'}}>
           <div style={{width:6,height:6,borderRadius:'50%',background:typeof matrixcs!=='undefined'?'var(--green)':'var(--gold)'}}/>
           <span style={{fontFamily:'var(--mono)',fontSize:10.5,color:'var(--tx-3)'}}>
-            {typeof matrixcs!=='undefined'?'matrix-js-sdk + Megolm E2EE':'SDK loading — fallback ready'}
+            {typeof matrixcs!=='undefined'?'Secure connection ready':'Connecting\u2026'}
           </span>
         </div>
       </div>
@@ -13052,7 +13052,7 @@ const App = () => {
   };
 
   if (restoring || detectingRoles) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
-    <div style={{textAlign:'center'}}><Spin s={32}/><p style={{color:'var(--tx-2)',fontSize:13,marginTop:16}}>{detectingRoles ? 'Detecting roles from room membership…' : 'Restoring session…'}</p></div>
+    <div style={{textAlign:'center'}}><Spin s={32}/><p style={{color:'var(--tx-2)',fontSize:13,marginTop:16}}>{detectingRoles ? 'Setting up your workspace\u2026' : 'Restoring session\u2026'}</p></div>
   </div>;
 
   // Network error during restore — offer retry without wiping the saved session
@@ -13061,7 +13061,7 @@ const App = () => {
       <div style={{background:'var(--bg-1)',border:'1px solid var(--border-0)',borderRadius:'var(--r-lg)',padding:'36px 32px',textAlign:'center'}}>
         <div style={{width:48,height:48,borderRadius:'50%',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',margin:'0 auto 16px'}}><I n="wifi-off" s={22}/></div>
         <h2 style={{fontSize:18,fontWeight:700,marginBottom:8}}>Connection issue</h2>
-        <p style={{color:'var(--tx-2)',fontSize:13,lineHeight:1.6,marginBottom:20}}>Could not reach the homeserver to restore your session. Your login is saved and will reconnect automatically.</p>
+        <p style={{color:'var(--tx-2)',fontSize:13,lineHeight:1.6,marginBottom:20}}>Could not reach the server to restore your session. Your login is saved and will reconnect automatically.</p>
         {restoreError.message && <p style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--tx-3)',marginBottom:16}}>{restoreError.message}</p>}
         <div style={{display:'flex',gap:10,justifyContent:'center'}}>
           <button className="b-pri" onClick={() => attemptRestore()} style={{padding:'10px 24px',fontSize:13}}><I n="refresh-cw" s={14}/> Retry</button>
