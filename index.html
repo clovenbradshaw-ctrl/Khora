@@ -635,22 +635,35 @@ function eKey(roomId, field) { return `${roomId}::${field||'_root'}`; }
 let opSeq = 0;
 function genOpId() { return `op_${Date.now().toString(36)}${(opSeq++).toString(36)}${Math.random().toString(36).slice(2,5)}`; }
 
+// Extract homeserver from a Matrix user ID (@user:server.org) or room ID (!room:server.org)
+function extractHomeserver(matrixId) {
+  if (!matrixId) return 'unknown';
+  const idx = matrixId.indexOf(':');
+  return idx >= 0 ? matrixId.slice(idx + 1) : 'unknown';
+}
+
 // Emit an EO operation — validates transitions, auto-emits intermediates
+// Now enriches every event with provenance metadata (created_by, origin_server)
+// and builds provenance chains linking each op to its predecessor on the same entity.
 async function emitOp(roomId, op, target, context, frame, provenance = []) {
   const ek = eKey(roomId, target?.field || target?.entity);
-  const lastOp = entityOpHist[ek];
+  const lastEntry = entityOpHist[ek];
+  const lastOp = lastEntry?.op;
   // Auto-emit intermediate operations if transition is invalid
   if (lastOp && !OP_ADJ[lastOp]?.includes(op)) {
     const path = findOpPath(lastOp, op);
     for (let i = 0; i < path.length - 1; i++) {
-      const mid = { id: genOpId(), op: path[i], target, context: { auto_intermediate: true, from: lastOp, to: op }, frame, provenance: [], ts: Date.now() };
+      const midId = genOpId();
+      const mid = { id: midId, op: path[i], target, context: { auto_intermediate: true, from: lastOp, to: op }, frame, provenance: lastEntry ? [lastEntry.id] : [], created_by: svc.userId, origin_server: extractHomeserver(svc.userId), ts: Date.now() };
       await svc.sendEvent(roomId, EVT.OP, mid);
-      entityOpHist[ek] = path[i];
+      entityOpHist[ek] = { op: path[i], id: midId };
     }
   }
-  const event = { id: genOpId(), op, target, context, frame, provenance, ts: Date.now() };
+  const prevEntry = entityOpHist[ek];
+  const chainedProvenance = [...provenance, ...(prevEntry?.id ? [prevEntry.id] : [])];
+  const event = { id: genOpId(), op, target, context, frame, provenance: chainedProvenance, created_by: svc.userId, origin_server: extractHomeserver(svc.userId), ts: Date.now() };
   await svc.sendEvent(roomId, EVT.OP, event);
-  entityOpHist[ek] = op;
+  entityOpHist[ek] = { op, id: event.id };
   return event;
 }
 
@@ -3186,6 +3199,7 @@ const ResourceService = {
         : null,
       notes: allocationData.notes || null,
       approval: allocationData.approval || null,
+      created_by: svc.userId, origin_server: extractHomeserver(svc.userId),
     };
 
     await svc.setState(bridgeRoomId, EVT.RESOURCE_ALLOC, allocation, allocation.id);
@@ -6966,6 +6980,182 @@ const ABSENCE_MAP = {
   REC: { label: 'Pre-recursive', desc: 'Not yet in feedback loop' },
 };
 
+/* ═══════════════════ RECORD PROVENANCE PANEL ═══════════════════
+ * Inline expandable panel showing provenance for any record/entity:
+ * - Origin server (extracted from Matrix IDs)
+ * - Who created / last modified the record
+ * - When created
+ * - Full EO operation history filtered to that specific entity
+ * ═══════════════════════════════════════════════════════════════ */
+
+const PROV_OP_COLORS = {
+  NUL:'red', DES:'teal', INS:'green', SEG:'orange', CON:'blue', SYN:'purple', ALT:'gold', SUP:'pink', REC:'teal',
+};
+
+const RecordProvenance = ({ roomId, entityKey, label, session }) => {
+  const [ops, setOps] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const loadProvenance = useCallback(async () => {
+    if (ops !== null) return; // already loaded
+    setLoading(true); setError(null);
+    try {
+      const allOps = [];
+      if (svc.client) {
+        const room = svc.client.getRoom(roomId);
+        if (room) {
+          // Collect from timeline
+          for (const ev of room.getLiveTimeline().getEvents()) {
+            if (ev.getType() === EVT.OP) {
+              const c = ev.getContent();
+              const tField = c.target?.field; const tEntity = c.target?.entity;
+              const tType = c.target?.type;
+              if (tField === entityKey || tEntity === entityKey || tType === entityKey) {
+                allOps.push({ ...c, _sender: ev.getSender(), _eventTs: ev.getTs() });
+              }
+            }
+          }
+          // Collect from state events (EO ops are timeline events, but check state too)
+          for (const ev of room.currentState.getStateEvents()) {
+            if (ev.getType() === EVT.OP) {
+              const c = ev.getContent();
+              const tField = c.target?.field; const tEntity = c.target?.entity;
+              const tType = c.target?.type;
+              if (tField === entityKey || tEntity === entityKey || tType === entityKey) {
+                if (!allOps.find(o => o.id === c.id)) {
+                  allOps.push({ ...c, _sender: ev.getSender(), _eventTs: ev.getTs() });
+                }
+              }
+            }
+          }
+        }
+      }
+      allOps.sort((a, b) => (a.ts || a._eventTs || 0) - (b.ts || b._eventTs || 0));
+      setOps(allOps);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }, [roomId, entityKey, ops]);
+
+  useEffect(() => { loadProvenance(); }, [loadProvenance]);
+
+  if (loading) return <div style={{padding:'12px 16px',background:'var(--bg-3)',borderRadius:'var(--r)',marginTop:4}}>
+    <Spin s={14}/> <span style={{fontSize:11,color:'var(--tx-2)',marginLeft:6}}>Loading provenance...</span>
+  </div>;
+
+  if (error) return <div style={{padding:'12px 16px',background:'var(--bg-3)',borderRadius:'var(--r)',marginTop:4,fontSize:11,color:'var(--red)'}}>
+    Error loading provenance: {error}
+  </div>;
+
+  if (!ops || ops.length === 0) return <div style={{padding:'12px 16px',background:'var(--bg-3)',borderRadius:'var(--r)',marginTop:4}}>
+    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+      <I n="git-commit" s={12} c="var(--tx-2)"/>
+      <span style={{fontSize:11,fontWeight:600,color:'var(--tx-1)'}}>Provenance: {label || entityKey}</span>
+    </div>
+    <span style={{fontSize:10.5,color:'var(--tx-3)'}}>No EO operations recorded for this entity yet.</span>
+  </div>;
+
+  const firstOp = ops[0];
+  const lastOp = ops[ops.length - 1];
+  const creator = firstOp.created_by || firstOp._sender || 'Unknown';
+  const creatorServer = firstOp.origin_server || extractHomeserver(creator);
+  const createdAt = firstOp.ts || firstOp._eventTs;
+  const roomServer = extractHomeserver(roomId);
+  const modifierCount = new Set(ops.map(o => o.created_by || o._sender).filter(Boolean)).size;
+
+  const fmtDate = (ts) => {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, {year:'numeric',month:'short',day:'numeric'}) + ' ' +
+           d.toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'});
+  };
+
+  const fmtUserId = (uid) => {
+    if (!uid) return 'Unknown';
+    return uid.startsWith('@') ? uid.split(':')[0].slice(1) : uid;
+  };
+
+  const getTriad = (opName) => {
+    for (const [k,v] of Object.entries(OPERATOR_TRIADS)) { if (v.ops.includes(opName)) return v; }
+    return { color: 'blue' };
+  };
+
+  return <div style={{padding:'14px 16px',background:'var(--bg-3)',borderRadius:'var(--r)',marginTop:4,border:'1px solid var(--border-0)'}}>
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
+      <I n="git-commit" s={13} c="var(--teal)"/>
+      <span style={{fontSize:12,fontWeight:700,color:'var(--tx-0)'}}>Provenance</span>
+      <span style={{fontSize:10.5,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{label || entityKey}</span>
+      <span style={{marginLeft:'auto',fontSize:9.5,color:'var(--tx-3)'}}>{ops.length} operation{ops.length!==1?'s':''}</span>
+    </div>
+
+    {/* Summary grid */}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+      <div style={{padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
+        <div style={{fontSize:9,textTransform:'uppercase',color:'var(--tx-3)',letterSpacing:'.04em',marginBottom:2}}>Server</div>
+        <div style={{fontSize:11.5,fontFamily:'var(--mono)',color:'var(--tx-1)',wordBreak:'break-all'}}>{roomServer}</div>
+      </div>
+      <div style={{padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
+        <div style={{fontSize:9,textTransform:'uppercase',color:'var(--tx-3)',letterSpacing:'.04em',marginBottom:2}}>Created by</div>
+        <div style={{fontSize:11.5,color:'var(--tx-1)'}} title={creator}>{fmtUserId(creator)}</div>
+        <div style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{creatorServer}</div>
+      </div>
+      <div style={{padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
+        <div style={{fontSize:9,textTransform:'uppercase',color:'var(--tx-3)',letterSpacing:'.04em',marginBottom:2}}>Created</div>
+        <div style={{fontSize:11.5,color:'var(--tx-1)'}}>{fmtDate(createdAt)}</div>
+      </div>
+      <div style={{padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
+        <div style={{fontSize:9,textTransform:'uppercase',color:'var(--tx-3)',letterSpacing:'.04em',marginBottom:2}}>Last modified</div>
+        <div style={{fontSize:11.5,color:'var(--tx-1)'}}>{fmtDate(lastOp.ts || lastOp._eventTs)}</div>
+        {modifierCount > 1 && <div style={{fontSize:9.5,color:'var(--tx-3)'}}>{modifierCount} contributors</div>}
+      </div>
+    </div>
+
+    {/* EO Operation History */}
+    <div style={{fontSize:9.5,textTransform:'uppercase',color:'var(--tx-3)',letterSpacing:'.04em',marginBottom:6,fontWeight:600}}>EO Log History</div>
+    <div style={{maxHeight:200,overflowY:'auto',display:'flex',flexDirection:'column',gap:3}}>
+      {ops.map((o, i) => {
+        const triad = getTriad(o.op);
+        const opDesc = OP_DESCRIPTIONS[o.op] || { verb: o.op, desc: '' };
+        const opColor = PROV_OP_COLORS[o.op] || 'blue';
+        const sender = o.created_by || o._sender;
+        return <div key={o.id || i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 8px',background:'var(--bg-2)',borderRadius:5,fontSize:11}}>
+          {/* Timeline dot */}
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',minWidth:16,paddingTop:2}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:`var(--${opColor})`,flexShrink:0}}/>
+            {i < ops.length - 1 && <div style={{width:1,height:16,background:'var(--border-0)',marginTop:2}}/>}
+          </div>
+          {/* Op badge + details */}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
+              <span className={`tag tag-${opColor}`} style={{fontSize:8.5,fontFamily:'var(--mono)',fontWeight:700}}>{o.op}</span>
+              <span style={{fontSize:10.5,fontWeight:600,color:'var(--tx-1)'}}>{opDesc.verb}</span>
+              {o.context?.auto_intermediate && <span className="tag tag-orange" style={{fontSize:7.5}}>AUTO</span>}
+              {o.frame?.epistemic && <span className={`tag tag-${o.frame.epistemic==='GIVEN'?'teal':'gold'}`} style={{fontSize:7.5}}>{o.frame.epistemic}</span>}
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,fontSize:10,color:'var(--tx-3)'}}>
+              <span>{fmtDate(o.ts || o._eventTs)}</span>
+              {sender && <span title={sender} style={{fontFamily:'var(--mono)'}}>{fmtUserId(sender)}</span>}
+              {o.origin_server && <span style={{fontFamily:'var(--mono)',color:'var(--tx-3)'}}>{o.origin_server}</span>}
+            </div>
+            {/* Context details */}
+            {o.context && !o.context.auto_intermediate && <div style={{marginTop:3,fontSize:10,color:'var(--tx-2)'}}>
+              {o.context.value && <span>value: {String(o.context.value).slice(0,50)}</span>}
+              {o.context.from && o.context.to && <span>changed: {String(o.context.from).slice(0,25)} → {String(o.context.to).slice(0,25)}</span>}
+              {o.context.source && <span style={{marginLeft:6,fontStyle:'italic'}}>{o.context.source}</span>}
+              {o.context.reason && <span style={{marginLeft:6}}>{o.context.reason}</span>}
+            </div>}
+            {/* Provenance chain */}
+            {o.provenance && o.provenance.length > 0 && <div style={{marginTop:2,fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
+              chain: {o.provenance.map(p => p.slice(0,12)).join(' → ')}
+            </div>}
+          </div>
+        </div>;
+      })}
+    </div>
+  </div>;
+};
+
 // Map a Matrix event to Choreo operation grammar
 const toChoreoOp = (ev) => {
   const content = ev.content || {};
@@ -7551,6 +7741,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const [obsValue, setObsValue] = useState('');
   const [obsDate, setObsDate] = useState(new Date().toISOString().slice(0,10));
   const [obsFreeText, setObsFreeText] = useState('');
+  const [provenanceTarget, setProvenanceTarget] = useState(null); // {entityKey, label, roomId} or null — toggles inline provenance panel
   const [initError, setInitError] = useState(null);
   const [claimedRooms, setClaimedRooms] = useState([]);
   const [pendingClaims, setPendingClaims] = useState([]);
@@ -7652,11 +7843,12 @@ const ClientApp = ({session, onLogout, showToast}) => {
       }
       if (!vault) {
         vault = await svc.createRoom('[Khora Vault]', 'Personal data vault', [
-          {type:EVT.IDENTITY,state_key:'',content:{account_type:'client',owner:svc.userId,created:Date.now()}},
+          {type:EVT.IDENTITY,state_key:'',content:{account_type:'client',owner:svc.userId,created:Date.now(),created_by:svc.userId,origin_server:extractHomeserver(svc.userId)}},
           {type:EVT.VAULT_SNAPSHOT,state_key:'',content:{fields:{},observations:[],
             metrics_consent:{enabled:false,categories:[]},
             matching_consent:{enabled:false,layers:[],network_id:null,last_token_ts:null},
-            custom_field_defs:[],enabled_frameworks:[]}},
+            custom_field_defs:[],enabled_frameworks:[],
+            created_by:svc.userId,origin_server:extractHomeserver(svc.userId),last_modified_by:svc.userId,last_modified_at:Date.now()}},
           {type:EVT.VAULT_PROVIDERS,state_key:'',content:{providers:[]}},
         ]);
         showToast('Vault created — encrypted room ready','success');
@@ -7761,7 +7953,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
   };
 
   const saveSnapshot = async (fields, obs, mc, cfd, ef) => {
-    const snapshot = {fields:fields??vaultData, observations:obs??observations, metrics_consent:mc??metricsConsent, custom_field_defs:cfd??customFieldDefs, enabled_frameworks:ef??enabledFrameworks};
+    const snapshot = {fields:fields??vaultData, observations:obs??observations, metrics_consent:mc??metricsConsent, custom_field_defs:cfd??customFieldDefs, enabled_frameworks:ef??enabledFrameworks,
+      last_modified_by: svc.userId, last_modified_at: Date.now(), origin_server: extractHomeserver(svc.userId)};
     await svc.setState(vaultRoom, EVT.VAULT_SNAPSHOT, snapshot);
     setVaultData(snapshot.fields); setObservations(snapshot.observations); setMetricsConsent(snapshot.metrics_consent); setCustomFieldDefs(snapshot.custom_field_defs); setEnabledFrameworks(snapshot.enabled_frameworks);
   };
@@ -7797,7 +7990,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const handleRecordObservation = async () => {
     if (!obsValue || !obsModal) return;
     const obs = { id:genOpId(), category:obsModal.key, value:obsValue, date:obsDate, prompt_id:obsModal.id,
-      schema_version:obsModal.version||1, free_text:obsFreeText||undefined, ts:Date.now() };
+      schema_version:obsModal.version||1, free_text:obsFreeText||undefined, ts:Date.now(),
+      created_by: svc.userId, origin_server: extractHomeserver(svc.userId) };
     await emitOp(vaultRoom, 'INS', {type:'observation',category:obsModal.key,value:obsValue,date:obsDate},
       {reported_by:'client',method:'self_report',prompt:obsModal.question,free_text:obsFreeText||undefined}, vaultFrame());
     const newObs = [...observations, obs];
@@ -7818,7 +8012,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     if (!newProviderId.trim()) return;
     try {
       const bridgeId = await svc.createRoom(`[Khora Bridge] ${svc.userId} ↔ ${newProviderId}`, 'Khora bridge — shared data room', [
-        {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:newProviderId,relationship_type:RELATIONSHIP_TYPES.client_provider.id,created:Date.now(),status:'active',transferable:true,org_id:null,assigned_staff:[newProviderId]}},
+        {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:newProviderId,relationship_type:RELATIONSHIP_TYPES.client_provider.id,created:Date.now(),status:'active',transferable:true,org_id:null,assigned_staff:[newProviderId],created_by:svc.userId,origin_server:extractHomeserver(svc.userId)}},
         {type:EVT.BRIDGE_REFS,state_key:'',content:{fields:{}}},
       ]);
       await svc.invite(bridgeId, newProviderId);
@@ -7876,7 +8070,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     const prov = providers[pi];
     try {
       const newBridgeId = await svc.createRoom(`[Khora Bridge] ${svc.userId} ↔ ${prov.providerUserId}`, 'Khora bridge — replaced', [
-        {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:prov.providerUserId,relationship_type:RELATIONSHIP_TYPES.client_provider.id,created:Date.now(),status:'active',previous:prov.bridgeRoomId,transferable:prov.transferable!==false,org_id:null,assigned_staff:[prov.providerUserId]}},
+        {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:prov.providerUserId,relationship_type:RELATIONSHIP_TYPES.client_provider.id,created:Date.now(),status:'active',previous:prov.bridgeRoomId,transferable:prov.transferable!==false,org_id:null,assigned_staff:[prov.providerUserId],created_by:svc.userId,origin_server:extractHomeserver(svc.userId)}},
         {type:EVT.BRIDGE_REFS,state_key:'',content:{fields:{}}},
       ]);
       await emitOp(prov.bridgeRoomId, 'NUL', {entity:'bridge',field:'relationship'}, {reason:'hard_revoke'}, bridgeFrame(prov.bridgeRoomId));
@@ -8104,7 +8298,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
               <span style={{color:`var(--${color})`}}><I n={CAT_ICONS[cat]||'file'} s={13}/></span>
               <span className="section-label" style={{marginBottom:0}}>{(CAT_LABELS[cat]||cat.charAt(0).toUpperCase()+cat.slice(1)).toUpperCase()}</span></div>
             <div className="card" style={{padding:0,overflow:'hidden'}}>
-              {fields.map((f,fi)=><div key={f.key} style={{padding:'10px 16px',borderBottom:fi<fields.length-1?'1px solid var(--border-0)':'none',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              {fields.map((f,fi)=><React.Fragment key={f.key}>
+                <div style={{padding:'10px 16px',borderBottom:(fi<fields.length-1&&!(provenanceTarget?.entityKey===f.key&&provenanceTarget?.roomId===vaultRoom))?'1px solid var(--border-0)':'none',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <span style={{fontSize:12.5,fontWeight:500}}>{f.label}</span>
                   {f.sensitive&&<span className="tag tag-red" style={{fontSize:8.5}}>SENSITIVE</span>}
@@ -8113,10 +8308,17 @@ const ClientApp = ({session, onLogout, showToast}) => {
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <span style={{fontFamily:'var(--mono)',fontSize:11.5,color:vaultData[f.key]?'var(--tx-1)':'var(--tx-3)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                     {vaultData[f.key]?(f.sensitive?'••••••••':vaultData[f.key]):'—'}</span>
+                  <span onClick={()=>setProvenanceTarget(pt=>pt?.entityKey===f.key&&pt?.roomId===vaultRoom?null:{entityKey:f.key,label:f.label,roomId:vaultRoom})}
+                    style={{cursor:'pointer',color:provenanceTarget?.entityKey===f.key&&provenanceTarget?.roomId===vaultRoom?'var(--teal)':'var(--tx-3)',transition:'color .15s'}}
+                    title="View provenance"><I n="git-commit" s={12}/></span>
                   {f.custom&&<span onClick={()=>handleDeleteCustomField(f.key)} style={{cursor:'pointer',color:'var(--tx-3)',transition:'color .15s'}}
                     onMouseEnter={e=>e.currentTarget.style.color='var(--red)'} onMouseLeave={e=>e.currentTarget.style.color='var(--tx-3)'}><I n="trash" s={12}/></span>}
                 </div>
-              </div>)}
+              </div>
+              {provenanceTarget?.entityKey===f.key&&provenanceTarget?.roomId===vaultRoom&&<div style={{padding:'4px 16px 12px',borderBottom:fi<fields.length-1?'1px solid var(--border-0)':'none'}}>
+                <RecordProvenance roomId={vaultRoom} entityKey={f.key} label={f.label} session={session}/>
+              </div>}
+              </React.Fragment>)}
             </div>
           </div>;
         })}
@@ -8161,13 +8363,25 @@ const ClientApp = ({session, onLogout, showToast}) => {
             {[...observations].reverse().map((obs,i)=>{
               const prompt = DEFAULT_PROMPTS.find(p=>p.key===obs.category);
               const optLabel = prompt?.options.find(o=>o.v===obs.value)?.l || obs.value;
-              return <div key={obs.id||i} style={{padding:'10px 14px',background:'var(--bg-3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:10}}>
+              const obsEntityKey = obs.category;
+              const obsProvOpen = provenanceTarget?.entityKey===obsEntityKey&&provenanceTarget?.roomId===vaultRoom&&provenanceTarget?._obsId===obs.id;
+              return <React.Fragment key={obs.id||i}>
+                <div style={{padding:'10px 14px',background:'var(--bg-3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:10}}>
                 <span className={`tag tag-${OBS_CAT_COLORS[obs.category]||'blue'}`} style={{fontSize:9}}>{obs.category}</span>
                 <span className="tag tag-teal" style={{fontSize:8.5}}>GIVEN</span>
                 <span style={{fontSize:12,flex:1}}>{optLabel}</span>
+                {obs.created_by&&<span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}} title={obs.created_by}>{obs.created_by.split(':')[0]?.slice(1)}</span>}
+                {obs.origin_server&&<span style={{fontSize:8.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{obs.origin_server}</span>}
                 {obs.free_text&&<span style={{fontSize:10.5,color:'var(--tx-2)',fontStyle:'italic'}}>{obs.free_text}</span>}
                 <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{obs.date}</span>
-              </div>;
+                <span onClick={()=>setProvenanceTarget(obsProvOpen?null:{entityKey:obsEntityKey,label:`Observation: ${obs.category}`,roomId:vaultRoom,_obsId:obs.id})}
+                  style={{cursor:'pointer',color:obsProvOpen?'var(--teal)':'var(--tx-3)',transition:'color .15s',flexShrink:0}}
+                  title="View provenance"><I n="git-commit" s={11}/></span>
+              </div>
+              {obsProvOpen&&<div style={{marginTop:2,marginBottom:4}}>
+                <RecordProvenance roomId={vaultRoom} entityKey={obsEntityKey} label={`Observation: ${obs.category}`} session={session}/>
+              </div>}
+              </React.Fragment>;
             })}
           </div>}
         </div>
@@ -8226,17 +8440,25 @@ const ClientApp = ({session, onLogout, showToast}) => {
               <div style={{display:'flex',flexDirection:'column',gap:6}}>
                 {allocs.sort((a,b)=>(b.allocated_at||0)-(a.allocated_at||0)).map((alloc,i)=>{
                   const statusColors = {active:'teal',consumed:'blue',expired:'orange',revoked:'red'};
-                  return <div key={alloc.allocation_id||i} className="card" style={{padding:'10px 14px'}}>
+                  const clientAllocProvOpen = provenanceTarget?.entityKey===alloc.allocation_id&&provenanceTarget?.roomId===alloc.bridge_room_id;
+                  return <React.Fragment key={alloc.allocation_id||i}>
+                    <div className="card" style={{padding:'10px 14px'}}>
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2}}>
                       <span style={{fontSize:13,fontWeight:600}}>{alloc.resource_name||alloc.resource_type_id}</span>
-                      <span className={`tag tag-${statusColors[alloc.status]||'teal'}`} style={{fontSize:8.5}}>{(alloc.status||'active').toUpperCase()}</span>
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <span className={`tag tag-${statusColors[alloc.status]||'teal'}`} style={{fontSize:8.5}}>{(alloc.status||'active').toUpperCase()}</span>
+                        <span onClick={()=>setProvenanceTarget(clientAllocProvOpen?null:{entityKey:alloc.allocation_id,label:`Resource: ${alloc.resource_name||alloc.resource_type_id}`,roomId:alloc.bridge_room_id})}
+                          style={{cursor:'pointer',color:clientAllocProvOpen?'var(--teal)':'var(--tx-3)',transition:'color .15s'}} title="View provenance"><I n="git-commit" s={11}/></span>
+                      </div>
                     </div>
                     <div style={{display:'flex',alignItems:'center',gap:8}}>
                       <span style={{fontSize:11,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>x{alloc.quantity} {alloc.unit||''}</span>
                       <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{alloc.allocated_at ? new Date(alloc.allocated_at).toLocaleDateString() : ''}</span>
                     </div>
                     {alloc.notes && <p style={{fontSize:11,color:'var(--tx-2)',marginTop:4,fontStyle:'italic'}}>{alloc.notes}</p>}
-                  </div>;
+                  </div>
+                  {clientAllocProvOpen&&<div style={{marginTop:2,marginBottom:4}}><RecordProvenance roomId={alloc.bridge_room_id} entityKey={alloc.allocation_id} label={`Resource: ${alloc.resource_name||alloc.resource_type_id}`} session={session}/></div>}
+                  </React.Fragment>;
                 })}
               </div>
             </div>);
@@ -8822,6 +9044,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [provObsValue, setProvObsValue] = useState('');
   const [provObsNotes, setProvObsNotes] = useState('');
   const [provObservations, setProvObservations] = useState([]);
+  const [provenanceTarget, setProvenanceTarget] = useState(null); // {entityKey, label, roomId} or null
   const [initError, setInitError] = useState(null);
   // Organization context — orgs are a feature within the provider experience
   const [orgRoom, setOrgRoom] = useState(null);
@@ -9276,7 +9499,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       id:genOpId(), prompt_id:provObsModal.id, prompt_key:provObsModal.key,
       value:provObsValue, notes:provObsNotes||undefined,
       schema_version:provObsModal.version||1,
-      author:svc.userId, ts:Date.now()
+      author:svc.userId, ts:Date.now(),
+      created_by: svc.userId, origin_server: extractHomeserver(svc.userId)
     };
     await svc.sendEvent(activeCase, EVT.OBSERVATION, obs);
     await emitOp(activeCase, 'INS',
@@ -9339,6 +9563,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           transferred_from: c.meta.provider,
           transferred_at: Date.now(),
           transferred_by: svc.userId,
+          last_modified_by: svc.userId, last_modified_at: Date.now(), origin_server: extractHomeserver(svc.userId),
         });
       } catch(e) {
         // Provider may not have state permission — update org assignment instead
@@ -10881,10 +11106,18 @@ const ProviderApp = ({session, onLogout, showToast}) => {
                   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
                     <span style={{color:`var(--${CAT_COLORS[cat]})`}}><I n={CAT_ICONS[cat]} s={12}/></span>
                     <span style={{fontSize:10.5,fontFamily:'var(--mono)',color:'var(--tx-2)',letterSpacing:'.05em'}}>{CAT_LABELS[cat].toUpperCase()}</span></div>
-                  {fields.map(f=><div key={f.key} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
+                  {fields.map(f=>{const provOpen = provenanceTarget?.entityKey===f.key&&provenanceTarget?.roomId===activeCase;
+                    return <React.Fragment key={f.key}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
                     <span style={{fontSize:12,color:'var(--tx-1)'}}>{f.label}</span>
-                    <span style={{fontSize:12.5,fontWeight:500,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeCaseData.sharedData[f.key]}</span>
-                  </div>)}
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{fontSize:12.5,fontWeight:500,maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{activeCaseData.sharedData[f.key]}</span>
+                      <span onClick={()=>setProvenanceTarget(provOpen?null:{entityKey:f.key,label:f.label,roomId:activeCase})}
+                        style={{cursor:'pointer',color:provOpen?'var(--teal)':'var(--tx-3)',transition:'color .15s',flexShrink:0}} title="View provenance"><I n="git-commit" s={11}/></span>
+                    </div>
+                  </div>
+                  {provOpen&&<div style={{padding:'4px 0 8px'}}><RecordProvenance roomId={activeCase} entityKey={f.key} label={f.label} session={session}/></div>}
+                  </React.Fragment>;})}
                 </div>;})}
               {sharedFwFields.length>0&&<div style={{marginBottom:10}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
@@ -10958,13 +11191,22 @@ const ProviderApp = ({session, onLogout, showToast}) => {
               {[...provObservations].reverse().map((obs,i)=>{
                 const prompt = DEFAULT_PROVIDER_PROMPTS.find(p=>p.id===obs.prompt_id||p.key===obs.prompt_key);
                 const optLabel = prompt?.options?.find(o=>o.v===obs.value)?.l || obs.value;
-                return <div key={obs.id||i} style={{padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:8}}>
+                const obsProvKey = obs.prompt_key || prompt?.key || obs.prompt_id;
+                const obsProvOpen = provenanceTarget?.entityKey===obsProvKey&&provenanceTarget?.roomId===activeCase&&provenanceTarget?._obsId===obs.id;
+                return <React.Fragment key={obs.id||i}>
+                  <div style={{padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:8}}>
                   <span className={`tag tag-${OBS_CAT_COLORS[prompt?.category]||'purple'}`} style={{fontSize:8.5}}>{prompt?.category||'obs'}</span>
                   <span className="tag tag-gold" style={{fontSize:8}}>MEANT</span>
                   <span style={{fontSize:11.5,flex:1}}>{prompt?.question}: <strong>{optLabel}</strong></span>
+                  {obs.created_by&&<span style={{fontSize:8.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}} title={obs.created_by}>{obs.created_by.split(':')[0]?.slice(1)}</span>}
+                  {obs.origin_server&&<span style={{fontSize:8,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{obs.origin_server}</span>}
                   {obs.notes&&<span style={{fontSize:10,color:'var(--tx-2)',fontStyle:'italic'}}>{obs.notes}</span>}
                   <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{obs.ts?new Date(obs.ts).toLocaleTimeString():''}</span>
-                </div>;
+                  <span onClick={()=>setProvenanceTarget(obsProvOpen?null:{entityKey:obsProvKey,label:`Observation: ${prompt?.category||'obs'}`,roomId:activeCase,_obsId:obs.id})}
+                    style={{cursor:'pointer',color:obsProvOpen?'var(--teal)':'var(--tx-3)',transition:'color .15s',flexShrink:0}} title="View provenance"><I n="git-commit" s={10}/></span>
+                </div>
+                {obsProvOpen&&<div style={{marginTop:2,marginBottom:4}}><RecordProvenance roomId={activeCase} entityKey={obsProvKey} label={`Observation: ${prompt?.category||'obs'}`} session={session}/></div>}
+                </React.Fragment>;
               })}
             </div>
           </>}
@@ -10983,14 +11225,24 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             {[...caseAllocations].sort((a,b)=>(b.allocated_at||0)-(a.allocated_at||0)).map(alloc=>{
               const rt = resourceTypes.find(t=>t.id===alloc.resource_type_id);
               const statusColors = {active:'teal',consumed:'blue',expired:'orange',revoked:'red'};
-              return <div key={alloc.id} style={{padding:'10px 14px',background:'var(--bg-3)',borderRadius:'var(--r)',border:'1px solid var(--border-0)'}}>
+              const allocProvOpen = provenanceTarget?.entityKey===alloc.id&&provenanceTarget?.roomId===activeCase;
+              return <React.Fragment key={alloc.id}>
+                <div style={{padding:'10px 14px',background:'var(--bg-3)',borderRadius:'var(--r)',border:'1px solid var(--border-0)'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <span style={{fontSize:13,fontWeight:600}}>{rt?.name||alloc.resource_type_id}</span>
                     <span style={{fontSize:11,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>x{alloc.quantity} {alloc.unit||rt?.unit||''}</span>
                   </div>
-                  <span className={`tag tag-${statusColors[alloc.status]||'teal'}`} style={{fontSize:8.5}}>{alloc.status?.toUpperCase()}</span>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span className={`tag tag-${statusColors[alloc.status]||'teal'}`} style={{fontSize:8.5}}>{alloc.status?.toUpperCase()}</span>
+                    <span onClick={()=>setProvenanceTarget(allocProvOpen?null:{entityKey:alloc.id,label:`Resource: ${rt?.name||alloc.resource_type_id}`,roomId:activeCase})}
+                      style={{cursor:'pointer',color:allocProvOpen?'var(--teal)':'var(--tx-3)',transition:'color .15s'}} title="View provenance"><I n="git-commit" s={11}/></span>
+                  </div>
                 </div>
+                {alloc.created_by&&<div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                  <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}} title={alloc.created_by}>Allocated by: {alloc.created_by.split(':')[0]?.slice(1)}</span>
+                  {alloc.origin_server&&<span style={{fontSize:8.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{alloc.origin_server}</span>}
+                </div>}
                 {alloc.notes && <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:4,fontStyle:'italic'}}>{alloc.notes}</p>}
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                   <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{alloc.allocated_at ? new Date(alloc.allocated_at).toLocaleDateString() : ''}{alloc.expires_at ? ` · expires ${new Date(alloc.expires_at).toLocaleDateString()}` : ''}</span>
@@ -11000,7 +11252,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
                     <button onClick={()=>handleResourceLifecycle(alloc.id,'revoked')} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3,color:'var(--red)'}}><I n="x" s={10}/>Revoke</button>
                   </div>}
                 </div>
-              </div>;
+              </div>
+              {allocProvOpen&&<div style={{marginTop:2,marginBottom:4}}><RecordProvenance roomId={activeCase} entityKey={alloc.id} label={`Resource: ${rt?.name||alloc.resource_type_id}`} session={session}/></div>}
+              </React.Fragment>;
             })}
           </div>}
         </div>
