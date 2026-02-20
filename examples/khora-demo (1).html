@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Khora – Data Table Demo (EO + Matrix)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #F5F2EB; --surface: #FDFBF7; --border: #D4CCBC; --border-light: #E8E2D6;
+    --text: #3A3226; --text-mid: #5A4E3E; --text-muted: #8B7355; --text-faint: #A0937D;
+    --green: #2E6B4F; --green-bg: #E8F0EC; --green-border: #C8DDD0;
+    --amber: #B8860B; --red: #A0222A; --red-bg: #FDEDED;
+    --olive: #6B7C5E; --plum: #7B6B8A; --teal: #5E7C8A; --rust: #8A6B5E;
+    --brown: #8B4513; --brown-bg: #F5EBE5;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-thumb { background: #C4B9A8; border-radius: 3px; }
+
+  /* ── Layout ── */
+  .app { max-width: 1400px; margin: 0 auto; padding: 20px 24px 40px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo-mark { width: 28px; height: 28px; border-radius: 7px; background: var(--green); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; }
+  .logo-text { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+  .header-actions { display: flex; gap: 8px; }
+
+  /* ── Buttons ── */
+  .btn { padding: 8px 14px; border-radius: 7px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; transition: all .15s; }
+  .btn:hover { background: var(--bg); }
+  .btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
+  .btn-primary:hover { opacity: .9; }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+  .btn-active { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--text-muted); }
+  .btn-ghost:hover { color: var(--text); background: var(--bg); }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .tab { padding: 10px 18px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: transparent; color: var(--text-muted); border-bottom: 2.5px solid transparent; margin-bottom: -1px; font-family: inherit; transition: all .15s; }
+  .tab.active { color: var(--green); border-bottom-color: var(--green); }
+  .tab:hover:not(.active) { color: var(--text); }
+  .tab .count { font-weight: 400; font-size: 12px; margin-left: 4px; }
+
+  /* ── Toolbar ── */
+  .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .search-input { padding: 8px 14px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; color: var(--text); outline: none; font-family: inherit; width: 240px; }
+  .search-input:focus { border-color: var(--green); }
+  .toolbar-right { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+
+  /* ── Dropdowns ── */
+  .dropdown-wrap { position: relative; }
+  .dropdown { position: absolute; top: calc(100% + 4px); left: 0; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 32px rgba(58,50,38,.12); padding: 6px; min-width: 200px; max-height: 340px; overflow-y: auto; }
+  .dropdown-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); padding: 4px 8px 6px; }
+  .dropdown-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--text); }
+  .dropdown-item:hover { background: var(--bg); }
+  .dropdown-item.selected { background: var(--green-bg); color: var(--green); font-weight: 600; }
+  .checkbox { width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 10px; color: #fff; }
+  .checkbox.checked { background: var(--green); border-color: var(--green); }
+
+  /* ── Table ── */
+  .table-wrap { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: #F0EDE5; border-bottom: 2px solid var(--border); }
+  th { padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); cursor: pointer; user-select: none; white-space: nowrap; border-right: 1px solid var(--border-light); }
+  th:hover { color: var(--text); }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); border-right: 1px solid #F5F2EB; vertical-align: middle; }
+  tr.row:hover { background: #F8F5EF; }
+  tr.row.selected { background: var(--green-bg); }
+  tr.revoked { opacity: .55; }
+  tr.group-header { background: var(--bg); cursor: pointer; }
+  tr.group-header td { padding: 9px 12px; font-size: 12px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); }
+
+  /* ── Badges ── */
+  .badge { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .badge-green { background: var(--green-bg); color: var(--green); }
+  .badge-olive { background: #EEF2EB; color: var(--olive); }
+  .badge-amber { background: #FFF8E7; color: var(--amber); }
+  .badge-red { background: var(--red-bg); color: var(--red); }
+  .badge-rust { background: #F5EBE5; color: var(--brown); }
+  .badge-plum { background: #F0EBF2; color: var(--plum); }
+  .badge-teal { background: #EBF2F5; color: var(--teal); }
+  .badge-muted { background: #EDEDED; color: #888; }
+  .eo-op { font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500; padding: 1px 5px; border-radius: 4px; background: #3A322610; color: var(--text-mid); letter-spacing: .04em; }
+
+  /* ── Disclosure bar ── */
+  .disc-bar { display: flex; gap: 2px; align-items: center; }
+  .disc-bar .seg { width: 5px; height: 12px; border-radius: 2px; background: #E0D8CC; }
+  .disc-bar .seg.on { background: var(--green); }
+  .disc-bar .pct { font-size: 10px; color: var(--text-muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+  /* ── Utilization bar ── */
+  .util-bar { display: flex; align-items: center; gap: 6px; }
+  .util-track { width: 48px; height: 6px; border-radius: 3px; background: #E0D8CC; overflow: hidden; }
+  .util-fill { height: 100%; border-radius: 3px; transition: width .3s; }
+  .util-label { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ── Locked cell ── */
+  .locked { display: inline-flex; align-items: center; gap: 4px; color: var(--text-faint); font-size: 11px; font-style: italic; }
+  .locked svg { flex-shrink: 0; }
+
+  /* ── Inline edit ── */
+  .editable { border-bottom: 1px dashed #C4B9A8; padding-bottom: 1px; cursor: pointer; }
+  .editable:hover { border-color: var(--green); }
+  .edit-input { width: 100%; padding: 2px 5px; font-size: 13px; border: 1.5px solid var(--green); border-radius: 4px; background: #fff; outline: none; font-family: inherit; color: var(--text); }
+
+  /* ── Side panel ── */
+  .panel-overlay { position: fixed; inset: 0; background: rgba(58,50,38,.12); z-index: 290; }
+  .panel { position: fixed; top: 0; right: 0; bottom: 0; width: 520px; background: #FAF8F3; border-left: 1px solid var(--border); box-shadow: -6px 0 30px rgba(58,50,38,.08); z-index: 300; display: flex; flex-direction: column; overflow: hidden; }
+  .panel-head { padding: 18px 22px; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: flex-start; background: #F5F2EB; }
+  .panel-head h2 { font-size: 18px; font-weight: 700; margin: 0; }
+  .panel-close { background: none; border: none; cursor: pointer; font-size: 20px; color: var(--text-muted); }
+  .panel-tabs { display: flex; border-bottom: 1px solid var(--border-light); background: var(--surface); }
+  .panel-tab { padding: 9px 16px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: transparent; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: inherit; }
+  .panel-tab.active { color: var(--green); border-bottom-color: var(--green); }
+  .panel-body { flex: 1; overflow-y: auto; padding: 18px 22px; }
+
+  /* ── Panel sections ── */
+  .section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 8px; }
+  .field-grid { display: grid; grid-template-columns: 95px 1fr; gap: 7px 10px; font-size: 13px; margin-bottom: 16px; }
+  .field-key { color: var(--text-muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding-top: 2px; }
+  .given-meant { padding: 11px 14px; border-radius: 8px; background: #F0EDE5; border: 1px solid var(--border-light); margin-bottom: 14px; font-size: 12px; color: var(--text-mid); line-height: 1.5; }
+  .given-meant .label { font-weight: 600; }
+  .given-meant .g { color: var(--olive); }
+  .given-meant .m { color: var(--green); }
+
+  /* ── Notes ── */
+  .note-card { padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 8px; position: relative; }
+  .note-card.shared { background: var(--surface); border-left: 3px solid var(--green); }
+  .note-card.internal { background: #FFFCF5; border-left: 3px solid var(--amber); }
+  .note-meta { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted); margin-bottom: 6px; flex-wrap: wrap; }
+  .note-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+  .note-tags { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+  .note-tag { font-size: 10px; padding: 1px 6px; border-radius: 6px; background: var(--bg); color: var(--text-muted); }
+
+  /* ── Allocation cards ── */
+  .alloc-card { padding: 14px; border-radius: 8px; border: 1px solid var(--border-light); background: var(--surface); margin-bottom: 8px; }
+  .alloc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .alloc-title { font-size: 14px; font-weight: 600; }
+  .alloc-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; color: var(--text-mid); }
+  .alloc-events { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-light); }
+  .alloc-event { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-mid); padding: 3px 0; }
+  .alloc-event .dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── Provisioning ── */
+  .prov-event { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-light); font-size: 12px; }
+  .prov-event:last-child { border-bottom: none; }
+  .prov-icon { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+  .prov-body { flex: 1; }
+  .prov-body strong { font-weight: 600; color: var(--text); }
+  .prov-body .ts { color: var(--text-faint); font-size: 11px; }
+
+  /* ── Sovereignty banner ── */
+  .sovereignty { margin-top: 14px; padding: 12px 16px; border-radius: 9px; background: var(--green-bg); border: 1px solid var(--green-border); display: flex; gap: 10px; align-items: flex-start; font-size: 12px; color: var(--green); line-height: 1.5; }
+  .sovereignty .icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── Hint bar ── */
+  .hints { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); padding: 10px 0; }
+  .hints strong { font-weight: 600; }
+
+  /* ── Matrix room chip ── */
+  .room-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 5px; background: #3A322608; font-size: 10px; font-family: 'DM Mono', monospace; color: var(--text-muted); }
+
+  /* ── Capacity stat ── */
+  .cap-stat { display: flex; gap: 20px; margin-bottom: 16px; }
+  .cap-box { padding: 10px 14px; border-radius: 8px; background: #F0EDE5; border: 1px solid var(--border-light); flex: 1; text-align: center; }
+  .cap-box .num { font-size: 22px; font-weight: 700; }
+  .cap-box .label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// DATA MODEL — every mutation carries an EO operator and a Matrix room target
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// EO OPERATORS (9 universal, organized in triads):
+//
+//   IDENTITY TRIAD:
+//   NUL (∅) — recognize absence, void, destruction
+//   DES (≝) — designate, name, mark, identify
+//   INS (△) — instantiate, create, bring into being
+//
+//   STRUCTURE TRIAD:
+//   SEG (⊢) — segment, bound, classify, partition
+//   CON (⋈) — connect, relate, link (type-level connectability)
+//   SYN (∨) — synthesize, merge, fuse, integrate
+//
+//   INTERPRETATION TRIAD:
+//   ALT (∿) — alternate, oscillate, transition between states
+//   SUP (⧦) — superpose, overlay, hold competing interpretations
+//   REC (↻) — recurse, reconfigure, self-reference, learn
+//
+// EVERY event has:
+//   eo_op: which operator
+//   frame: GIVEN (raw observation) or MEANT (interpretation under a framework)
+//   room: which Matrix room this lives in
+//   author: who wrote it (Matrix user ID)
+//
+// ROOM TOPOLOGY:
+//   CLIENT VAULT — client-only, GIVEN layer, sovereign
+//   BRIDGE ROOM — client + provider, MEANT layer (shared projection)
+//   PROVIDER ROSTER — org-internal, MEANT layer (provider's interpretation)
+//   ORG ROOM — org-wide, resource catalog + inventory
+//   NETWORK ROOM — cross-org, schema + governance
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const DATA = {
+  individuals: [
+    {
+      id:"ind_001", name:"Marcus Williams", alias:null, status:"claimed",
+      disclosureLevel:.85, lastContact:"2026-02-19T14:30:00Z", assignedTo:"Sarah Chen",
+      activeCases:2, needs:["housing","medical"], priority:"high",
+      nextAction:"Housing voucher follow-up", nextActionDue:"2026-02-21",
+      bridgeRoom:"!bridge_marcus_org1:hyphae.social",
+      vaultRoom:"!vault_marcus:matrix.org",
+      rosterRef:"!roster_org1:hyphae.social",
+      fields: {
+        dob: { value:"1987-03-14", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Self-reported on intake form", meant:"Date of birth per HUD HMIS 3.03", source:"self", confidence:"high", editable:true,
+          history:[
+            { value:"1987-03-14", by:"Sarah Chen", at:"2026-01-15T09:00:00Z", eo_op:"INS", type:"intake" }
+          ]},
+        veteran: { value:"Yes", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Client stated 'I served in the Army'", meant:"Veteran Status = Yes (HUD 3.07)", source:"self", confidence:"high", editable:true, history:[] },
+        phone: { value:"615-555-0142", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Provided by client", meant:"Contact phone", source:"self", confidence:"medium", editable:true,
+          history:[
+            { value:"615-555-0199", by:"Sarah Chen", at:"2026-01-15T09:00:00Z", eo_op:"INS", type:"intake" },
+            { value:"615-555-0142", by:"Marcus Williams", at:"2026-02-01T11:00:00Z", eo_op:"ALT", type:"self-update" }
+          ]},
+        housing_status: { value:"Literally Homeless", eo_op:"INS", frame:"MEANT", room:"bridge", given:"Sleeping in vehicle at intake", meant:"Category 1 (HUD 3.917)", source:"staff", confidence:"high", editable:true, history:[] },
+        income: { value:null, disclosed:false },
+        disability: { value:"Physical", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Client disclosed chronic back injury", meant:"Disabling Condition = Yes, Physical (HUD 3.08)", source:"self", confidence:"medium", editable:true, history:[] },
+      }
+    },
+    {
+      id:"ind_002", name:"Tamika Johnson", alias:null, status:"joined",
+      disclosureLevel:.6, lastContact:"2026-02-18T10:15:00Z", assignedTo:"David Park",
+      activeCases:1, needs:["legal","employment"], priority:"medium",
+      nextAction:"Legal aid referral confirmation", nextActionDue:"2026-02-20",
+      bridgeRoom:"!bridge_tamika_org1:hyphae.social",
+      vaultRoom:"!vault_tamika:matrix.org",
+      rosterRef:"!roster_org1:hyphae.social",
+      fields: {
+        dob: { value:"1992-11-08", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"ID verified at intake", meant:"DOB per HUD HMIS 3.03", source:"document", confidence:"high", editable:true, history:[] },
+        veteran: { value:"No", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Client stated", meant:"Veteran Status = No (HUD 3.07)", source:"self", confidence:"high", editable:true, history:[] },
+        phone: { value:"615-555-0278", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Provided by client", meant:"Contact phone", source:"self", confidence:"medium", editable:true, history:[] },
+        housing_status: { value:"Imminent Risk", eo_op:"INS", frame:"MEANT", room:"bridge", given:"Eviction filing, court date next week", meant:"Category 2 (HUD 3.917)", source:"self", confidence:"medium", editable:true, history:[] },
+        income: { value:"$1,240/mo", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Pay stubs verified", meant:"Monthly income (HUD 4.02)", source:"document", confidence:"high", editable:true, history:[] },
+        disability: { value:"None", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Client stated", meant:"Disabling Condition = No (HUD 3.08)", source:"self", confidence:"medium", editable:true, history:[] },
+      }
+    },
+    {
+      id:"ind_003", name:"Robert Chen", alias:"Bobby", status:"claimed",
+      disclosureLevel:.95, lastContact:"2026-02-20T08:00:00Z", assignedTo:"Sarah Chen",
+      activeCases:3, needs:["housing","medical","substance"], priority:"critical",
+      nextAction:"SPDAT reassessment", nextActionDue:"2026-02-22",
+      bridgeRoom:"!bridge_bobby_org1:hyphae.social",
+      vaultRoom:"!vault_bobby:matrix.org",
+      rosterRef:"!roster_org1:hyphae.social",
+      fields: {
+        dob: { value:"1975-06-22", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"ID verified", meant:"DOB per HUD HMIS 3.03", source:"document", confidence:"high", editable:true, history:[] },
+        veteran: { value:"Yes", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"DD-214 on file", meant:"Veteran Status = Yes (HUD 3.07)", source:"document", confidence:"high", editable:false, history:[] },
+        phone: { value:"615-555-0391", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Provided by client", meant:"Contact phone", source:"self", confidence:"medium", editable:true, history:[] },
+        housing_status: { value:"Literally Homeless", eo_op:"INS", frame:"MEANT", room:"bridge", given:"Currently in emergency shelter", meant:"Category 1 (HUD 3.917)", source:"staff", confidence:"high", editable:true, history:[] },
+        income: { value:"$0", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"No income sources", meant:"Monthly income (HUD 4.02)", source:"self", confidence:"medium", editable:true, history:[] },
+        disability: { value:"Substance Use + Physical", eo_op:"INS", frame:"GIVEN", room:"bridge", given:"Self-disclosed; VA records confirm", meant:"Disabling Condition = Yes, Multiple (HUD 3.08)", source:"document", confidence:"high", editable:true, history:[] },
+      }
+    },
+    {
+      id:"ind_004", name:null, alias:"J.R.", status:"imported",
+      disclosureLevel:.15, lastContact:"2026-02-10T16:00:00Z", assignedTo:"Unassigned",
+      activeCases:0, needs:["outreach"], priority:"low",
+      nextAction:"Initial outreach attempt", nextActionDue:"2026-02-20",
+      bridgeRoom:null, vaultRoom:null, rosterRef:"!roster_org1:hyphae.social",
+      fields: {
+        dob: { value:null, disclosed:false },
+        veteran: { value:"Unknown", eo_op:"INS", frame:"MEANT", room:"roster", given:"Not yet assessed", meant:"Veteran Status = Unknown (HUD 3.07)", source:"none", confidence:"low", editable:true, history:[] },
+        phone: { value:null, disclosed:false },
+        housing_status: { value:"Literally Homeless", eo_op:"INS", frame:"MEANT", room:"roster", given:"Observed under Jefferson St bridge by outreach team", meant:"Category 1 (HUD 3.917)", source:"staff", confidence:"medium", editable:true, history:[] },
+        income: { value:null, disclosed:false },
+        disability: { value:null, disclosed:false },
+      }
+    },
+    {
+      id:"ind_005", name:"— access revoked —", alias:null, status:"revoked",
+      disclosureLevel:0, lastContact:"2026-01-28T09:00:00Z", assignedTo:"Sarah Chen",
+      activeCases:0, needs:[], priority:"none",
+      nextAction:null, nextActionDue:null,
+      bridgeRoom:null, vaultRoom:null, rosterRef:"!roster_org1:hyphae.social",
+      fields: {
+        dob: { value:"1989-**-**", eo_op:"NUL", frame:"MEANT", room:"vault-shadow", given:"Vault shadow only", meant:"Partial — frozen at revocation", source:"vault-shadow", confidence:"frozen", editable:false, history:[] },
+        veteran: { value:"No", eo_op:"NUL", frame:"MEANT", room:"vault-shadow", given:"Previously disclosed", meant:"Vault shadow", source:"vault-shadow", confidence:"frozen", editable:false, history:[] },
+        phone: { value:null, disclosed:false },
+        housing_status: { value:"Unknown (revoked)", eo_op:"NUL", frame:"MEANT", room:"vault-shadow", given:"Last known: Cat 1", meant:"Stale", source:"vault-shadow", confidence:"frozen", editable:false, history:[] },
+        income: { value:null, disclosed:false },
+        disability: { value:null, disclosed:false },
+      }
+    },
+  ],
+
+  // Notes: eo_op is OBS. Room placement determines privacy.
+  notes: [
+    { id:"n1", indId:"ind_001", type:"shared", eo_op:"INS", frame:"GIVEN", room:"bridge", category:"case_note", author:"Sarah Chen", at:"2026-02-19T14:30:00Z",
+      text:"Marcus came in today. Mentioned he's been sleeping in his car for two weeks. Expressed interest in safe parking program.", tags:["housing"], linkedAlloc:"alloc_001" },
+    { id:"n2", indId:"ind_001", type:"internal", eo_op:"INS", frame:"MEANT", room:"roster", category:"assessment", author:"Sarah Chen", at:"2026-02-18T11:00:00Z",
+      text:"Concerns about self-reported sobriety timeline — inconsistent with shelter intake coordinator's observations. Will follow up with MI approach. Do not raise directly yet.", tags:["substance","clinical"], linkedAlloc:null },
+    { id:"n3", indId:"ind_001", type:"shared", eo_op:"INS", frame:"GIVEN", room:"bridge", category:"follow_up", author:"Sarah Chen", at:"2026-02-15T09:00:00Z",
+      text:"Called Marcus to confirm housing voucher appointment Thursday. Reminded him to bring ID and income docs.", tags:["housing"], linkedAlloc:"alloc_001" },
+    { id:"n4", indId:"ind_001", type:"shared", eo_op:"CON", frame:"MEANT", room:"bridge", category:"referral", author:"Sarah Chen", at:"2026-02-10T13:00:00Z",
+      text:"Referred Marcus to VA Healthcare for service-connected disability claim. Faxed referral. VA: 615-327-4751 x3200.", tags:["medical","veteran"], linkedAlloc:null },
+    { id:"n5", indId:"ind_001", type:"internal", eo_op:"INS", frame:"MEANT", room:"roster", category:"coordination", author:"David Park", at:"2026-02-08T10:00:00Z",
+      text:"Coordinating with Legal Aid re: Marcus's prior eviction on record — may affect voucher eligibility. Sarah aware.", tags:["legal","housing"], linkedAlloc:null },
+    { id:"n6", indId:"ind_002", type:"shared", eo_op:"CON", frame:"MEANT", room:"bridge", category:"referral", author:"David Park", at:"2026-02-18T10:15:00Z",
+      text:"Tamika's eviction hearing next Thursday. Connected with Legal Aid Housing Court clinic — slot confirmed.", tags:["legal"], linkedAlloc:"alloc_003" },
+    { id:"n7", indId:"ind_002", type:"shared", eo_op:"INS", frame:"GIVEN", room:"bridge", category:"progress_note", author:"David Park", at:"2026-02-14T15:00:00Z",
+      text:"Tamika secured part-time position at Amazon warehouse. Starts Monday. Discussed budgeting.", tags:["employment"], linkedAlloc:null },
+    { id:"n8", indId:"ind_003", type:"shared", eo_op:"SEG", frame:"MEANT", room:"bridge", category:"assessment", author:"Sarah Chen", at:"2026-02-20T08:00:00Z",
+      text:"SPDAT reassessment completed. Score: 9 → 11. Recommend continued PSH priority. Bobby cooperative.", tags:["housing","assessment"], linkedAlloc:null },
+    { id:"n9", indId:"ind_003", type:"shared", eo_op:"INS", frame:"GIVEN", room:"bridge", category:"case_note", author:"Sarah Chen", at:"2026-02-17T14:00:00Z",
+      text:"Bobby reports VA case manager helped him into IOP at Park Center. Attending 3x/week. Positive attitude.", tags:["substance"], linkedAlloc:"alloc_005" },
+  ],
+
+  // Allocations: individual receives resource. Dual-write to bridge + vault.
+  allocations: [
+    { id:"alloc_001", indId:"ind_001", resourceId:"res_002", eo_op:"CON", frame:"MEANT",
+      resourceName:"Rapid Rehousing Voucher", quantity:1, unit:"voucher", status:"active",
+      allocatedBy:"Sarah Chen", org:"Nashville Rescue Mission", at:"2026-02-01T10:00:00Z", expiresAt:"2028-02-01",
+      bridgeRoom:"!bridge_marcus_org1:hyphae.social",
+      vaultShadow:{ resource_name:"Rapid Rehousing Voucher", provider:"Sarah Chen", org:"Nashville Rescue Mission", status:"active" },
+      events:[
+        { event:"allocated", eo_op:"CON", at:"2026-02-01T10:00:00Z", by:"Sarah Chen", note:"Approved by MHPC coordinated entry" },
+        { event:"reserved", eo_op:"ALT", at:"2026-01-28T14:00:00Z", by:"Sarah Chen", note:"Submitted for approval" },
+      ],
+      constraintsChecked:["VI-SPDAT ≥ 8 ✓","Chronically homeless priority ✓","CoC referral required ✓"] },
+    { id:"alloc_002", indId:"ind_001", resourceId:"res_001", eo_op:"CON", frame:"MEANT",
+      resourceName:"Room Inn Emergency Shelter – Bed", quantity:1, unit:"bed-night", status:"consumed",
+      allocatedBy:"Sarah Chen", org:"Nashville Rescue Mission", at:"2026-01-15T18:00:00Z", expiresAt:null,
+      bridgeRoom:"!bridge_marcus_org1:hyphae.social",
+      vaultShadow:{ resource_name:"Room Inn Emergency Shelter – Bed", provider:"Sarah Chen", org:"Nashville Rescue Mission", status:"consumed" },
+      events:[
+        { event:"consumed", eo_op:"ALT", at:"2026-01-16T08:00:00Z", by:"System", note:"Auto-consumed after checkout" },
+        { event:"allocated", eo_op:"CON", at:"2026-01-15T18:00:00Z", by:"Sarah Chen", note:"Walk-in intake" },
+      ],
+      constraintsChecked:["Men 18+ only ✓","Sober entry required ✓"] },
+    { id:"alloc_003", indId:"ind_002", resourceId:"res_003", eo_op:"CON", frame:"MEANT",
+      resourceName:"Legal Aid Clinic – Housing Court Slot", quantity:1, unit:"slot", status:"active",
+      allocatedBy:"David Park", org:"Legal Aid Society of Middle TN", at:"2026-02-18T10:30:00Z", expiresAt:null,
+      bridgeRoom:"!bridge_tamika_org1:hyphae.social",
+      vaultShadow:{ resource_name:"Legal Aid Clinic – Housing Court Slot", provider:"David Park", org:"Legal Aid Society", status:"active" },
+      events:[
+        { event:"allocated", eo_op:"CON", at:"2026-02-18T10:30:00Z", by:"David Park", note:"Urgent — hearing next week" },
+      ],
+      constraintsChecked:["Income ≤ 200% FPL ✓","Davidson County ✓","Housing cases only ✓"] },
+    { id:"alloc_004", indId:"ind_003", resourceId:"res_004", eo_op:"CON", frame:"MEANT",
+      resourceName:"HUD-VASH PSH Unit", quantity:1, unit:"unit", status:"active",
+      allocatedBy:"Sarah Chen", org:"VA / HUD-VASH", at:"2025-12-15T10:00:00Z", expiresAt:null,
+      bridgeRoom:"!bridge_bobby_org1:hyphae.social",
+      vaultShadow:{ resource_name:"HUD-VASH PSH Unit", provider:"Sarah Chen", org:"VA / HUD-VASH", status:"active" },
+      events:[
+        { event:"allocated", eo_op:"CON", at:"2025-12-15T10:00:00Z", by:"Sarah Chen", note:"VA referral completed, unit assigned" },
+      ],
+      constraintsChecked:["Veterans only (DD-214) ✓","Chronically homeless ✓","Disability documented ✓"] },
+    { id:"alloc_005", indId:"ind_003", resourceId:"res_006", eo_op:"CON", frame:"MEANT",
+      resourceName:"Substance Use IOP – Park Center", quantity:1, unit:"slot", status:"active",
+      allocatedBy:"Sarah Chen", org:"Park Center", at:"2026-02-10T09:00:00Z", expiresAt:"2026-05-10",
+      bridgeRoom:"!bridge_bobby_org1:hyphae.social",
+      vaultShadow:{ resource_name:"IOP Slot – Park Center", provider:"Sarah Chen", org:"Park Center", status:"active" },
+      events:[
+        { event:"allocated", eo_op:"CON", at:"2026-02-10T09:00:00Z", by:"Sarah Chen", note:"Licensed provider referral from VA" },
+      ],
+      constraintsChecked:["Licensed provider referral ✓","3x/week attendance ✓","Medicaid ✓"] },
+  ],
+
+  resources: [
+    { id:"res_001", name:"Room Inn Emergency Shelter", type:"shelter_beds",
+      category:"Emergency Shelter", holder:"Nashville Rescue Mission",
+      holderType:"org", relation:"operates", network:"CoC TN-504",
+      totalCapacity:120, available:14, allocated:98, reserved:8, utilizationPct:.88,
+      lastUpdated:"2026-02-20T06:00:00Z", opacityLevel:"published",
+      governance:"CoC Board vote 2025-09-14",
+      constraints:["Men 18+ only","Sober entry required","Max 90-day stay"],
+      orgRoom:"!org_nrm:hyphae.social",
+      provisioningEvents:[
+        { event:"restocked", eo_op:"ALT", at:"2026-02-01T00:00:00Z", by:"Admin", detail:"Monthly capacity reset. 120 beds confirmed.", delta:"+120" },
+        { event:"allocated", eo_op:"CON", at:"2026-02-19T18:00:00Z", by:"Intake Staff", detail:"3 beds allocated (walk-in intake)", delta:"-3" },
+        { event:"returned", eo_op:"ALT", at:"2026-02-19T08:00:00Z", by:"System", detail:"5 beds returned (checkout)", delta:"+5" },
+        { event:"allocated", eo_op:"CON", at:"2026-02-18T19:00:00Z", by:"Intake Staff", detail:"7 beds allocated (evening intake)", delta:"-7" },
+        { event:"capacity_reduced", eo_op:"NUL", at:"2026-01-15T00:00:00Z", by:"Director", detail:"Wing B closed for repairs. -20 beds.", delta:"-20" },
+        { event:"capacity_restored", eo_op:"ALT", at:"2026-02-10T00:00:00Z", by:"Director", detail:"Wing B reopened.", delta:"+20" },
+      ]},
+    { id:"res_002", name:"Rapid Rehousing Vouchers – Q1 2026", type:"voucher",
+      category:"Rapid Rehousing", holder:"Metro Homelessness Planning Council",
+      holderType:"org", relation:"administers", network:"CoC TN-504",
+      totalCapacity:45, available:8, allocated:34, reserved:3, utilizationPct:.82,
+      lastUpdated:"2026-02-18T14:00:00Z", opacityLevel:"attested",
+      governance:"MHPC allocation policy rev. 2025-11",
+      constraints:["Chronically homeless priority","VI-SPDAT ≥ 8","CoC referral required"],
+      orgRoom:"!org_mhpc:hyphae.social",
+      provisioningEvents:[
+        { event:"restocked", eo_op:"INS", at:"2026-01-01T00:00:00Z", by:"MHPC Admin", detail:"Q1 2026 HUD CoC Grant TN0043 — 45 vouchers allocated.", delta:"+45" },
+        { event:"allocated", eo_op:"CON", at:"2026-02-01T10:00:00Z", by:"Sarah Chen", detail:"1 voucher → Bridge !bridge_marcus_org1", delta:"-1" },
+        { event:"allocated", eo_op:"CON", at:"2026-02-05T14:00:00Z", by:"Other Provider", detail:"2 vouchers → [bridge refs]", delta:"-2" },
+        { event:"expired", eo_op:"NUL", at:"2026-02-15T00:00:00Z", by:"System", detail:"1 voucher expired (24-month max reached, prior alloc)", delta:"-1 alloc, +0 avail" },
+      ]},
+    { id:"res_003", name:"Legal Aid Clinic – Housing Court", type:"service_slot",
+      category:"Legal Services", holder:"Legal Aid Society of Middle TN",
+      holderType:"org", relation:"operates", network:"LASMT Network",
+      totalCapacity:30, available:5, allocated:24, reserved:1, utilizationPct:.83,
+      lastUpdated:"2026-02-19T09:00:00Z", opacityLevel:"published",
+      governance:"Board policy",
+      constraints:["Income ≤ 200% FPL","Davidson County residents","Housing cases only"],
+      orgRoom:"!org_lasmt:hyphae.social",
+      provisioningEvents:[
+        { event:"restocked", eo_op:"ALT", at:"2026-02-01T00:00:00Z", by:"Clinic Director", detail:"Monthly docket reset. 30 slots.", delta:"+30" },
+        { event:"allocated", eo_op:"CON", at:"2026-02-18T10:30:00Z", by:"David Park", detail:"1 slot → Bridge !bridge_tamika_org1", delta:"-1" },
+      ]},
+    { id:"res_004", name:"Safe Haven PSH – Veteran Units", type:"psh_unit",
+      category:"Permanent Supportive Housing", holder:"VA / HUD-VASH",
+      holderType:"network", relation:"funds", network:"VA VISN 9",
+      totalCapacity:60, available:2, allocated:57, reserved:1, utilizationPct:.97,
+      lastUpdated:"2026-02-15T12:00:00Z", opacityLevel:"attested",
+      governance:"VA regional allocation",
+      constraints:["Veterans only (DD-214)","Chronically homeless","Disability documented"],
+      orgRoom:"!org_va_vash:va.gov",
+      provisioningEvents:[
+        { event:"allocated", eo_op:"CON", at:"2025-12-15T10:00:00Z", by:"Sarah Chen", detail:"1 unit → Bridge !bridge_bobby_org1", delta:"-1" },
+        { event:"returned", eo_op:"ALT", at:"2026-01-20T00:00:00Z", by:"VA Admin", detail:"1 unit returned (client transitioned to independent housing)", delta:"+1" },
+      ]},
+    { id:"res_006", name:"Substance Use IOP – Park Center", type:"service_slot",
+      category:"Behavioral Health", holder:"Park Center",
+      holderType:"org", relation:"operates", network:"MHSS Network",
+      totalCapacity:20, available:3, allocated:16, reserved:1, utilizationPct:.85,
+      lastUpdated:"2026-02-17T11:00:00Z", opacityLevel:"contributed",
+      governance:"Clinical director discretion",
+      constraints:["Licensed provider referral","3x/week attendance","Medicaid or sliding scale"],
+      orgRoom:"!org_parkcenter:hyphae.social",
+      provisioningEvents:[
+        { event:"allocated", eo_op:"CON", at:"2026-02-10T09:00:00Z", by:"Sarah Chen", detail:"1 slot → Bridge !bridge_bobby_org1", delta:"-1" },
+        { event:"completed", eo_op:"ALT", at:"2026-02-14T00:00:00Z", by:"Clinical Staff", detail:"1 client completed program, slot freed.", delta:"+1" },
+      ]},
+  ],
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const state = {
+  tab: "individuals", // individuals | resources
+  search: "",
+  groupBy: "none",
+  sortField: "name",
+  sortDir: "asc",
+  visibleCols: { individuals: ["name","status","priority","assignedTo","needs","housing_status","veteran","nextAction"], resources: ["name","category","holder","relation","capacity","utilization","opacityLevel","constraints"] },
+  selectedRow: null,
+  panelTab: "fields", // fields | notes | allocations | provisioning
+  editingCell: null, // { rowId, fieldKey }
+  colDropdown: false,
+  grpDropdown: false,
+  provenanceField: null, // { field, key }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COLUMNS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const IND_COLS = [
+  { key:"name", label:"Individual", fixed:true },
+  { key:"status", label:"Status" },
+  { key:"priority", label:"Priority" },
+  { key:"assignedTo", label:"Assigned" },
+  { key:"activeCases", label:"Cases" },
+  { key:"needs", label:"Needs" },
+  { key:"nextAction", label:"Next Action" },
+  { key:"dob", label:"DOB", isField:true },
+  { key:"veteran", label:"Veteran", isField:true },
+  { key:"phone", label:"Phone", isField:true },
+  { key:"housing_status", label:"Housing Status", isField:true },
+  { key:"income", label:"Income", isField:true },
+  { key:"disability", label:"Disability", isField:true },
+];
+const RES_COLS = [
+  { key:"name", label:"Resource", fixed:true },
+  { key:"category", label:"Category" },
+  { key:"holder", label:"Holder" },
+  { key:"relation", label:"Relation" },
+  { key:"network", label:"Network" },
+  { key:"capacity", label:"Capacity" },
+  { key:"utilization", label:"Utilization" },
+  { key:"opacityLevel", label:"Opacity" },
+  { key:"constraints", label:"Constraints" },
+  { key:"governance", label:"Governance" },
+];
+const IND_GROUPS = [{k:"none",l:"No grouping"},{k:"status",l:"Status"},{k:"assignedTo",l:"Assigned To"},{k:"priority",l:"Priority"},{k:"housing_status",l:"Housing Status"}];
+const RES_GROUPS = [{k:"none",l:"No grouping"},{k:"category",l:"Category"},{k:"holder",l:"Holder"},{k:"relation",l:"Relation"},{k:"network",l:"Network"},{k:"opacityLevel",l:"Opacity"}];
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function fmtDate(iso){if(!iso)return"—";const d=new Date(iso),now=new Date(),diff=now-d;if(diff<864e5)return"Today";if(diff<1728e5)return"Yesterday";if(diff<6048e5)return Math.floor(diff/864e5)+"d ago";return d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+function h(tag,attrs,...kids){const el=document.createElement(tag);if(attrs)Object.entries(attrs).forEach(([k,v])=>{if(k==="className")el.className=v;else if(k.startsWith("on"))el.addEventListener(k.slice(2).toLowerCase(),v);else if(k==="style"&&typeof v==="object")Object.assign(el.style,v);else el.setAttribute(k,v)});kids.flat(Infinity).forEach(c=>{if(c==null||c===false)return;el.appendChild(typeof c==="string"||typeof c==="number"?document.createTextNode(c):c)});return el}
+function lockIcon(s=10){const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("width",s);svg.setAttribute("height",s);svg.setAttribute("viewBox","0 0 16 16");svg.innerHTML=`<rect x="2" y="7" width="12" height="8" rx="2" fill="#C4B9A8"/><path d="M5 7V5a3 3 0 016 0v2" stroke="#C4B9A8" stroke-width="1.5" fill="none"/>`;return svg}
+const statusCfg={imported:{l:"Imported",c:"#8B7355",bg:"#F5F0EB"},invited:{l:"Invited",c:"#6B7C5E",bg:"#EEF2EB"},joined:{l:"Joined",c:"#2E6B4F",bg:"#E8F0EC"},claimed:{l:"Claimed",c:"#1A4D35",bg:"#DFF0E7"},revoked:{l:"Revoked",c:"#8B4513",bg:"#F5EBE5"}};
+const priCfg={critical:{cls:"badge-red"},high:{cls:"badge-amber"},medium:{cls:"badge-olive"},low:{cls:"badge-muted"},none:{cls:"badge-muted"}};
+const opCfg={sovereign:{l:"Sovereign",cls:"badge-muted"},attested:{l:"Attested",cls:"badge-olive"},contributed:{l:"Contributed",cls:"badge-teal"},published:{l:"Published",cls:"badge-green"}};
+const needColors={housing:"badge-olive",medical:"badge-plum",legal:"badge-amber",employment:"badge-teal",substance:"badge-rust",outreach:"badge-muted",childcare:"badge-green"};
+const provEventColors={restocked:"var(--green)",allocated:"var(--teal)",returned:"var(--olive)",expired:"var(--amber)",capacity_reduced:"var(--red)",capacity_restored:"var(--green)",completed:"var(--green)"};
+
+function discBar(lvl){const el=h("div",{className:"disc-bar"});for(let i=0;i<5;i++)el.appendChild(h("span",{className:"seg"+(i<Math.round(lvl*5)?" on":"")}));el.appendChild(h("span",{className:"pct"},Math.round(lvl*100)+"%"));return el}
+function utilBar(pct){const c=pct>.9?"var(--red)":pct>.7?"var(--amber)":"var(--green)";return h("div",{className:"util-bar"},h("div",{className:"util-track"},h("div",{className:"util-fill",style:{width:(pct*100)+"%",background:c}})),h("span",{className:"util-label",style:{color:c}},Math.round(pct*100)+"%"))}
+function badge(text,cls){return h("span",{className:"badge "+cls},text)}
+function eoBadge(op){return h("span",{className:"eo-op"},op)}
+function roomChip(room){return room?h("span",{className:"room-chip"},"⬡ "+room.replace(/!|:hyphae\.social|:matrix\.org|:va\.gov/g,"").substring(0,22)):h("span",{className:"room-chip"},"no room")}
+
+function getIndVal(row,key){if(key==="disclosure")return row.disclosureLevel;if(key==="activeCases")return row.activeCases;if(row.fields&&row.fields[key])return row.fields[key].value||"";return row[key]||""}
+function getResVal(row,key){if(key==="capacity")return row.available;if(key==="utilization")return row.utilizationPct;return row[key]||""}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function render(){
+  const app=document.getElementById("app");
+  app.innerHTML="";
+
+  const isInd=state.tab==="individuals";
+  const cols=isInd?IND_COLS:RES_COLS;
+  const visCols=cols.filter(c=>c.fixed||state.visibleCols[state.tab].includes(c.key));
+  const groups=isInd?IND_GROUPS:RES_GROUPS;
+  const data=isInd?DATA.individuals:DATA.resources;
+
+  // Filter
+  let filtered=data;
+  if(state.search){const s=state.search.toLowerCase();filtered=filtered.filter(r=>JSON.stringify(r).toLowerCase().includes(s))}
+
+  // Sort
+  filtered=[...filtered].sort((a,b)=>{
+    let av=isInd?getIndVal(a,state.sortField):getResVal(a,state.sortField);
+    let bv=isInd?getIndVal(b,state.sortField):getResVal(b,state.sortField);
+    if(typeof av==="number"&&typeof bv==="number")return state.sortDir==="asc"?av-bv:bv-av;
+    av=String(av||"").toLowerCase();bv=String(bv||"").toLowerCase();
+    return state.sortDir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
+  });
+
+  // Group
+  let grouped;
+  if(state.groupBy!=="none"){
+    grouped={};
+    filtered.forEach(r=>{const g=String((isInd?getIndVal(r,state.groupBy):getResVal(r,state.groupBy))||"Unknown");if(!grouped[g])grouped[g]=[];grouped[g].push(r)});
+  } else grouped={"__all":filtered};
+
+  // ── Header ──
+  app.appendChild(h("div",{className:"header"},
+    h("div",{className:"logo"},h("div",{className:"logo-mark"},"K"),h("span",{className:"logo-text"},"Khora")),
+    h("div",{className:"header-actions"},
+      h("button",{className:"btn",onClick:()=>{}},"↑ Import"),
+      h("button",{className:"btn btn-primary"},`+ New ${isInd?"Individual":"Resource"}`)
+    )
+  ));
+
+  // ── Tabs ──
+  app.appendChild(h("div",{className:"tabs"},
+    h("button",{className:"tab"+(state.tab==="individuals"?" active":""),onClick:()=>{state.tab="individuals";state.selectedRow=null;state.groupBy="none";render()}},"Individuals",h("span",{className:"count"},"("+DATA.individuals.length+")")),
+    h("button",{className:"tab"+(state.tab==="resources"?" active":""),onClick:()=>{state.tab="resources";state.selectedRow=null;state.groupBy="none";render()}},"Resources",h("span",{className:"count"},"("+DATA.resources.length+")"))
+  ));
+
+  // ── Hints ──
+  app.appendChild(h("div",{className:"hints"},
+    h("span",null,"💡 ",h("strong",null,"Double-click")," editable cells to edit inline"),
+    h("span",null,"🔗 ",h("strong",null,"Click")," any cell to open provenance / detail panel"),
+    h("span",null,"🔒 Locked = not disclosed"),
+    h("span",null,h("span",{className:"eo-op"},"INS")," ",h("span",{className:"eo-op"},"CON")," ",h("span",{className:"eo-op"},"ALT")," ",h("span",{className:"eo-op"},"NUL")," = EO operators on every event"),
+  ));
+
+  // ── Toolbar ──
+  const toolbar=h("div",{className:"toolbar"});
+  const searchEl=h("input",{className:"search-input",placeholder:"Search...",value:state.search,onInput:(e)=>{state.search=e.target.value;render()}});
+  toolbar.appendChild(searchEl);
+
+  // Group button
+  const grpWrap=h("div",{className:"dropdown-wrap"});
+  const grpBtn=h("button",{className:"btn"+(state.groupBy!=="none"?" btn-active":""),onClick:()=>{state.grpDropdown=!state.grpDropdown;state.colDropdown=false;render()}},
+    "≡ "+(state.groupBy!=="none"?"Grouped: "+groups.find(g=>g.k===state.groupBy)?.l:"Group"));
+  grpWrap.appendChild(grpBtn);
+  if(state.grpDropdown){
+    const dd=h("div",{className:"dropdown"});
+    dd.appendChild(h("div",{className:"dropdown-label"},"Group By"));
+    groups.forEach(g=>{dd.appendChild(h("div",{className:"dropdown-item"+(state.groupBy===g.k?" selected":""),onClick:()=>{state.groupBy=g.k;state.grpDropdown=false;render()}},g.l))});
+    grpWrap.appendChild(dd);
+  }
+  toolbar.appendChild(grpWrap);
+
+  // Column selector
+  const colWrap=h("div",{className:"dropdown-wrap"});
+  colWrap.appendChild(h("button",{className:"btn",onClick:()=>{state.colDropdown=!state.colDropdown;state.grpDropdown=false;render()}},"⊞ Columns ("+visCols.length+")"));
+  if(state.colDropdown){
+    const dd=h("div",{className:"dropdown"});
+    dd.appendChild(h("div",{className:"dropdown-label"},"Toggle Columns"));
+    cols.forEach(c=>{
+      const on=c.fixed||state.visibleCols[state.tab].includes(c.key);
+      dd.appendChild(h("div",{className:"dropdown-item",style:{opacity:c.fixed?.5:1},onClick:()=>{
+        if(c.fixed)return;
+        const v=state.visibleCols[state.tab];
+        state.visibleCols[state.tab]=on?v.filter(x=>x!==c.key):[...v,c.key];
+        render();
+      }},h("span",{className:"checkbox"+(on?" checked":"")},on?"✓":""),c.label+(c.fixed?" (always)":"")));
+    });
+    colWrap.appendChild(dd);
+  }
+  toolbar.appendChild(colWrap);
+  toolbar.appendChild(h("span",{className:"toolbar-right"},filtered.length+" "+(isInd?"individuals":"resources")));
+  app.appendChild(toolbar);
+
+  // ── Table ──
+  const tw=h("div",{className:"table-wrap"});
+  const ts=h("div",{className:"table-scroll"});
+  const table=h("table");
+
+  // Thead
+  const thead=h("thead");
+  const hr=h("tr");
+  visCols.forEach(c=>{
+    const arrow=state.sortField===c.key?(state.sortDir==="asc"?" ↑":" ↓"):"";
+    hr.appendChild(h("th",{onClick:()=>{if(state.sortField===c.key)state.sortDir=state.sortDir==="asc"?"desc":"asc";else{state.sortField=c.key;state.sortDir="asc"}render()}},c.label+arrow));
+  });
+  thead.appendChild(hr);
+  table.appendChild(thead);
+
+  // Tbody
+  const tbody=h("tbody");
+  Object.entries(grouped).forEach(([gName,rows])=>{
+    if(gName!=="__all"){
+      const gRow=h("tr",{className:"group-header"});
+      gRow.appendChild(h("td",{colSpan:visCols.length},"▾ "+gName+" ("+rows.length+")"));
+      tbody.appendChild(gRow);
+    }
+    rows.forEach(row=>{
+      const isSel=state.selectedRow===row.id;
+      const isRev=row.status==="revoked";
+      const tr=h("tr",{className:"row"+(isSel?" selected":"")+(isRev?" revoked":""),onClick:()=>{state.selectedRow=isSel?null:row.id;state.panelTab=isInd?"fields":"details";state.provenanceField=null;render()}});
+      visCols.forEach(col=>{
+        const td=h("td");
+        if(isInd) renderIndCell(td,row,col);
+        else renderResCell(td,row,col);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  });
+  table.appendChild(tbody);
+  ts.appendChild(table);
+  tw.appendChild(ts);
+  app.appendChild(tw);
+
+  // ── Sovereignty banner ──
+  const sovText=isInd
+    ?"Every row is a Matrix room. Edits append EO events — INS (△) instantiates new observations, ALT (∿) transitions state, NUL (∅) marks revocation. Nothing is overwritten. Shared notes live in the bridge room (client can see). Internal notes live in the roster room (org-only). Vault shadows preserve allocation history even if the bridge is severed."
+    :"Resources live in org rooms. Allocations dual-write to bridge + vault via CON (⋈). The org room tracks inventory via INS/ALT/NUL events. Provisioning history shows capacity changes with full EO operator audit trail. Bridge references are anonymized in org-level views.";
+  app.appendChild(h("div",{className:"sovereignty"},h("span",{className:"icon"},"◇"),h("div",null,h("strong",null,isInd?"Sovereignty model: ":"Resource model: "),sovText)));
+
+  // ── Side panel ──
+  if(state.selectedRow){
+    const overlay=h("div",{className:"panel-overlay",onClick:()=>{state.selectedRow=null;render()}});
+    app.appendChild(overlay);
+    if(isInd) renderIndPanel(app);
+    else renderResPanel(app);
+  }
+
+  // Close dropdowns on outside click
+  setTimeout(()=>{document.addEventListener("click",function handler(e){
+    if(!e.target.closest(".dropdown-wrap")){state.colDropdown=false;state.grpDropdown=false;document.removeEventListener("click",handler);render();}
+  },{once:true})},0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INDIVIDUAL CELL RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function renderIndCell(td,row,col){
+  const k=col.key;
+  if(k==="name"){
+    const av=h("div",{style:{width:"24px",height:"24px",borderRadius:"50%",background:row.status==="revoked"?"#D4CCBC":"var(--green)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:"11px",fontWeight:"700",flexShrink:"0"}},(row.name||row.alias||"?")[0].toUpperCase());
+    const name=h("div",null,h("div",{style:{fontWeight:"600",fontSize:"13px"}},row.name||row.alias||"Unknown"),row.alias&&row.name?h("div",{style:{fontSize:"11px",color:"var(--text-faint)"}},'"'+row.alias+'"'):null);
+    td.appendChild(h("div",{style:{display:"flex",alignItems:"center",gap:"8px"}},av,name));
+  } else if(k==="status"){const c=statusCfg[row.status]||statusCfg.imported;td.appendChild(badge(c.l,"badge",`background:${c.bg};color:${c.c}`));td.firstChild.style.background=c.bg;td.firstChild.style.color=c.c;
+  } else if(k==="priority"){const p=priCfg[row.priority]||priCfg.none;td.appendChild(badge(row.priority,p.cls));
+  } else if(k==="assignedTo"){td.textContent=row.assignedTo;td.style.fontSize="13px";td.style.color="var(--text-mid)";
+  } else if(k==="activeCases"){td.appendChild(h("span",{style:{display:"inline-flex",alignItems:"center",justifyContent:"center",width:"22px",height:"22px",borderRadius:"5px",background:row.activeCases>0?"var(--green-bg)":"#F0EDE5",color:row.activeCases>0?"var(--green)":"var(--text-faint)",fontSize:"12px",fontWeight:"700"}},String(row.activeCases)));
+  } else if(k==="needs"){row.needs.forEach(n=>td.appendChild(badge(n,needColors[n]||"badge-muted")));if(!row.needs.length)td.innerHTML="<span style='color:var(--text-faint);font-style:italic;font-size:12px'>—</span>";
+  } else if(k==="nextAction"){
+    td.appendChild(h("div",{style:{fontSize:"12px",color:"var(--text-mid)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"180px"}},row.nextAction||"—"));
+    if(row.nextActionDue){const overdue=new Date(row.nextActionDue)<=new Date();td.appendChild(h("div",{style:{fontSize:"11px",color:overdue?"var(--red)":"var(--text-muted)",fontWeight:overdue?"600":"400"}},(overdue?"⚠ ":"")+"Due "+fmtDate(row.nextActionDue)))}
+  } else if(col.isField&&row.fields&&row.fields[k]){
+    const f=row.fields[k];
+    if(f.disclosed===false){td.appendChild(h("span",{className:"locked"},lockIcon()," not disclosed"));return}
+    if(f.editable){
+      if(state.editingCell&&state.editingCell.rowId===row.id&&state.editingCell.fieldKey===k){
+        const inp=h("input",{className:"edit-input",value:f.value||"",onBlur:(e)=>{f.value=e.target.value;f.history.push({value:e.target.value,by:"You",at:new Date().toISOString(),eo_op:"ALT",type:"inline-edit"});state.editingCell=null;render()},onKeydown:(e)=>{if(e.key==="Enter")e.target.blur();if(e.key==="Escape"){state.editingCell=null;render()}}});
+        td.appendChild(inp);setTimeout(()=>inp.focus(),0);
+      } else {
+        const span=h("span",{className:"editable",onDblclick:(e)=>{e.stopPropagation();state.editingCell={rowId:row.id,fieldKey:k};render()}},f.value||h("span",{style:{color:"var(--text-faint)",fontStyle:"italic"}},"empty"));
+        td.appendChild(span);
+      }
+    } else {td.appendChild(h("span",{style:{fontSize:"13px"}},f.value||"—"))}
+  } else {td.innerHTML="<span style='color:var(--text-faint);font-size:12px'>—</span>"}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RESOURCE CELL RENDERER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function renderResCell(td,row,col){
+  const k=col.key;
+  if(k==="name"){td.appendChild(h("div",null,h("div",{style:{fontWeight:"600",fontSize:"13px"}},row.name),h("div",{style:{fontSize:"11px",color:"var(--text-muted)"}},row.type.replace(/_/g," "))));
+  } else if(k==="category"){td.appendChild(badge(row.category,"badge-teal"));
+  } else if(k==="holder"){td.appendChild(h("div",null,h("div",{style:{fontSize:"13px",fontWeight:"500"}},row.holder),h("div",{style:{fontSize:"11px",color:"var(--text-muted)"}},row.holderType)));
+  } else if(k==="relation"){td.appendChild(badge(row.relation,"badge-amber"));
+  } else if(k==="network"){td.textContent=row.network;td.style.fontSize="13px";td.style.color="var(--text-mid)";
+  } else if(k==="capacity"){td.appendChild(h("div",{style:{fontSize:"13px"}},h("span",{style:{fontWeight:"600",color:"var(--green)"}},String(row.available)),h("span",{style:{color:"var(--text-muted)"}}," / "+row.totalCapacity),h("span",{style:{fontSize:"11px",color:"var(--text-faint)",marginLeft:"4px"}},"avail")));
+  } else if(k==="utilization"){td.appendChild(utilBar(row.utilizationPct));
+  } else if(k==="opacityLevel"){const o=opCfg[row.opacityLevel]||opCfg.sovereign;td.appendChild(badge(o.l,o.cls));
+  } else if(k==="constraints"){row.constraints.forEach(c=>td.appendChild(h("span",{style:{fontSize:"10px",padding:"2px 6px",borderRadius:"7px",background:"var(--bg)",border:"1px solid var(--border-light)",color:"var(--text-mid)",whiteSpace:"nowrap",display:"inline-block",marginRight:"3px",marginBottom:"2px"}},c)));
+  } else if(k==="governance"){td.textContent=row.governance;td.style.fontSize="12px";td.style.color="var(--text-mid)";td.style.fontStyle="italic";
+  } else {td.innerHTML="<span style='color:var(--text-faint);font-size:12px'>—</span>"}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INDIVIDUAL SIDE PANEL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function renderIndPanel(app){
+  const row=DATA.individuals.find(r=>r.id===state.selectedRow);
+  if(!row)return;
+  const notes=DATA.notes.filter(n=>n.indId===row.id);
+  const allocs=DATA.allocations.filter(a=>a.indId===row.id);
+
+  const panel=h("div",{className:"panel"});
+
+  // Head
+  panel.appendChild(h("div",{className:"panel-head"},
+    h("div",null,
+      h("h2",null,row.name||row.alias||"Unknown"),
+      h("div",{style:{display:"flex",gap:"8px",alignItems:"center",marginTop:"6px",flexWrap:"wrap"}},
+        (()=>{const c=statusCfg[row.status];const b=badge(c.l,"badge");b.style.background=c.bg;b.style.color=c.c;return b})(),
+        discBar(row.disclosureLevel),
+        row.bridgeRoom?roomChip(row.bridgeRoom):roomChip(null),
+      )
+    ),
+    h("button",{className:"panel-close",onClick:()=>{state.selectedRow=null;render()}},"✕")
+  ));
+
+  // Panel tabs
+  const ptabs=h("div",{className:"panel-tabs"});
+  ["fields","notes","allocations"].forEach(t=>{
+    ptabs.appendChild(h("button",{className:"panel-tab"+(state.panelTab===t?" active":""),onClick:()=>{state.panelTab=t;render()}},
+      t==="fields"?"Fields":t==="notes"?`Notes (${notes.length})`:`Allocations (${allocs.length})`
+    ));
+  });
+  panel.appendChild(ptabs);
+
+  // Body
+  const body=h("div",{className:"panel-body"});
+
+  if(state.panelTab==="fields"){
+    body.appendChild(h("div",{className:"section-label"},"Schema Fields — click for provenance"));
+    Object.entries(row.fields).forEach(([key,f])=>{
+      const card=h("div",{style:{padding:"10px 12px",borderRadius:"8px",border:"1px solid var(--border-light)",marginBottom:"6px",cursor:"pointer",background:state.provenanceField?.key===key?"var(--green-bg)":"var(--surface)",transition:"all .15s"},onClick:()=>{state.provenanceField=state.provenanceField?.key===key?null:{key,field:f};render()}});
+      const top=h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}});
+      top.appendChild(h("div",{style:{fontSize:"11px",fontWeight:"600",textTransform:"uppercase",letterSpacing:".05em",color:"var(--text-muted)"}},key.replace(/_/g," ")));
+      const badges=h("div",{style:{display:"flex",gap:"4px"}});
+      if(f.eo_op)badges.appendChild(eoBadge(f.eo_op));
+      if(f.frame)badges.appendChild(h("span",{className:"eo-op",style:{background:f.frame==="GIVEN"?"#6B7C5E18":"#2E6B4F18",color:f.frame==="GIVEN"?"var(--olive)":"var(--green)"}},f.frame));
+      if(f.room)badges.appendChild(h("span",{className:"eo-op"},f.room));
+      top.appendChild(badges);
+      card.appendChild(top);
+      if(f.disclosed===false){card.appendChild(h("div",{style:{marginTop:"4px"}},h("span",{className:"locked"},lockIcon()," not disclosed")));}
+      else{card.appendChild(h("div",{style:{marginTop:"4px",fontSize:"14px",fontWeight:"500"}},f.value||"—"));}
+      body.appendChild(card);
+
+      // Expanded provenance
+      if(state.provenanceField?.key===key&&f.disclosed!==false){
+        const prov=h("div",{className:"given-meant"});
+        if(f.given)prov.appendChild(h("div",null,h("span",{className:"label g"},"GIVEN: "),f.given));
+        if(f.meant)prov.appendChild(h("div",{style:{marginTop:"3px"}},h("span",{className:"label m"},"MEANT: "),f.meant));
+        if(f.source)prov.appendChild(h("div",{style:{marginTop:"6px",fontSize:"11px"}},h("strong",null,"Source: "),f.source," · ",h("strong",null,"Confidence: "),f.confidence));
+        body.appendChild(prov);
+        if(f.history&&f.history.length>0){
+          body.appendChild(h("div",{className:"section-label",style:{marginTop:"8px"}},"Event History"));
+          f.history.slice().reverse().forEach(evt=>{
+            body.appendChild(h("div",{style:{display:"flex",alignItems:"center",gap:"8px",fontSize:"12px",color:"var(--text-mid)",padding:"4px 0"}},
+              eoBadge(evt.eo_op),
+              h("span",{style:{fontWeight:"500",minWidth:"55px"}},fmtDate(evt.at)),
+              h("span",{style:{color:"var(--text-muted)"}},evt.by),
+              h("span",{style:{marginLeft:"auto",fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"var(--text-faint)"}},evt.type),
+            ));
+          });
+        }
+      }
+    });
+  }
+
+  if(state.panelTab==="notes"){
+    // Shared notes
+    const shared=notes.filter(n=>n.type==="shared");
+    const internal=notes.filter(n=>n.type==="internal");
+    if(shared.length){
+      body.appendChild(h("div",{className:"section-label"},"Shared Notes (bridge room — individual can see)"));
+      shared.forEach(n=>{
+        const card=h("div",{className:"note-card shared"});
+        const meta=h("div",{className:"note-meta"},
+          h("strong",null,n.author),
+          h("span",null,fmtDate(n.at)),
+          eoBadge(n.eo_op),
+          h("span",{className:"eo-op",style:{background:"#2E6B4F18",color:"var(--green)"}},n.frame),
+          badge(n.category,"badge-muted"),
+          n.linkedAlloc?h("span",{style:{fontSize:"10px",color:"var(--teal)"}},"🔗 "+n.linkedAlloc):null,
+        );
+        card.appendChild(meta);
+        card.appendChild(h("div",{className:"note-text"},n.text));
+        if(n.tags.length){const tags=h("div",{className:"note-tags"});n.tags.forEach(t=>tags.appendChild(h("span",{className:"note-tag"},t)));card.appendChild(tags);}
+        body.appendChild(card);
+      });
+    }
+    if(internal.length){
+      body.appendChild(h("div",{className:"section-label",style:{marginTop:"16px"}},"Internal Notes (roster room — org-only, individual CANNOT see)"));
+      internal.forEach(n=>{
+        const card=h("div",{className:"note-card internal"});
+        const meta=h("div",{className:"note-meta"},
+          h("strong",null,n.author),
+          h("span",null,fmtDate(n.at)),
+          eoBadge(n.eo_op),
+          h("span",{className:"eo-op",style:{background:"#B8860B18",color:"var(--amber)"}},n.frame),
+          badge(n.category,"badge-muted"),
+          h("span",{style:{fontSize:"10px",color:"var(--amber)"}},"🔒 internal"),
+        );
+        card.appendChild(meta);
+        card.appendChild(h("div",{className:"note-text"},n.text));
+        if(n.tags.length){const tags=h("div",{className:"note-tags"});n.tags.forEach(t=>tags.appendChild(h("span",{className:"note-tag"},t)));card.appendChild(tags);}
+        body.appendChild(card);
+      });
+    }
+    body.appendChild(h("div",{style:{marginTop:"14px",padding:"10px 12px",borderRadius:"8px",background:"#FFFCF5",border:"1px solid #E8DFC8",fontSize:"12px",color:"var(--text-muted)",lineHeight:"1.5"}},
+      h("strong",null,"Privacy logic: "),"Shared notes emit ",eoBadge("INS")," in the ",h("strong",null,"bridge room")," → encrypted via Megolm + per-field AES-256-GCM → client + provider can read. Internal notes emit ",eoBadge("INS")," in the ",h("strong",null,"roster room")," → only org staff can read. The client's vault may also contain personal notes (not shown here) that no provider can access."
+    ));
+  }
+
+  if(state.panelTab==="allocations"){
+    if(!allocs.length){body.appendChild(h("div",{style:{padding:"40px 0",textAlign:"center",color:"var(--text-faint)"}},"No allocations recorded."));}
+    else{
+      body.appendChild(h("div",{className:"section-label"},"Resources Received (dual-write: bridge + vault shadow)"));
+      allocs.forEach(a=>{
+        const statusCls=a.status==="active"?"badge-green":a.status==="consumed"?"badge-muted":"badge-amber";
+        const card=h("div",{className:"alloc-card"});
+        card.appendChild(h("div",{className:"alloc-header"},
+          h("div",null,h("div",{className:"alloc-title"},a.resourceName),h("div",{style:{fontSize:"11px",color:"var(--text-muted)",marginTop:"2px"}},a.quantity+" "+a.unit+" · "+a.org)),
+          h("div",{style:{display:"flex",gap:"4px",alignItems:"center"}},eoBadge(a.eo_op),badge(a.status,statusCls)),
+        ));
+        card.appendChild(h("div",{className:"alloc-detail"},
+          h("div",null,h("strong",null,"By: "),a.allocatedBy),
+          h("div",null,h("strong",null,"Date: "),fmtDate(a.at)),
+          h("div",null,h("strong",null,"Bridge: "),roomChip(a.bridgeRoom)),
+          a.expiresAt?h("div",null,h("strong",null,"Expires: "),a.expiresAt):null,
+        ));
+        // Constraints checked
+        if(a.constraintsChecked.length){
+          card.appendChild(h("div",{style:{marginTop:"8px",fontSize:"11px",color:"var(--text-mid)"}},
+            h("strong",null,"Constraints verified: "),
+            ...a.constraintsChecked.map(c=>h("span",{style:{display:"inline-block",padding:"1px 6px",borderRadius:"5px",background:"var(--green-bg)",color:"var(--green)",fontSize:"10px",marginRight:"3px",marginBottom:"2px"}},c))
+          ));
+        }
+        // Vault shadow
+        card.appendChild(h("div",{style:{marginTop:"8px",padding:"8px 10px",borderRadius:"6px",background:"#F5F2EB",border:"1px solid var(--border-light)",fontSize:"11px",color:"var(--text-muted)"}},
+          "🔒 ",h("strong",null,"Vault shadow: "),`"${a.vaultShadow.resource_name}" from ${a.vaultShadow.org} — denormalized, survives bridge severance`
+        ));
+        // Events timeline
+        if(a.events.length){
+          const evts=h("div",{className:"alloc-events"});
+          evts.appendChild(h("div",{style:{fontSize:"10px",fontWeight:"700",textTransform:"uppercase",letterSpacing:".06em",color:"var(--text-muted)",marginBottom:"4px"}},"Lifecycle Events"));
+          a.events.forEach(evt=>{
+            evts.appendChild(h("div",{className:"alloc-event"},
+              h("span",{className:"dot",style:{background:evt.event==="allocated"?"var(--green)":evt.event==="consumed"?"var(--text-faint)":"var(--amber)"}}),
+              eoBadge(evt.eo_op),
+              h("span",{style:{fontWeight:"500"}},evt.event),
+              h("span",null,fmtDate(evt.at)),
+              h("span",{style:{color:"var(--text-faint)",fontSize:"11px",marginLeft:"auto"}},evt.note),
+            ));
+          });
+          card.appendChild(evts);
+        }
+        body.appendChild(card);
+      });
+      body.appendChild(h("div",{style:{marginTop:"14px",padding:"10px 12px",borderRadius:"8px",background:"#FFFCF5",border:"1px solid #E8DFC8",fontSize:"12px",color:"var(--text-muted)",lineHeight:"1.5"}},
+        h("strong",null,"Allocation logic: "),"Every allocation emits ",eoBadge("CON")," (⋈ connecting individual to resource). Status changes emit ",eoBadge("ALT")," (∿ transitioning state). Revocations emit ",eoBadge("NUL")," (∅ recognizing absence). The bridge room gets the live record; the vault gets a denormalized shadow copy with plain-text names so it remains readable even if the bridge or org ceases to exist. Inventory in the org room decrements via ",eoBadge("ALT")," — the individual's identity is NOT in the org room event, only a bridge room reference."
+      ));
+    }
+  }
+
+  panel.appendChild(body);
+  app.appendChild(panel);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RESOURCE SIDE PANEL
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function renderResPanel(app){
+  const row=DATA.resources.find(r=>r.id===state.selectedRow);
+  if(!row)return;
+  const allocs=DATA.allocations.filter(a=>a.resourceId===row.id);
+
+  const panel=h("div",{className:"panel"});
+
+  panel.appendChild(h("div",{className:"panel-head"},
+    h("div",null,
+      h("h2",null,row.name),
+      h("div",{style:{display:"flex",gap:"6px",alignItems:"center",marginTop:"6px",flexWrap:"wrap"}},
+        badge(row.category,"badge-teal"),
+        badge(row.relation,"badge-amber"),
+        (()=>{const o=opCfg[row.opacityLevel];return badge(o.l,o.cls)})(),
+        roomChip(row.orgRoom),
+      )
+    ),
+    h("button",{className:"panel-close",onClick:()=>{state.selectedRow=null;render()}},"✕")
+  ));
+
+  const ptabs=h("div",{className:"panel-tabs"});
+  ["details","provisioning","allocations"].forEach(t=>{
+    ptabs.appendChild(h("button",{className:"panel-tab"+(state.panelTab===t?" active":""),onClick:()=>{state.panelTab=t;render()}},
+      t==="details"?"Details":t==="provisioning"?"Provisioning":`Allocations (${allocs.length})`
+    ));
+  });
+  panel.appendChild(ptabs);
+
+  const body=h("div",{className:"panel-body"});
+
+  if(state.panelTab==="details"){
+    // Capacity stats
+    const stats=h("div",{className:"cap-stat"});
+    [{n:row.available,l:"Available",c:"var(--green)"},{n:row.allocated,l:"Allocated",c:"var(--teal)"},{n:row.reserved,l:"Reserved",c:"var(--amber)"},{n:row.totalCapacity,l:"Total",c:"var(--text)"}].forEach(s=>{
+      stats.appendChild(h("div",{className:"cap-box"},h("div",{className:"num",style:{color:s.c}},String(s.n)),h("div",{className:"label"},s.l)));
+    });
+    body.appendChild(stats);
+    body.appendChild(h("div",{style:{marginBottom:"14px"}},utilBar(row.utilizationPct)));
+
+    body.appendChild(h("div",{className:"section-label"},"Details"));
+    const grid=h("div",{className:"field-grid"});
+    [{k:"Holder",v:row.holder+" ("+row.holderType+")"},{k:"Relation",v:row.relation},{k:"Network",v:row.network},{k:"Governance",v:row.governance},{k:"Updated",v:fmtDate(row.lastUpdated)}].forEach(({k,v})=>{grid.appendChild(h("div",{className:"field-key"},k));grid.appendChild(h("div",null,v))});
+    body.appendChild(grid);
+
+    body.appendChild(h("div",{className:"section-label",style:{marginTop:"12px"}},"Constraints (with governance provenance)"));
+    row.constraints.forEach(c=>{
+      body.appendChild(h("div",{style:{padding:"6px 10px",borderRadius:"6px",border:"1px solid var(--border-light)",marginBottom:"4px",fontSize:"12px",display:"flex",alignItems:"center",gap:"8px"}},
+        h("span",{style:{color:"var(--green)"}},"✓"),c,
+        h("span",{style:{marginLeft:"auto",fontSize:"10px",color:"var(--text-faint)",fontStyle:"italic"}},row.governance)
+      ));
+    });
+  }
+
+  if(state.panelTab==="provisioning"){
+    body.appendChild(h("div",{className:"section-label"},"Provisioning Timeline (org room events)"));
+    body.appendChild(h("div",{style:{marginBottom:"12px",padding:"8px 10px",borderRadius:"6px",background:"#F0EDE5",fontSize:"11px",color:"var(--text-muted)"}},
+      "These events live in ",roomChip(row.orgRoom),". Individual identities are NOT in these events — only bridge room references. Inventory is a computed view: available = total - allocated - reserved."
+    ));
+    row.provisioningEvents.forEach(evt=>{
+      const color=provEventColors[evt.event]||"var(--text-muted)";
+      body.appendChild(h("div",{className:"prov-event"},
+        h("div",{className:"prov-icon",style:{background:color+"18",color}},evt.event==="restocked"?"↑":evt.event==="allocated"?"→":evt.event==="returned"?"←":evt.event==="expired"?"⏱":evt.event.includes("capacity")?"⚡":"✓"),
+        h("div",{className:"prov-body"},
+          h("div",null,h("strong",null,evt.event.replace(/_/g," "))," ",eoBadge(evt.eo_op)," ",h("span",{style:{color,fontWeight:"600",fontFamily:"'DM Mono',monospace",fontSize:"12px"}},evt.delta)),
+          h("div",{style:{marginTop:"2px",fontSize:"12px",color:"var(--text-mid)"}},evt.detail),
+          h("div",{className:"ts"},fmtDate(evt.at)," · ",evt.by),
+        )
+      ));
+    });
+
+    body.appendChild(h("div",{style:{marginTop:"14px",padding:"10px 12px",borderRadius:"8px",background:"#FFFCF5",border:"1px solid #E8DFC8",fontSize:"12px",color:"var(--text-muted)",lineHeight:"1.5"}},
+      h("strong",null,"Provisioning logic: "),"Capacity changes emit ",eoBadge("ALT")," (∿ state transition) or ",eoBadge("NUL")," (∅ capacity destroyed). New funding emits ",eoBadge("INS")," (△ instantiating new capacity). Allocations emit ",eoBadge("CON")," (⋈ connecting to a bridge). The inventory state event is recomputed on every change. All events carry full provenance: who, when, why, and under what governance authority."
+    ));
+  }
+
+  if(state.panelTab==="allocations"){
+    if(!allocs.length){body.appendChild(h("div",{style:{padding:"40px 0",textAlign:"center",color:"var(--text-faint)"}},"No allocations from this resource."));}
+    else{
+      body.appendChild(h("div",{className:"section-label"},"Allocations from this resource (anonymized in org view)"));
+      allocs.forEach(a=>{
+        const ind=DATA.individuals.find(i=>i.id===a.indId);
+        const card=h("div",{className:"alloc-card"});
+        card.appendChild(h("div",{className:"alloc-header"},
+          h("div",null,
+            h("div",{style:{fontWeight:"600",fontSize:"13px"}},ind?(ind.name||ind.alias):"[bridge ref]"),
+            h("div",{style:{fontSize:"11px",color:"var(--text-muted)"}},a.quantity+" "+a.unit+" · "+fmtDate(a.at)),
+          ),
+          h("div",{style:{display:"flex",gap:"4px"}},eoBadge(a.eo_op),badge(a.status,a.status==="active"?"badge-green":"badge-muted")),
+        ));
+        card.appendChild(h("div",{style:{fontSize:"11px",color:"var(--text-muted)",marginTop:"4px"}},
+          "Bridge: ",roomChip(a.bridgeRoom)," · By: ",a.allocatedBy
+        ));
+        body.appendChild(card);
+      });
+      body.appendChild(h("div",{style:{marginTop:"12px",padding:"10px 12px",borderRadius:"8px",background:"#FFFCF5",border:"1px solid #E8DFC8",fontSize:"12px",color:"var(--text-muted)",lineHeight:"1.5"}},
+        h("strong",null,"Privacy note: "),"In a production deployment, this panel would show bridge room references, not individual names, unless the viewer has access to each bridge. Names resolve only for bridges you're a member of. This demo shows resolved names for illustration."
+      ));
+    }
+  }
+
+  panel.appendChild(body);
+  app.appendChild(panel);
+}
+
+// Boot
+render();
+</script>
+</body>
+</html>
