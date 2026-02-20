@@ -1,0 +1,57 @@
+[
+  {
+    "full_name": "Maria Santos",
+    "dob": "1988-03-14",
+    "id_number": "EX-10001",
+    "email": "maria.santos@example.com",
+    "phone": "555-0101",
+    "address": "742 Evergreen Terrace, Springfield, IL 62704",
+    "affiliation": "Harbor House Shelter",
+    "case_notes": "Initial intake completed. Referred from community outreach.",
+    "history": "2024-01 Contacted via outreach; 2024-02 Intake completed"
+  },
+  {
+    "full_name": "James Whitfield",
+    "dob": "1975-11-02",
+    "id_number": "EX-10002",
+    "email": "j.whitfield@example.com",
+    "phone": "555-0102",
+    "address": "308 Negra Arroyo Lane, Albuquerque, NM 87104",
+    "affiliation": "Sunrise Recovery Center",
+    "case_notes": "Enrolled in transitional housing program.",
+    "history": "2023-09 Emergency shelter; 2023-12 Transitional housing application; 2024-01 Approved"
+  },
+  {
+    "full_name": "Aisha Okafor",
+    "dob": "1992-07-20",
+    "id_number": "EX-10003",
+    "email": "aisha.o@example.com",
+    "phone": "555-0103",
+    "address": "1600 Pennsylvania Ave, Apt 4B, Washington, DC 20500",
+    "affiliation": "Downtown Legal Aid",
+    "case_notes": "Awaiting eligibility confirmation, documents pending.",
+    "history": "2024-03 First contact; 2024-03 Document collection in progress"
+  },
+  {
+    "full_name": "Robert Chen",
+    "dob": "1960-05-08",
+    "id_number": "EX-10004",
+    "email": "r.chen@example.com",
+    "phone": "555-0104",
+    "address": "221B Baker Street, Boston, MA 02101",
+    "affiliation": "Northside Community Health",
+    "case_notes": "Follow-up visit scheduled. Medication assistance requested.",
+    "history": "2022-06 Initial enrollment; 2023-01 Annual review; 2024-02 Follow-up"
+  },
+  {
+    "full_name": "Fatima Al-Rashid",
+    "dob": "2001-12-30",
+    "id_number": "EX-10005",
+    "email": "f.alrashid@example.com",
+    "phone": "555-0105",
+    "address": "12 Grimmauld Place, Portland, OR 97201",
+    "affiliation": "Youth Forward Alliance",
+    "case_notes": "New intake — recently aged out of foster care system.",
+    "history": "2024-04 Referral received; 2024-04 Intake scheduled"
+  }
+]
