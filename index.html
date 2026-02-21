@@ -10468,7 +10468,7 @@ const EditableCell = ({value, onSave, placeholder, type}) => {
     onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();commit()}if(e.key==='Escape'){setDraft(value||'');setEditing(false)}}}
     onClick={e=>e.stopPropagation()}/>;
   return <div className="dt-ecell" onClick={e=>{e.stopPropagation();setEditing(true)}}>
-    {value || <span style={{color:'var(--tx-3)',fontStyle:'italic'}}>{placeholder||'—'}</span>}
+    {draft || <span style={{color:'var(--tx-3)',fontStyle:'italic'}}>{placeholder||'—'}</span>}
   </div>;
 };
 
