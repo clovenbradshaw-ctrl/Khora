@@ -23007,7 +23007,8 @@ const NoteCreateModal = ({
   rosterRoom,
   onSave,
   showToast,
-  T
+  T,
+  initialAttachTo
 }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -23015,6 +23016,17 @@ const NoteCreateModal = ({
   const [tags, setTags] = useState([]); // [{userId, displayName}]
   const [tagSearch, setTagSearch] = useState('');
   const [tagDd, setTagDd] = useState(false);
+
+  useEffect(() => {
+    if (open) setAttachTo(initialAttachTo || '');
+  }, [open, initialAttachTo]);
+
+  const authorName = (() => {
+    const me = (staff||[]).find(s => s.userId === svc.userId);
+    if (me) return me.display_name || svc.userId?.split(':')[0]?.replace('@','') || 'Unknown';
+    return svc.userId?.split(':')[0]?.replace('@','') || 'Unknown';
+  })();
+
   if (!open) return null;
   const allPeople = [...(staff || []).map(s => ({
     userId: s.userId,
@@ -23114,26 +23126,54 @@ const NoteCreateModal = ({
     style: {
       marginBottom: 14
     }
+  }, initialAttachTo ? /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("span", {
+      className: "section-label"
+    }, "ATTACHED TO ", T?.client_term?.toUpperCase() || 'INDIVIDUAL'),
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14, fontWeight: 600, color: 'var(--tx-0)', padding: '8px 12px',
+        background: 'var(--bg-2)', borderRadius: 'var(--r)', border: '1px solid var(--border-0)', marginTop: 4
+      }
+    }, (individuals || []).find(i => i.id === initialAttachTo)?.name || initialAttachTo),
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 10, color: 'var(--tx-2)', marginTop: 4 }
+    }, "Stored in the individual\u2019s bridge room \u2014 they can see and control this note.")
+  ) : /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("span", {
+      className: "section-label"
+    }, "ATTACH TO ", T?.client_term?.toUpperCase() || 'INDIVIDUAL', " (OPTIONAL)"),
+    /*#__PURE__*/React.createElement("select", {
+      value: attachTo,
+      onChange: e => setAttachTo(e.target.value),
+      style: { width: '100%' }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Standalone (not attached)"), (individuals || []).map(ind => /*#__PURE__*/React.createElement("option", {
+      key: ind.id,
+      value: ind.id
+    }, ind.name || ind.id))),
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 10, color: 'var(--tx-2)', marginTop: 4 }
+    }, attachTo ? 'Stored in the individual\'s bridge room \u2014 they can see and control this note.' : 'Stored in your roster room \u2014 internal to your organization.')
+  )), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "ATTACH TO ", T?.client_term?.toUpperCase() || 'INDIVIDUAL', " (OPTIONAL)"), /*#__PURE__*/React.createElement("select", {
-    value: attachTo,
-    onChange: e => setAttachTo(e.target.value),
+  }, "CREATED BY"), /*#__PURE__*/React.createElement("div", {
     style: {
-      width: '100%'
+      fontSize: 13, color: 'var(--tx-1)', padding: '8px 12px',
+      background: 'var(--bg-2)', borderRadius: 'var(--r)', border: '1px solid var(--border-0)', marginTop: 4,
+      display: 'flex', alignItems: 'center', gap: 8
     }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "Standalone (not attached)"), (individuals || []).map(ind => /*#__PURE__*/React.createElement("option", {
-    key: ind.id,
-    value: ind.id
-  }, ind.name || ind.id))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 10,
-      color: 'var(--tx-2)',
-      marginTop: 4
+      width: 20, height: 20, borderRadius: '50%', background: 'var(--purple-dim)', color: 'var(--purple)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0
     }
-  }, attachTo ? 'Stored in the individual\'s bridge room — they can see and control this note.' : 'Stored in your roster room — internal to your organization.')), /*#__PURE__*/React.createElement("div", {
+  }, authorName[0].toUpperCase()), authorName)), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 18
     }
@@ -31152,7 +31192,8 @@ const ProviderApp = ({
     rosterRoom: rosterRoom,
     onSave: handleNoteSave,
     showToast: showToast,
-    T: T
+    T: T,
+    initialAttachTo: newNoteAttachTo
   }), /*#__PURE__*/React.createElement(Modal, {
     open: !!noteDetailModal,
     onClose: () => setNoteDetailModal(null),
@@ -31244,7 +31285,8 @@ const ProviderApp = ({
     rosterRoom: rosterRoom,
     onSave: handleNoteSave,
     showToast: showToast,
-    T: T
+    T: T,
+    initialAttachTo: newNoteAttachTo
   })), view === 'resource-profile' && activeResourceProfile && /*#__PURE__*/React.createElement(ResourceProfilePage, {
     resource: activeResourceProfile,
     allocations: allAllocations,
