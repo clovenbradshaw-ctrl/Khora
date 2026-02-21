@@ -620,6 +620,13 @@ menu:<svg {...p}><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="2
 bell:<svg {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
 filter:<svg {...p}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
 dice:<svg {...p}><rect x="2" y="2" width="20" height="20" rx="4"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.5" fill="currentColor" stroke="none"/></svg>,
+rss:<svg {...p}><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>,
+megaphone:<svg {...p}><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>,
+'arrow-right-circle':<svg {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 16 16 12 12 8"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
+'git-merge':<svg {...p}><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>,
+map:<svg {...p}><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>,
+radio:<svg {...p}><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>,
+'external-link':<svg {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>,
 };
 return <span style={{display:'inline-flex',alignItems:'center',flexShrink:0}}>{d[n]}</span>;
 };
@@ -1195,6 +1202,16 @@ const EVT = {
   // Field definitions & crosswalks
   FIELD_DEF:      `${NS}.field.definition`,
   FIELD_CROSSWALK:`${NS}.field.crosswalk`,
+  // Team operational subscriptions & channels
+  TEAM_SERVICE_INFO:  `${NS}.team.service_info`,   // published service metadata (hours, capacity, services)
+  TEAM_SUBSCRIBERS:   `${NS}.team.subscribers`,     // subscriber list with approval status
+  TEAM_CHANNELS:      `${NS}.team.channels`,        // channel definitions (announcements, capacity, etc.)
+  TEAM_UPDATE:        `${NS}.team.update`,          // operational update (timeline event, not state)
+  TEAM_DIRECTORY:     `${NS}.team.directory`,       // network-level directory listing (state_key=teamRoomId)
+  // Referrals (privacy-controlled handoffs)
+  REFERRAL_META:      `${NS}.referral.meta`,        // referral metadata (source, destination, status, reason)
+  REFERRAL_REFS:      `${NS}.referral.refs`,        // consented field data (same encryption as BRIDGE_REFS)
+  REFERRAL_OUTCOME:   `${NS}.referral.outcome`,     // outcome feedback from receiving team
   // Matching / dedup
   MATCH_TOKEN:    `${NS}.match.token`,
   MATCH_HIT:      `${NS}.match.hit`,
@@ -8512,6 +8529,441 @@ const LoginScreen = ({onLogin}) => {
   </div>;
 };
 
+/* ═══════════════════ NETWORK MAP VIEW ═══════════════════ */
+const NetworkMapView = ({teams=[], subscribedTeams=[], cases=[], providers=[], svc, filters, setFilters, mode, setMode, onNavigate, role='provider', T}) => {
+  const [hoveredNode, setHoveredNode] = useState(null);
+  const [graphTooltip, setGraphTooltip] = useState(null);
+
+  // ─── Derive nodes from direct connections only ───
+  const teamNodes = useMemo(() => {
+    const all = [...teams.map(t=>({...t, connectionType:'member'})), ...subscribedTeams.map(t=>({...t, connectionType:'subscriber'}))];
+    return all;
+  }, [teams, subscribedTeams]);
+
+  const memberNodes = useMemo(() => {
+    const map = {};
+    for (const team of teams) {
+      for (const m of (team.members||[])) {
+        if (m.userId === svc?.userId) continue;
+        if (!map[m.userId]) map[m.userId] = {userId:m.userId, name:m.display_name||m.userId, teams:[], source:'team', role:m.role};
+        map[m.userId].teams.push(team.name||'Unnamed');
+      }
+    }
+    // Add bridge connections (providers for client, cases for provider)
+    const bridgeList = role==='client' ? (providers||[]) : (cases||[]);
+    for (const b of bridgeList) {
+      const uid = role==='client' ? b.providerUserId : b.clientUserId;
+      const name = role==='client' ? (b.providerName||b.providerUserId) : (b.sharedData?.full_name||b.clientUserId);
+      if (uid && uid !== svc?.userId) {
+        if (!map[uid]) map[uid] = {userId:uid, name, teams:[], source:'bridge', role:null};
+        else if (map[uid].source === 'team') map[uid].source = 'bridge+team';
+      }
+    }
+    return Object.values(map);
+  }, [teams, providers, cases, svc?.userId, role]);
+
+  const individualNodes = useMemo(() => {
+    if (role === 'client') {
+      // For clients: show providers as "individuals" they're connected to
+      return (providers||[]).map(p => ({
+        userId: p.providerUserId,
+        name: p.providerName || p.providerUserId,
+        org: p.providerProfile?.org_membership?.org_name,
+        bridgeRoomId: p.bridgeRoomId,
+        source: 'bridge'
+      }));
+    }
+    // For providers: show cases/clients
+    return (cases||[]).map(c => ({
+      userId: c.clientUserId,
+      name: c.sharedData?.full_name || c.clientUserId,
+      bridgeRoomId: c.bridgeRoomId,
+      source: 'bridge',
+      status: c.meta?.status || 'active'
+    }));
+  }, [providers, cases, role]);
+
+  // ─── SVG Graph Layout (concentric circles) ───
+  const renderGraph = () => {
+    const W = 700, H = 500, CX = W/2, CY = H/2;
+    const R1 = 120, R2 = 200, R3 = 280; // ring radii
+    const allTeamNodes = filters.teams ? teamNodes : [];
+    const allMemberNodes = filters.teamMembers ? memberNodes.filter(m=>m.source!=='bridge') : [];
+    const allIndividualNodes = filters.individuals ? individualNodes : [];
+    // Also show bridge-connected members when individuals filter is on
+    const bridgeMembers = filters.individuals ? memberNodes.filter(m=>m.source==='bridge'||m.source==='bridge+team') : [];
+    const combinedMembers = [...new Map([...allMemberNodes, ...bridgeMembers].map(m=>[m.userId,m])).values()];
+
+    const positionOnRing = (index, total, cx, cy, radius) => {
+      if (total === 0) return {x:cx, y:cy};
+      const angle = (2 * Math.PI * index / total) - Math.PI/2;
+      return {x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle)};
+    };
+
+    const teamPositions = allTeamNodes.map((_,i) => positionOnRing(i, allTeamNodes.length, CX, CY, R1));
+    const memberPositions = combinedMembers.map((_,i) => positionOnRing(i, combinedMembers.length, CX, CY, R2));
+    const indivPositions = allIndividualNodes.map((_,i) => positionOnRing(i, allIndividualNodes.length, CX, CY, R3));
+
+    return <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{background:'var(--bg-2)',borderRadius:'var(--r-lg)',border:'1px solid var(--border-0)'}}>
+      {/* Background rings */}
+      {[R1,R2,R3].map((r,i)=><circle key={i} cx={CX} cy={CY} r={r} fill="none" stroke="var(--border-0)" strokeWidth="1" strokeDasharray="4 4"/>)}
+      {/* Edges: center to teams */}
+      {allTeamNodes.map((t,i)=><line key={`ct-${i}`} x1={CX} y1={CY} x2={teamPositions[i].x} y2={teamPositions[i].y}
+        stroke={t.connectionType==='subscriber'?'var(--teal)':'var(--purple,var(--blue))'} strokeWidth="1.5" strokeOpacity="0.3"/>)}
+      {/* Edges: teams to members */}
+      {combinedMembers.map((m,mi)=>{
+        const relatedTeams = allTeamNodes.map((t,ti)=>({t,ti})).filter(({t})=>(t.members||[]).some(mm=>mm.userId===m.userId));
+        return relatedTeams.map(({ti},ri)=><line key={`tm-${mi}-${ri}`} x1={teamPositions[ti]?.x||CX} y1={teamPositions[ti]?.y||CY}
+          x2={memberPositions[mi].x} y2={memberPositions[mi].y} stroke="var(--blue)" strokeWidth="1" strokeOpacity="0.2"/>);
+      })}
+      {/* Edges: center to individuals (bridge connections) */}
+      {allIndividualNodes.map((ind,i)=><line key={`ci-${i}`} x1={CX} y1={CY} x2={indivPositions[i].x} y2={indivPositions[i].y}
+        stroke="var(--gold)" strokeWidth="1" strokeOpacity="0.2"/>)}
+      {/* Center node (You) */}
+      <circle cx={CX} cy={CY} r="18" fill="var(--gold-dim)" stroke="var(--gold)" strokeWidth="2"/>
+      <text x={CX} y={CY+4} textAnchor="middle" fontSize="9" fill="var(--gold)" fontFamily="var(--mono)" fontWeight="600">YOU</text>
+      {/* Team nodes */}
+      {allTeamNodes.map((t,i)=><g key={`tn-${i}`} style={{cursor:'pointer'}}
+        onMouseEnter={()=>setGraphTooltip({x:teamPositions[i].x,y:teamPositions[i].y-30,text:`${t.name||'Unnamed'} (${t.members?.length||0} members)${t.connectionType==='subscriber'?' — Subscribed':''}`,color:'var(--purple,var(--blue))'})}
+        onMouseLeave={()=>setGraphTooltip(null)}>
+        <circle cx={teamPositions[i].x} cy={teamPositions[i].y} r="14"
+          fill={t.connectionType==='subscriber'?'var(--teal-dim)':'var(--purple-dim,var(--blue-dim))'}
+          stroke={t.connectionType==='subscriber'?'var(--teal)':'var(--purple,var(--blue))'} strokeWidth="2"/>
+        <text x={teamPositions[i].x} y={teamPositions[i].y+3.5} textAnchor="middle" fontSize="7" fill="var(--tx-1)" fontFamily="var(--mono)"
+          >{(t.name||'?').slice(0,4)}</text>
+      </g>)}
+      {/* Member nodes */}
+      {combinedMembers.map((m,i)=><g key={`mn-${i}`} style={{cursor:'pointer'}}
+        onMouseEnter={()=>setGraphTooltip({x:memberPositions[i].x,y:memberPositions[i].y-24,text:`${m.name}${m.teams.length?` — ${m.teams.join(', ')}`:''}`,color:'var(--blue)'})}
+        onMouseLeave={()=>setGraphTooltip(null)}>
+        <circle cx={memberPositions[i].x} cy={memberPositions[i].y} r="10"
+          fill={m.source==='bridge'?'var(--gold-dim)':m.source==='bridge+team'?'var(--teal-dim)':'var(--blue-dim)'}
+          stroke={m.source==='bridge'?'var(--gold)':m.source==='bridge+team'?'var(--teal)':'var(--blue)'} strokeWidth="1.5"/>
+        <text x={memberPositions[i].x} y={memberPositions[i].y+3} textAnchor="middle" fontSize="6" fill="var(--tx-2)" fontFamily="var(--mono)"
+          >{(m.name.split(':')[0]?.replace('@','')||'?').slice(0,3)}</text>
+      </g>)}
+      {/* Individual nodes */}
+      {allIndividualNodes.map((ind,i)=><g key={`in-${i}`} style={{cursor:'pointer'}}
+        onMouseEnter={()=>setGraphTooltip({x:indivPositions[i].x,y:indivPositions[i].y-24,text:ind.name,color:'var(--gold)'})}
+        onMouseLeave={()=>setGraphTooltip(null)}>
+        <circle cx={indivPositions[i].x} cy={indivPositions[i].y} r="8"
+          fill="var(--gold-dim)" stroke="var(--gold)" strokeWidth="1.5"/>
+        <text x={indivPositions[i].x} y={indivPositions[i].y+3} textAnchor="middle" fontSize="5.5" fill="var(--tx-2)" fontFamily="var(--mono)"
+          >{(ind.name||'?').slice(0,3)}</text>
+      </g>)}
+      {/* Tooltip */}
+      {graphTooltip && <g>
+        <rect x={graphTooltip.x-80} y={graphTooltip.y-12} width="160" height="20" rx="4"
+          fill="var(--bg-1)" stroke={graphTooltip.color} strokeWidth="1"/>
+        <text x={graphTooltip.x} y={graphTooltip.y+2} textAnchor="middle" fontSize="9" fill="var(--tx-0)" fontFamily="var(--sans)"
+          >{graphTooltip.text.length>30?graphTooltip.text.slice(0,30)+'…':graphTooltip.text}</text>
+      </g>}
+      {/* Legend */}
+      <g transform={`translate(16, ${H-60})`}>
+        <rect x="-4" y="-4" width="130" height="56" rx="4" fill="var(--bg-1)" stroke="var(--border-0)" fillOpacity="0.9"/>
+        {[{c:'var(--gold)',l:'You (center)'},{c:'var(--purple,var(--blue))',l:'Teams'},{c:'var(--blue)',l:(T?.provider_term_plural||'Team Members')},{c:'var(--gold)',l:(T?.client_term_plural||'Individuals')}].map((item,i)=>
+          <g key={i} transform={`translate(4, ${i*12+4})`}>
+            <circle cx="4" cy="0" r="3" fill={item.c} fillOpacity="0.3" stroke={item.c} strokeWidth="1"/>
+            <text x="12" y="3" fontSize="8" fill="var(--tx-2)" fontFamily="var(--mono)">{item.l}</text>
+          </g>
+        )}
+      </g>
+    </svg>;
+  };
+
+  // ─── Card Layout ───
+  const renderCards = () => {
+    const filteredTeams = filters.teams ? teamNodes : [];
+    const filteredMembers = filters.teamMembers ? memberNodes : [];
+    const filteredIndividuals = filters.individuals ? individualNodes : [];
+
+    return <div>
+      {/* Teams section */}
+      {filters.teams && <div style={{marginBottom:24}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+          <I n="users" s={16} c="var(--purple,var(--blue))"/>
+          <span style={{fontSize:15,fontWeight:700}}>Teams</span>
+          <span className="tag tag-purple" style={{fontSize:9}}>{filteredTeams.length}</span>
+        </div>
+        {filteredTeams.length===0
+          ?<div className="card" style={{textAlign:'center',padding:'20px',borderStyle:'dashed'}}>
+            <p style={{color:'var(--tx-3)',fontSize:12}}>Not connected to any teams yet.</p>
+          </div>
+          :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:10}}>
+            {filteredTeams.map(t=><div key={t.roomId} className="card-h" style={{padding:14}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                <span style={{fontSize:13,fontWeight:600}}>{t.name||'Unnamed Team'}</span>
+                <span className={`tag ${t.connectionType==='subscriber'?'tag-teal':'tag-purple'}`} style={{fontSize:8}}>
+                  {t.connectionType==='subscriber'?'SUBSCRIBED':'MEMBER'}
+                </span>
+              </div>
+              {t.org_name&&<span className="tag tag-blue" style={{fontSize:8,marginBottom:4}}>{t.org_name}</span>}
+              {t.description&&<p style={{fontSize:10.5,color:'var(--tx-2)',lineHeight:1.4,marginBottom:6}}>{t.description}</p>}
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <I n="user" s={10} c="var(--tx-3)"/>
+                <span style={{fontSize:10,color:'var(--tx-2)'}}>
+                  {t.members?.length||0} member{(t.members?.length||0)!==1?'s':''}
+                </span>
+                {t.serviceInfo?.capacity_status && <span className={`tag ${
+                  t.serviceInfo.capacity_status==='accepting'?'tag-green':t.serviceInfo.capacity_status==='waitlist'?'tag-gold':'tag-red'
+                }`} style={{fontSize:7}}>{t.serviceInfo.capacity_status.toUpperCase()}</span>}
+              </div>
+            </div>)}
+          </div>}
+      </div>}
+
+      {/* Team Members section */}
+      {filters.teamMembers && <div style={{marginBottom:24}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+          <I n="briefcase" s={16} c="var(--blue)"/>
+          <span style={{fontSize:15,fontWeight:700}}>{T?.provider_term_plural||'Team Members'}</span>
+          <span className="tag tag-blue" style={{fontSize:9}}>{filteredMembers.length}</span>
+        </div>
+        {filteredMembers.length===0
+          ?<div className="card" style={{textAlign:'center',padding:'20px',borderStyle:'dashed'}}>
+            <p style={{color:'var(--tx-3)',fontSize:12}}>No {(T?.provider_term_plural||'team members').toLowerCase()} connected.</p>
+          </div>
+          :<div className="card" style={{padding:0,overflow:'hidden'}}>
+            {filteredMembers.map((m,i)=><div key={m.userId} style={{padding:'10px 16px',borderBottom:i<filteredMembers.length-1?'1px solid var(--border-0)':'none',
+              display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:28,height:28,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+                  background:m.source==='bridge'?'var(--gold-dim)':m.source==='bridge+team'?'var(--teal-dim)':'var(--blue-dim)',
+                  color:m.source==='bridge'?'var(--gold)':m.source==='bridge+team'?'var(--teal)':'var(--blue)'}}>
+                  <I n={m.source==='bridge'?'briefcase':'user'} s={13}/>
+                </div>
+                <div>
+                  <span style={{fontSize:12.5,fontWeight:500,display:'block'}}>{m.name}</span>
+                  {m.teams.length>0 && <span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
+                    {m.teams.join(', ')}
+                  </span>}
+                </div>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:4}}>
+                {m.role==='lead'&&<span className="tag tag-gold" style={{fontSize:7}}>LEAD</span>}
+                <span className={`tag ${
+                  m.source==='bridge'?'tag-gold':m.source==='bridge+team'?'tag-teal':'tag-blue'
+                }`} style={{fontSize:8}}>
+                  {m.source==='bridge'?'Bridge':m.source==='bridge+team'?'Bridge+Team':'Team'}
+                </span>
+              </div>
+            </div>)}
+          </div>}
+      </div>}
+
+      {/* Individuals section */}
+      {filters.individuals && <div style={{marginBottom:24}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+          <I n="shield" s={16} c="var(--gold)"/>
+          <span style={{fontSize:15,fontWeight:700}}>{T?.client_term_plural||'Individuals'}</span>
+          <span className="tag tag-gold" style={{fontSize:9}}>{filteredIndividuals.length}</span>
+        </div>
+        {filteredIndividuals.length===0
+          ?<div className="card" style={{textAlign:'center',padding:'20px',borderStyle:'dashed'}}>
+            <p style={{color:'var(--tx-3)',fontSize:12}}>No {(T?.client_term_plural||'individuals').toLowerCase()} connected.</p>
+          </div>
+          :<div className="card" style={{padding:0,overflow:'hidden'}}>
+            {filteredIndividuals.map((ind,i)=><div key={ind.userId||i} style={{padding:'10px 16px',borderBottom:i<filteredIndividuals.length-1?'1px solid var(--border-0)':'none',
+              display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:28,height:28,borderRadius:'50%',background:'var(--gold-dim)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--gold)',flexShrink:0}}>
+                  <I n="shield" s={13}/>
+                </div>
+                <div>
+                  <span style={{fontSize:12.5,fontWeight:500,display:'block'}}>{ind.name}</span>
+                  {ind.org&&<span style={{fontSize:9.5,color:'var(--blue)',fontFamily:'var(--mono)'}}>{ind.org}</span>}
+                  {ind.status&&<span className={`tag ${ind.status==='active'?'tag-green':'tag-gold'}`} style={{fontSize:7,marginLeft:4}}>{ind.status.toUpperCase()}</span>}
+                </div>
+              </div>
+              <span className="tag tag-gold" style={{fontSize:8}}>Bridge</span>
+            </div>)}
+          </div>}
+      </div>}
+    </div>;
+  };
+
+  const totalConnections = teamNodes.length + memberNodes.length + individualNodes.length;
+
+  return <div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+      <div>
+        <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Network Map</h2>
+        <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Your connections — only people and teams you are directly connected to.</p>
+      </div>
+      <div style={{display:'flex',gap:4}}>
+        {['cards','graph'].map(m=><button key={m} onClick={()=>setMode(m)}
+          className={mode===m?'b-pri b-sm':'b-gho b-sm'} style={{display:'flex',alignItems:'center',gap:4}}>
+          <I n={m==='cards'?'grid':'globe'} s={12}/>{m==='cards'?'Cards':'Graph'}
+        </button>)}
+      </div>
+    </div>
+
+    {/* Stats bar */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:20}}>
+      {[{l:'Teams',v:teamNodes.length,c:'purple',i:'users'},
+        {l:T?.provider_term_plural||'Team Members',v:memberNodes.length,c:'blue',i:'briefcase'},
+        {l:T?.client_term_plural||'Individuals',v:individualNodes.length,c:'gold',i:'shield'},
+        {l:'Total',v:totalConnections,c:'teal',i:'globe'},
+      ].map((s,i)=><div key={i} className="card" style={{padding:14}}>
+        <span className="section-label">{s.l.toUpperCase()}</span>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
+          <span style={{fontSize:18,fontWeight:700}}>{s.v}</span>
+          <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span>
+        </div>
+      </div>)}
+    </div>
+
+    {/* Filter toggles */}
+    <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
+      {[{key:'teams',label:'Teams',color:'purple',icon:'users'},
+        {key:'teamMembers',label:T?.provider_term_plural||'Team Members',color:'blue',icon:'briefcase'},
+        {key:'individuals',label:T?.client_term_plural||'Individuals',color:'gold',icon:'shield'}
+      ].map(f=><button key={f.key} onClick={()=>setFilters(prev=>({...prev,[f.key]:!prev[f.key]}))}
+        style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:'var(--r)',cursor:'pointer',
+          border:`1px solid ${filters[f.key]?`var(--${f.color})`:'var(--border-1)'}`,
+          background:filters[f.key]?`var(--${f.color}-dim)`:'transparent',
+          color:filters[f.key]?`var(--${f.color})`:'var(--tx-2)',fontFamily:'var(--sans)',fontSize:12.5,fontWeight:600,transition:'all .15s'}}>
+        <div style={{width:14,height:14,borderRadius:3,border:`2px solid ${filters[f.key]?`var(--${f.color})`:'var(--border-2)'}`,
+          background:filters[f.key]?`var(--${f.color})`:'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          {filters[f.key]&&<I n="check" s={9} c="var(--bg-0)"/>}
+        </div>
+        <I n={f.icon} s={13}/>{f.label}
+      </button>)}
+    </div>
+
+    {/* Content */}
+    {mode==='graph' ? renderGraph() : renderCards()}
+
+    {/* Privacy notice */}
+    <div style={{background:'var(--green-dim)',border:'1px solid rgba(61,214,140,.15)',borderRadius:'var(--r)',padding:'12px 16px',fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6,marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
+      <I n="shield" s={16} c="var(--green)"/>
+      <span><strong style={{color:'var(--green)'}}>Privacy-first.</strong> This map shows only your direct connections. No second-degree visibility, no suggested connections. All data stays encrypted in your rooms.</span>
+    </div>
+  </div>;
+};
+
+/* ═══════════════════ FEED VIEW ═══════════════════ */
+const FeedView = ({feedItems=[], feedFilter, setFeedFilter, referrals=[], subscribedTeams=[], teams=[], onViewReferral, onNavigate, role='provider', T}) => {
+  const timeAgo = (ts) => {
+    if (!ts) return '';
+    const diff = Date.now() - ts;
+    if (diff < 60000) return 'just now';
+    if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
+    if (diff < 604800000) return `${Math.floor(diff/86400000)}d ago`;
+    return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  };
+
+  // Build feed from all sources
+  const allItems = useMemo(() => {
+    const items = [];
+    // Referral status changes
+    for (const ref of referrals) {
+      for (const sh of (ref.status_history||[])) {
+        items.push({
+          type:'referral',
+          title:`Referral ${sh.status}`,
+          body:`Referral to ${ref.destination_team||'team'} — ${ref.reason||'No reason specified'}`,
+          ts:sh.at,
+          status:sh.status,
+          referralRoomId:ref.roomId,
+          color:'blue',
+          icon:'arrow-right-circle'
+        });
+      }
+      if (ref.outcome) {
+        items.push({
+          type:'referral_outcome',
+          title:`Referral outcome: ${ref.outcome.outcome}`,
+          body:ref.outcome.notes || `Services: ${(ref.outcome.services_provided||[]).join(', ')||'None specified'}`,
+          ts:ref.outcome.completed_at,
+          referralRoomId:ref.roomId,
+          color:'green',
+          icon:'check'
+        });
+      }
+    }
+    // Team updates from subscribed teams
+    for (const item of feedItems) {
+      items.push(item);
+    }
+    // Sort by timestamp descending
+    items.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    return items;
+  }, [referrals, feedItems]);
+
+  const filtered = feedFilter==='all' ? allItems
+    : feedFilter==='referrals' ? allItems.filter(i=>i.type==='referral'||i.type==='referral_outcome')
+    : feedFilter==='service' ? allItems.filter(i=>i.type==='service_update')
+    : feedFilter==='team' ? allItems.filter(i=>i.type==='team_update')
+    : allItems;
+
+  return <div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+    <div style={{marginBottom:20}}>
+      <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Feed</h2>
+      <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Operational updates from your network. Referral status, service changes, and team communications.</p>
+    </div>
+
+    {/* Stats */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:20}}>
+      {[{l:'Total Updates',v:allItems.length,c:'teal',i:'rss'},
+        {l:'Referrals',v:referrals.length,c:'blue',i:'arrow-right-circle'},
+        {l:'Subscriptions',v:subscribedTeams.length,c:'green',i:'radio'},
+        {l:'Teams',v:teams.length,c:'purple',i:'users'},
+      ].map((s,i)=><div key={i} className="card" style={{padding:14}}>
+        <span className="section-label">{s.l.toUpperCase()}</span>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
+          <span style={{fontSize:18,fontWeight:700}}>{s.v}</span>
+          <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span>
+        </div>
+      </div>)}
+    </div>
+
+    {/* Filter chips */}
+    <div style={{display:'flex',gap:6,marginBottom:20,flexWrap:'wrap'}}>
+      {[{k:'all',l:'All'},{k:'referrals',l:'Referrals'},{k:'service',l:'Service Updates'},{k:'team',l:'Team'}].map(f=>
+        <button key={f.k} onClick={()=>setFeedFilter(f.k)}
+          className={feedFilter===f.k?'b-pri b-sm':'b-gho b-sm'}>{f.l}
+        </button>
+      )}
+    </div>
+
+    {/* Feed items */}
+    {filtered.length===0
+      ?<div className="card" style={{textAlign:'center',padding:'40px 20px',borderStyle:'dashed'}}>
+        <I n="rss" s={32}/>
+        <p style={{color:'var(--tx-2)',marginTop:10,fontSize:13}}>No updates yet</p>
+        <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:4}}>Updates from referrals, subscribed teams, and team communications will appear here.</p>
+      </div>
+      :<div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {filtered.map((item,i)=><div key={i} className="card" style={{padding:'14px 18px'}}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:6}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{width:28,height:28,borderRadius:'50%',background:`var(--${item.color}-dim)`,display:'flex',alignItems:'center',justifyContent:'center',
+                color:`var(--${item.color})`,flexShrink:0}}>
+                <I n={item.icon||'rss'} s={14}/>
+              </div>
+              <div>
+                <span style={{fontSize:13,fontWeight:600,display:'block'}}>{item.title}</span>
+                {item.channel&&<span className="tag tag-teal" style={{fontSize:7}}>{item.channel}</span>}
+              </div>
+            </div>
+            <span style={{fontFamily:'var(--mono)',fontSize:9.5,color:'var(--tx-3)',flexShrink:0}}>{timeAgo(item.ts)}</span>
+          </div>
+          <p style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.5,marginLeft:36}}>{item.body}</p>
+          {item.type==='referral'&&<div style={{marginTop:8,marginLeft:36}}>
+            <span className={`tag ${
+              item.status==='completed'?'tag-green':item.status==='accepted'||item.status==='in_progress'?'tag-blue':
+              item.status==='declined'?'tag-red':'tag-gold'
+            }`} style={{fontSize:8}}>{item.status?.toUpperCase()}</span>
+            {onViewReferral&&<button onClick={()=>onViewReferral(item.referralRoomId)} className="b-gho b-xs" style={{marginLeft:8}}>View Referral</button>}
+          </div>}
+          {item.source&&<span style={{fontSize:9.5,color:'var(--tx-3)',fontFamily:'var(--mono)',display:'block',marginTop:4,marginLeft:36}}>{item.source}</span>}
+        </div>)}
+      </div>}
+  </div>;
+};
+
 /* ═══════════════════ PERSONAL DASHBOARD ═══════════════════ */
 const PersonalDashboard = ({session, providers, observations, myResources, vaultData, allFields, vaultRoom, onNavigate}) => {
   const [loading, setLoading] = useState(true);
@@ -8956,8 +9408,50 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const [myTeams, setMyTeams] = useState([]);
   const [clientSharingConsentModal, setClientSharingConsentModal] = useState(null); // {team} — prompts client team member to choose sharing preference
   const [myResources, setMyResources] = useState([]); // resource vault records from bridges
+  // ─── Network Map ───
+  const [networkMapFilters, setNetworkMapFilters] = useState({teams:true,teamMembers:true,individuals:true});
+  const [networkMapMode, setNetworkMapMode] = useState('cards'); // 'cards' | 'graph'
+  // ─── Subscriptions (teams the individual subscribes to for operational updates) ───
+  const [subscribedTeams, setSubscribedTeams] = useState([]); // teams user subscribes to (not a member of)
+  const [teamServiceInfoMap, setTeamServiceInfoMap] = useState({}); // teamRoomId → service info
+  // ─── Referrals ───
+  const [myReferrals, setMyReferrals] = useState([]); // referral rooms where user is the individual
+  // ─── Feed ───
+  const [feedItems, setFeedItems] = useState([]);
+  const [feedFilter, setFeedFilter] = useState('all');
 
   useEffect(() => { initVault(); }, []);
+
+  // Load feed items for client (referral status changes + subscribed team updates)
+  const loadClientFeed = async () => {
+    const items = [];
+    // Referral status changes
+    for (const ref of myReferrals) {
+      for (const sh of (ref.status_history||[])) {
+        items.push({type:'referral', title:`Referral ${sh.status}`, body:ref.reason||'',
+          ts:sh.at, source:`${ref.source_provider?.split(':')[0]?.replace('@','')} → ${ref.destination_team?.slice(0,20)}`,
+          color:sh.status==='completed'?'green':sh.status==='accepted'?'blue':sh.status==='declined'?'red':'gold',
+          icon:'arrow-right-circle', referralId:ref.roomId});
+      }
+    }
+    // Subscribed team updates
+    for (const team of [...(myTeams||[]), ...subscribedTeams].slice(0,20)) {
+      try {
+        const msgs = await svc.getMessages(team.roomId, 20);
+        for (const msg of (msgs||[])) {
+          if (msg.content?.msgtype === EVT.TEAM_UPDATE) {
+            items.push({type:'service_update', title:msg.content.title||'Service Update',
+              body:msg.content.body||'', ts:msg.content.ts||msg.ts,
+              channel:msg.content.channel_id, source:`${team.name||'Team'} — ${msg.content.channel_id||'General'}`,
+              color:'teal', icon:'megaphone'});
+          }
+        }
+      } catch(e) { /* skip */ }
+    }
+    items.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    setFeedItems(items);
+  };
+  useEffect(() => { if (!loading && svc) loadClientFeed(); }, [loading, myReferrals.length, subscribedTeams.length]);
 
   // Framework-derived fields from enabled standards
   const frameworkFields = useMemo(() => getFrameworkFields(enabledFrameworks), [enabledFrameworks]);
@@ -9019,11 +9513,14 @@ const ClientApp = ({session, onLogout, showToast}) => {
       } catch (e) { console.warn('Invited room scan failed:', e.message); }
 
       // Phase 2: Scan joined rooms (now includes any rooms we just auto-joined)
-      const scanned = await svc.scanRooms([EVT.PROVIDER_PROFILE, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.FIELD_DEF]);
+      const scanned = await svc.scanRooms([EVT.PROVIDER_PROFILE, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.FIELD_DEF, EVT.TEAM_SERVICE_INFO, EVT.TEAM_SUBSCRIBERS, EVT.TEAM_CHANNELS, EVT.REFERRAL_META, EVT.REFERRAL_REFS, EVT.REFERRAL_OUTCOME]);
       let vault = null, schema = null;
       const detectedPending = [], detectedClaimed = [];
       const bridgeProfiles = {}; // bridgeRoomId → provider profile
       const detectedTeams = [];
+      const detectedSubscribedTeams = [];
+      const detectedServiceInfo = {};
+      const detectedReferrals = [];
       for (const [rid, state] of Object.entries(scanned)) {
         const id = state[EVT.IDENTITY];
         if (id?.account_type === 'client' && id.owner === svc.userId) vault = rid;
@@ -9036,11 +9533,31 @@ const ClientApp = ({session, onLogout, showToast}) => {
             detectedPending.push({roomId: rid, ...id});
           }
         }
-        // Detect team rooms the individual belongs to
+        // Detect team rooms the individual belongs to or subscribes to
         if (id?.account_type === 'team') {
           const teamMeta = state[EVT.TEAM_META] || {};
           const teamMembers = state[EVT.TEAM_MEMBERS] || {members:[]};
-          detectedTeams.push({roomId:rid, ...teamMeta, members:teamMembers.members||[]});
+          const serviceInfo = state[EVT.TEAM_SERVICE_INFO];
+          const subscribers = state[EVT.TEAM_SUBSCRIBERS];
+          const channels = state[EVT.TEAM_CHANNELS];
+          const isMember = (teamMembers.members||[]).some(m=>m.userId===svc.userId);
+          const isSubscriber = (subscribers?.subscribers||[]).some(s=>s.userId===svc.userId&&s.status==='approved');
+          const teamObj = {roomId:rid, ...teamMeta, members:teamMembers.members||[], serviceInfo, subscribers, channels};
+          if (isMember) {
+            detectedTeams.push(teamObj);
+          } else if (isSubscriber) {
+            detectedSubscribedTeams.push(teamObj);
+          }
+          if (serviceInfo) detectedServiceInfo[rid] = serviceInfo;
+        }
+        // Detect referral rooms where this user is the individual
+        if (id?.account_type === 'referral') {
+          const refMeta = state[EVT.REFERRAL_META];
+          if (refMeta && refMeta.individual === svc.userId) {
+            const refRefs = state[EVT.REFERRAL_REFS];
+            const refOutcome = state[EVT.REFERRAL_OUTCOME];
+            detectedReferrals.push({roomId:rid, ...refMeta, refs:refRefs, outcome:refOutcome});
+          }
         }
         // Collect provider profiles and bridge metadata from bridge rooms
         const bridgeMeta = state[EVT.BRIDGE_META];
@@ -9086,6 +9603,9 @@ const ClientApp = ({session, onLogout, showToast}) => {
       setPendingClaims(detectedPending);
       setClaimedRooms(detectedClaimed);
       if (detectedTeams.length > 0) setMyTeams(detectedTeams);
+      if (detectedSubscribedTeams.length > 0) setSubscribedTeams(detectedSubscribedTeams);
+      if (Object.keys(detectedServiceInfo).length > 0) setTeamServiceInfoMap(detectedServiceInfo);
+      if (detectedReferrals.length > 0) setMyReferrals(detectedReferrals);
     } catch (e) {
       console.error('Vault init failed:', e);
       setInitError(e.message || 'Failed to initialize vault.');
@@ -9491,7 +10011,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
           {id:'vault',icon:'folder',label:'My Vault'},{id:'inbox',icon:'msg',label:'Messages'},
           {id:'observations',icon:'clipboard',label:'Observations'},
           {id:'resources',icon:'layers',label:`My Resources${myResources.length?` (${myResources.length})`:''}`},
-          {id:'providers',icon:'users',label:'People & Teams'},{id:'records',icon:'shield',label:'My Records'},
+          {id:'providers',icon:'users',label:'People & Teams'},{id:'network-map',icon:'map',label:'Network Map'},
+          {id:'feed',icon:'rss',label:'Feed'},{id:'records',icon:'shield',label:'My Records'},
           {id:'metrics',icon:'bar',label:'Metrics'},{id:'activity',icon:'layers',label:'Activity Stream'}
         ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveBridge(null);if(item.id!=='inbox')setInboxConvo(null)}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
@@ -9906,6 +10427,80 @@ const ClientApp = ({session, onLogout, showToast}) => {
                 </div>;
           })()}
         </div>
+      </div>}
+
+      {/* NETWORK MAP VIEW */}
+      {view==='network-map'&&!activeBridge&&<NetworkMapView
+        teams={myTeams} subscribedTeams={subscribedTeams} providers={providers}
+        svc={svc} filters={networkMapFilters} setFilters={setNetworkMapFilters}
+        mode={networkMapMode} setMode={setNetworkMapMode}
+        role="client" T={{provider_term:'Provider',provider_term_plural:'Providers',client_term:'Individual',client_term_plural:'Individuals'}}
+        onNavigate={(v)=>{setView(v);setActiveBridge(null)}}
+      />}
+
+      {/* FEED VIEW */}
+      {view==='feed'&&!activeBridge&&<FeedView
+        feedItems={feedItems} feedFilter={feedFilter} setFeedFilter={setFeedFilter}
+        referrals={myReferrals} subscribedTeams={subscribedTeams} teams={myTeams}
+        role="client" T={{provider_term:'Provider',provider_term_plural:'Providers',client_term:'Individual',client_term_plural:'Individuals'}}
+        onNavigate={(v)=>{setView(v);setActiveBridge(null)}}
+      />}
+
+      {/* MY REFERRALS — individual's view of referrals */}
+      {view==='referrals'&&!activeBridge&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+        <div style={{marginBottom:20}}>
+          <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>My Referrals</h2>
+          <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Referrals made on your behalf. You control which data is shared and can withdraw at any time.</p>
+        </div>
+        {myReferrals.length===0
+          ?<div className="card" style={{textAlign:'center',padding:'40px 20px',borderStyle:'dashed'}}>
+            <I n="arrow-right-circle" s={32}/>
+            <p style={{color:'var(--tx-2)',marginTop:10}}>No referrals yet</p>
+          </div>
+          :<div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {myReferrals.map(ref=><div key={ref.roomId} className="card" style={{padding:'14px 18px'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <I n="arrow-right-circle" s={16} c="var(--blue)"/>
+                  <span style={{fontSize:14,fontWeight:600}}>{ref.reason||'Referral'}</span>
+                </div>
+                <span className={`tag ${
+                  ref.status==='completed'?'tag-green':ref.status==='accepted'||ref.status==='in_progress'?'tag-blue':
+                  ref.status==='declined'||ref.status==='withdrawn'?'tag-red':'tag-gold'
+                }`}>{ref.status?.toUpperCase()}</span>
+              </div>
+              <div style={{display:'flex',gap:16,fontSize:11,color:'var(--tx-2)'}}>
+                <span>From: {ref.source_provider?.split(':')[0]?.replace('@','')}</span>
+                <span>To: {ref.destination_team?.slice(0,20)}</span>
+              </div>
+              {ref.refs?.fields && <div style={{marginTop:8}}>
+                <span className="section-label">SHARED FIELDS</span>
+                <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:4}}>
+                  {Object.keys(ref.refs.fields).map(k=><span key={k} className="tag tag-teal" style={{fontSize:8}}>{k}</span>)}
+                </div>
+              </div>}
+              {ref.outcome && <div style={{marginTop:8,padding:'8px 12px',background:'var(--green-dim)',borderRadius:'var(--r)'}}>
+                <span style={{fontSize:11,fontWeight:600,color:'var(--green)'}}>Outcome: {ref.outcome.outcome}</span>
+                {ref.outcome.notes&&<p style={{fontSize:10.5,color:'var(--tx-1)',marginTop:4}}>{ref.outcome.notes}</p>}
+              </div>}
+              <div style={{display:'flex',gap:6,marginTop:10}}>
+                {ref.status!=='withdrawn'&&ref.status!=='completed'&&ref.status!=='declined'&&
+                  <button onClick={async()=>{
+                    try {
+                      const meta = await svc.getState(ref.roomId, EVT.REFERRAL_META);
+                      await svc.setState(ref.roomId, EVT.REFERRAL_META, {...meta, status:'withdrawn',
+                        status_history:[...(meta.status_history||[]),{status:'withdrawn',by:svc.userId,at:Date.now()}]});
+                      // Revoke field access
+                      await svc.setState(ref.roomId, EVT.REFERRAL_REFS, {fields:{}, consented_by:svc.userId, revoked_at:Date.now()});
+                      setMyReferrals(prev=>prev.map(r=>r.roomId===ref.roomId?{...r,status:'withdrawn',refs:{fields:{}}}:r));
+                      showToast('Referral withdrawn — field access revoked','success');
+                    } catch(e) { showToast('Failed to withdraw: '+e.message,'error'); }
+                  }} className="b-red b-sm" style={{display:'flex',alignItems:'center',gap:4}}>
+                    <I n="x" s={11}/>Withdraw
+                  </button>}
+              </div>
+            </div>)}
+          </div>}
       </div>}
 
       {/* MY RECORDS VIEW — rooms claimed from providers */}
@@ -12928,6 +13523,42 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [fieldDefs, setFieldDefs] = useState({});           // uri → definition object
   const [fieldCrosswalks, setFieldCrosswalks] = useState([]); // crosswalk records
   const [sharingConsentModal, setSharingConsentModal] = useState(null); // {team, member} or null — prompts team member to choose sharing preference
+  // Team creation — operational subscription config
+  const [newTeamPublishService, setNewTeamPublishService] = useState(false);   // default OFF — private
+  const [newTeamServices, setNewTeamServices] = useState('');
+  const [newTeamHours, setNewTeamHours] = useState('');
+  const [newTeamCapacity, setNewTeamCapacity] = useState('accepting');
+  const [newTeamApprovalMode, setNewTeamApprovalMode] = useState('manual');     // default: require approval
+  const [newTeamDirectoryListed, setNewTeamDirectoryListed] = useState(false); // default OFF
+  const [newTeamChannels, setNewTeamChannels] = useState([{id:'service-updates',name:'Service Updates',audience:['subscriber','member']}]);
+  // Team service settings modal (for existing teams)
+  const [teamSettingsModal, setTeamSettingsModal] = useState(null);
+  const [teamSettingsDraft, setTeamSettingsDraft] = useState({});
+  // ─── Network Map ───
+  const [networkMapFilters, setNetworkMapFilters] = useState({teams:true,teamMembers:true,individuals:true});
+  const [networkMapMode, setNetworkMapMode] = useState('cards'); // 'cards' | 'graph'
+  // ─── Operational subscriptions (teams this provider subscribes to) ───
+  const [subscribedTeams, setSubscribedTeams] = useState([]);      // teams user subscribes to
+  const [teamServiceInfoMap, setTeamServiceInfoMap] = useState({}); // teamRoomId → service info
+  const [teamDirectory, setTeamDirectory] = useState([]);           // network-level directory listings
+  // ─── Referrals (privacy-controlled handoffs) ───
+  const [referrals, setReferrals] = useState([]);                   // all referral rooms (sent + received)
+  const [referralModal, setReferralModal] = useState(null);         // active referral compose modal — case/bridge data
+  const [referralDest, setReferralDest] = useState('');             // destination team room ID
+  const [referralReason, setReferralReason] = useState('');
+  const [referralFields, setReferralFields] = useState({});         // field toggles for referral
+  const [referralConsent, setReferralConsent] = useState(false);    // provider attests consent
+  const [activeReferral, setActiveReferral] = useState(null);       // viewing a referral detail
+  const [referralMessages, setReferralMessages] = useState([]);
+  const [referralMsgText, setReferralMsgText] = useState('');
+  // ─── Team Updates ───
+  const [teamUpdateModal, setTeamUpdateModal] = useState(null);     // team to post update for
+  const [teamUpdateChannel, setTeamUpdateChannel] = useState('');
+  const [teamUpdateTitle, setTeamUpdateTitle] = useState('');
+  const [teamUpdateBody, setTeamUpdateBody] = useState('');
+  // ─── Feed ───
+  const [feedItems, setFeedItems] = useState([]);
+  const [feedFilter, setFeedFilter] = useState('all');
   // Client data import
   const [importModal, setImportModal] = useState(false);
   // ─── Database / Notes / Profile state ───
@@ -13088,7 +13719,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     setInitError(null);
     try {
       // Single-pass scan: fetch all Khora state across rooms in one request
-      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK]);
+      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK, EVT.TEAM_SERVICE_INFO, EVT.TEAM_SUBSCRIBERS, EVT.TEAM_CHANNELS, EVT.TEAM_DIRECTORY, EVT.REFERRAL_META, EVT.REFERRAL_REFS, EVT.REFERRAL_OUTCOME]);
       let roster=null, metricsR=null, schema=null, network=null;
       let detectedOrg=null, detectedOrgRole=null;
       const bridgeData = [];
@@ -13097,6 +13728,10 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       const detectedTeams = [];
       const detectedFieldDefs = {};
       const detectedCrosswalks = [];
+      const detectedSubscribedTeams = [];
+      const detectedServiceInfo = {};
+      const detectedDirectoryListings = [];
+      const detectedReferrals = [];
       for (const [rid, state] of Object.entries(scanned)) {
         const id = state[EVT.IDENTITY];
         if (id?.account_type==='provider'&&id.owner===svc.userId) roster=rid;
@@ -13128,8 +13763,19 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           const teamMembers = state[EVT.TEAM_MEMBERS] || {members:[]};
           const teamSchema = state[EVT.TEAM_SCHEMA] || null;
           const teamSchemaRule = state[EVT.TEAM_SCHEMA_RULE] || null;
-          detectedTeams.push({roomId:rid, ...teamMeta, members:teamMembers.members||[], owner:id.owner, created:id.created,
-            schema:teamSchema, schemaRule:teamSchemaRule});
+          const serviceInfo = state[EVT.TEAM_SERVICE_INFO];
+          const subscribers = state[EVT.TEAM_SUBSCRIBERS];
+          const channels = state[EVT.TEAM_CHANNELS];
+          const isMember = (teamMembers.members||[]).some(m=>m.userId===svc.userId);
+          const isSubscriber = (subscribers?.subscribers||[]).some(s=>s.userId===svc.userId&&s.status==='approved');
+          const teamObj = {roomId:rid, ...teamMeta, members:teamMembers.members||[], owner:id.owner, created:id.created,
+            schema:teamSchema, schemaRule:teamSchemaRule, serviceInfo, subscribers, channels};
+          if (isMember) {
+            detectedTeams.push(teamObj);
+          } else if (isSubscriber) {
+            detectedSubscribedTeams.push(teamObj);
+          }
+          if (serviceInfo) detectedServiceInfo[rid] = serviceInfo;
         }
         // Collect field definitions and crosswalks from schema rooms
         if (id?.account_type==='schema') {
@@ -13137,6 +13783,20 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           if (defs?.definitions) Object.assign(detectedFieldDefs, defs.definitions);
           const xws = state[EVT.FIELD_CROSSWALK];
           if (xws?.crosswalks) detectedCrosswalks.push(...xws.crosswalks);
+        }
+        // Detect referral rooms (sent or received)
+        if (id?.account_type==='referral') {
+          const refMeta = state[EVT.REFERRAL_META];
+          if (refMeta && (refMeta.source_provider===svc.userId || refMeta.destination_assigned===svc.userId)) {
+            const refRefs = state[EVT.REFERRAL_REFS];
+            const refOutcome = state[EVT.REFERRAL_OUTCOME];
+            detectedReferrals.push({roomId:rid, ...refMeta, refs:refRefs, outcome:refOutcome});
+          }
+        }
+        // Detect network directory listings (stored as array in single state event)
+        if (id?.account_type==='network') {
+          const dirData = state[EVT.TEAM_DIRECTORY];
+          if (dirData?.listings) detectedDirectoryListings.push(...dirData.listings);
         }
         const meta = state[EVT.BRIDGE_META];
         if (meta && meta.status!=='tombstoned') {
@@ -13217,6 +13877,10 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       }
       // Load teams detected during scan
       if (detectedTeams.length > 0) setTeams(detectedTeams);
+      if (detectedSubscribedTeams.length > 0) setSubscribedTeams(detectedSubscribedTeams);
+      if (Object.keys(detectedServiceInfo).length > 0) setTeamServiceInfoMap(detectedServiceInfo);
+      if (detectedDirectoryListings.length > 0) setTeamDirectory(detectedDirectoryListings);
+      if (detectedReferrals.length > 0) setReferrals(detectedReferrals);
       // Load field definitions and crosswalks
       // Seed vault field defs if schema room exists and no defs stored yet
       if (schema && Object.keys(detectedFieldDefs).length === 0) {
@@ -13937,7 +14601,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       const defaultSchemaFields = DOMAIN_CONFIG.vaultFields
         .filter(f => f.category === 'identity' || f.category === 'contact')
         .map(f => ({uri:f.uri, required:f.category==='identity', added_version:1}));
-      const roomId = await svc.createRoom(`[Khora Team] ${newTeamName}`, newTeamDesc || `Team: ${newTeamName}`, [
+      const initEvents = [
         {type:EVT.IDENTITY,state_key:'',content:{account_type:'team',owner:svc.userId,created:Date.now()}},
         {type:EVT.TEAM_META,state_key:'',content:{
           name:newTeamName, description:newTeamDesc||'', created:Date.now(), created_by:svc.userId,
@@ -13954,8 +14618,39 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         {type:EVT.TEAM_SCHEMA_RULE,state_key:'',content:{
           mode:'lead_decides', modified_by:svc.userId, modified_at:Date.now(),
         }},
-      ]);
+      ];
+      // Add service info if publishing is enabled
+      if (newTeamPublishService) {
+        const servicesList = newTeamServices.split(',').map(s=>s.trim()).filter(Boolean);
+        initEvents.push({type:EVT.TEAM_SERVICE_INFO,state_key:'',content:{
+          services_offered:servicesList, hours:newTeamHours, capacity_status:newTeamCapacity,
+          referral_contact:svc.userId, visible_to:'subscribers', updated:Date.now()
+        }});
+        initEvents.push({type:EVT.TEAM_CHANNELS,state_key:'',content:{channels:newTeamChannels}});
+        initEvents.push({type:EVT.TEAM_SUBSCRIBERS,state_key:'',content:{
+          approval_mode:newTeamApprovalMode, subscribers:[]
+        }});
+      }
+      const roomId = await svc.createRoom(`[Khora Team] ${newTeamName}`, newTeamDesc || `Team: ${newTeamName}`, initEvents);
       await emitOp(roomId, 'DES', {entity:'team',field:newTeamName}, {created_by:svc.userId,org:orgMeta.name||null}, orgFrame());
+      // If directory listed and network exists, add to network directory
+      if (newTeamPublishService && newTeamDirectoryListed && networkRoom) {
+        try {
+          const existingDir = await svc.getState(networkRoom, EVT.TEAM_DIRECTORY) || {listings:[]};
+          const servicesList = newTeamServices.split(',').map(s=>s.trim()).filter(Boolean);
+          const listing = {
+            team_room_id:roomId, name:newTeamName, org_name:orgMeta.name||null,
+            services:servicesList, capacity_status:newTeamCapacity, approval_mode:newTeamApprovalMode,
+            listed_at:Date.now(), listed_by:svc.userId
+          };
+          await svc.setState(networkRoom, EVT.TEAM_DIRECTORY, {listings:[...(existingDir.listings||[]), listing], updated:Date.now()});
+          setTeamDirectory(prev=>[...prev, listing]);
+        } catch(e) { console.warn('Failed to list in directory:', e.message); }
+      }
+      const serviceInfo = newTeamPublishService ? {
+        services_offered:newTeamServices.split(',').map(s=>s.trim()).filter(Boolean),
+        hours:newTeamHours, capacity_status:newTeamCapacity
+      } : undefined;
       const newTeam = {
         roomId, name:newTeamName, description:newTeamDesc||'', created:Date.now(),
         created_by:svc.userId, org_id:orgRoom||null, org_name:orgMeta.name||null,
@@ -13963,10 +14658,16 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         owner:svc.userId,
         schema:{version:1, fields:defaultSchemaFields, pending_changes:[], change_log:[]},
         schemaRule:{mode:'lead_decides'},
+        serviceInfo,
+        channels:newTeamPublishService?{channels:newTeamChannels}:undefined,
+        subscribers:newTeamPublishService?{approval_mode:newTeamApprovalMode,subscribers:[]}:undefined,
       };
       setTeams(prev => [...prev, newTeam]);
       setCreateTeamModal(false);
       setNewTeamName(''); setNewTeamDesc('');
+      setNewTeamPublishService(false); setNewTeamServices(''); setNewTeamHours('');
+      setNewTeamCapacity('accepting'); setNewTeamApprovalMode('manual'); setNewTeamDirectoryListed(false);
+      setNewTeamChannels([{id:'service-updates',name:'Service Updates',audience:['subscriber','member']}]);
       showToast(`Team "${newTeamName}" created`,'success');
     } catch(e) { showToast('Failed to create team: '+e.message,'error'); }
   };
@@ -14006,6 +14707,132 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       }
     } catch(e) { showToast('Failed to save sharing preference: '+e.message, 'error'); }
   };
+
+  // ─── Referral creation ───
+  const handleCreateReferral = async () => {
+    if (!referralModal || !referralDest.trim() || !referralReason.trim()) return;
+    try {
+      const caseData = referralModal;
+      const clientUserId = caseData.clientUserId || caseData.meta?.client;
+      // Encrypt consented fields (same pattern as syncFieldsToBridge)
+      const encryptedFields = {};
+      for (const [fk, included] of Object.entries(referralFields)) {
+        if (included && caseData.sharedData?.[fk]) {
+          const keyB64 = await FieldCrypto.generateKey();
+          const enc = await FieldCrypto.encrypt(caseData.sharedData[fk], keyB64);
+          encryptedFields[fk] = {...enc, key: keyB64};
+        }
+      }
+      // Create the referral room
+      const referralRoomId = await svc.createRoom(
+        `[Khora Referral] ${providerProfile.display_name||svc.userId} → ${referralDest.slice(0,20)}`,
+        'Encrypted referral room',
+        [
+          {type:EVT.IDENTITY,state_key:'',content:{account_type:'referral',owner:svc.userId,created:Date.now()}},
+          {type:EVT.REFERRAL_META,state_key:'',content:{
+            source_provider:svc.userId,source_org:orgRoom||null,
+            destination_team:referralDest,
+            individual:clientUserId||null,individual_consent:referralConsent,
+            reason:referralReason,status:'submitted',
+            status_history:[{status:'submitted',by:svc.userId,at:Date.now()}],
+            created:Date.now(),created_by:svc.userId
+          }},
+          {type:EVT.REFERRAL_REFS,state_key:'',content:{
+            fields:encryptedFields,consented_by:referralConsent?clientUserId:svc.userId,consented_at:Date.now()
+          }}
+        ]
+      );
+      // Invite destination team members (try to find referral contact)
+      try {
+        const destServiceInfo = teamServiceInfoMap[referralDest];
+        const destContact = destServiceInfo?.referral_contact;
+        if (destContact) await svc.invite(referralRoomId, destContact);
+        else {
+          // Try inviting the team owner
+          const destMeta = await svc.getState(referralDest, EVT.IDENTITY).catch(()=>null);
+          if (destMeta?.owner) await svc.invite(referralRoomId, destMeta.owner);
+        }
+      } catch(e) { console.warn('Could not invite destination:', e.message); }
+      // Invite individual if they're a platform user
+      if (clientUserId && clientUserId !== svc.userId) {
+        try { await svc.invite(referralRoomId, clientUserId); } catch(e) { console.warn('Could not invite individual:', e.message); }
+      }
+      await emitOp(referralRoomId, 'DES', {entity:'referral',field:'referral'}, {
+        source:svc.userId,destination:referralDest,reason:referralReason,
+        fields_shared:Object.keys(encryptedFields).length,individual:clientUserId
+      }, orgFrame());
+      // Add to local state
+      setReferrals(prev => [...prev, {
+        roomId:referralRoomId, source_provider:svc.userId, source_org:orgRoom,
+        destination_team:referralDest, individual:clientUserId, individual_consent:referralConsent,
+        reason:referralReason, status:'submitted',
+        status_history:[{status:'submitted',by:svc.userId,at:Date.now()}],
+        created:Date.now(), refs:{fields:encryptedFields}
+      }]);
+      setReferralModal(null);
+      showToast('Referral created — encrypted room with consented data','success');
+    } catch(e) { showToast('Referral failed: '+e.message,'error'); }
+  };
+
+  // ─── Team update posting ───
+  const handlePostTeamUpdate = async () => {
+    if (!teamUpdateModal || !teamUpdateBody.trim()) return;
+    try {
+      const team = teamUpdateModal;
+      await svc.sendMessage(team.roomId, teamUpdateBody, {
+        msgtype:EVT.TEAM_UPDATE,
+        channel_id:teamUpdateChannel||'service-updates',
+        title:teamUpdateTitle||'Update',
+        target:(team.channels?.channels||[]).find(c=>c.id===teamUpdateChannel)?.audience||['member'],
+        author_display:providerProfile.display_name||svc.userId,
+        ts:Date.now()
+      });
+      await emitOp(team.roomId, 'INS', {entity:'team_update',field:teamUpdateChannel||'service-updates'}, {
+        title:teamUpdateTitle,channel:teamUpdateChannel
+      }, orgFrame());
+      setTeamUpdateModal(null);
+      setTeamUpdateTitle(''); setTeamUpdateBody(''); setTeamUpdateChannel('');
+      showToast('Update posted to team','success');
+    } catch(e) { showToast('Failed to post update: '+e.message,'error'); }
+  };
+
+  // ─── Load feed items from team rooms + referrals ───
+  const loadFeedItems = async () => {
+    const items = [];
+    // Referral status changes
+    for (const ref of referrals) {
+      for (const sh of (ref.status_history||[])) {
+        items.push({type:'referral', title:`Referral ${sh.status}`, body:ref.reason||'',
+          ts:sh.at, source:`${ref.source_provider?.split(':')[0]?.replace('@','')} → ${ref.destination_team?.slice(0,20)}`,
+          color:sh.status==='completed'?'green':sh.status==='accepted'?'blue':sh.status==='declined'?'red':'gold',
+          icon:'arrow-right-circle', referralId:ref.roomId});
+      }
+    }
+    // Team updates
+    const allTeamRooms = [...teams, ...subscribedTeams];
+    for (const team of allTeamRooms.slice(0, 20)) {
+      try {
+        const msgs = await svc.getMessages(team.roomId, 30);
+        for (const msg of (msgs||[])) {
+          if (msg.content?.msgtype === EVT.TEAM_UPDATE) {
+            items.push({
+              type: msg.content.target?.includes('connected_individual') ? 'service_update' : 'team_update',
+              title: msg.content.title || 'Team Update',
+              body: msg.content.body || '',
+              ts: msg.content.ts || msg.ts,
+              channel: msg.content.channel_id,
+              source: `${team.name||'Team'} — ${msg.content.channel_id||'General'}`,
+              color: 'teal',
+              icon: 'megaphone'
+            });
+          }
+        }
+      } catch(e) { console.warn('Feed load for', team.roomId, e.message); }
+    }
+    items.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    setFeedItems(items);
+  };
+  useEffect(() => { if (!loading) loadFeedItems(); }, [loading, teams.length, subscribedTeams.length, referrals.length]);
 
   const copyToClipboard = async (text, label) => {
     try {
@@ -14919,6 +15746,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           {id:'database',icon:'grid',label:'Database'},
           {id:'inbox',icon:'msg',label:'Messages'},
           {id:'teams',icon:'users',label:`Teams${teams.length?` (${teams.length})`:''}`},
+          {id:'network-map',icon:'map',label:'Network Map'},
+          {id:'feed',icon:'rss',label:`Feed${referrals.length?` (${referrals.length})`:''}`},
+          {id:'referrals',icon:'arrow-right-circle',label:`Referrals${referrals.length?` (${referrals.length})`:''}`},
           {id:'schema',icon:'grid',label:'Schema',badge:schemaNotifCount,badgeClass:'nav-badge-teal'},
           {id:'metrics',icon:'bar',label:'Metrics'},
           {id:'activity',icon:'layers',label:'Activity Stream',badge:activityNotifCount,badgeClass:'nav-badge-teal'}
@@ -15489,10 +16319,62 @@ const ProviderApp = ({session, onLogout, showToast}) => {
                 if(navigator.clipboard) navigator.clipboard.writeText(team.roomId);
                 showToast('Team room ID copied','success');
               }}><I n="share" s={11}/>Share ID</button>
+              {team.owner===svc.userId&&<button onClick={()=>{setTeamUpdateModal(team);setTeamUpdateChannel('');setTeamUpdateTitle('');setTeamUpdateBody('')}}
+                className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
+                <I n="megaphone" s={11}/>Post Update</button>}
+              {team.owner===svc.userId&&<button onClick={()=>{setTeamSettingsModal(team);setTeamSettingsDraft({
+                services:team.serviceInfo?.services_offered?.join(', ')||'',
+                hours:team.serviceInfo?.hours||'',
+                capacity:team.serviceInfo?.capacity_status||'accepting',
+                visible:team.serviceInfo?.visible_to||'network',
+                description:team.serviceInfo?.description||'',
+                approvalMode:team.subscribers?.approval_mode||'manual',
+                directoryListed:!!team.serviceInfo
+              })}} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
+                <I n="settings" s={11}/>Service Settings</button>}
               <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)',marginLeft:'auto',display:'flex',alignItems:'center',gap:3}}>
                 <I n="grid" s={9}/>{team.schema?.fields?.length||0} fields
               </span>
             </div>
+            {/* Subscriber info + management for team leads */}
+            {(()=>{
+              const subs = team.subscribers?.subscribers||[];
+              const pending = subs.filter(s=>s.status==='pending');
+              const approved = subs.filter(s=>s.status==='approved');
+              if (subs.length===0 && team.owner!==svc.userId) return null;
+              return <div style={{padding:'8px 18px 12px',borderTop:'1px solid var(--border-0)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:pending.length>0?8:0}}>
+                  <I n="radio" s={12} c="var(--tx-3)"/>
+                  <span style={{fontSize:10.5,color:'var(--tx-2)'}}>
+                    {approved.length} subscriber{approved.length!==1?'s':''}
+                    {pending.length>0&&<span style={{color:'var(--gold)',fontWeight:600}}> · {pending.length} pending</span>}
+                  </span>
+                </div>
+                {team.owner===svc.userId&&pending.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4}}>
+                  {pending.map((sub,si)=><div key={si} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',background:'var(--gold-dim)',borderRadius:'var(--r)',fontSize:11}}>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--tx-1)'}}>{sub.userId}</span>
+                    <button className="b-pri b-xs" style={{padding:'2px 8px',fontSize:10}} onClick={async()=>{
+                      try{
+                        const existing = await svc.getState(team.roomId, EVT.TEAM_SUBSCRIBERS)||{approval_mode:'manual',subscribers:[]};
+                        const updated = (existing.subscribers||[]).map(s=>s.userId===sub.userId?{...s,status:'approved'}:s);
+                        await svc.setState(team.roomId, EVT.TEAM_SUBSCRIBERS, {...existing,subscribers:updated});
+                        showToast('Subscriber approved','success');
+                        initProvider();
+                      }catch(e){showToast('Failed to approve','error')}
+                    }}>Approve</button>
+                    <button className="b-gho b-xs" style={{padding:'2px 8px',fontSize:10}} onClick={async()=>{
+                      try{
+                        const existing = await svc.getState(team.roomId, EVT.TEAM_SUBSCRIBERS)||{approval_mode:'manual',subscribers:[]};
+                        const updated = (existing.subscribers||[]).filter(s=>s.userId!==sub.userId);
+                        await svc.setState(team.roomId, EVT.TEAM_SUBSCRIBERS, {...existing,subscribers:updated});
+                        showToast('Subscriber removed','success');
+                        initProvider();
+                      }catch(e){showToast('Failed to remove','error')}
+                    }}>Decline</button>
+                  </div>)}
+                </div>}
+              </div>;
+            })()}
           </div>)}
         </div>}
         <div style={{background:'var(--purple-dim,var(--blue-dim))',border:'1px solid rgba(128,90,213,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
@@ -15501,6 +16383,201 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             <strong>Teams are flexible.</strong> They can include anyone — staff from your org, people from other orgs, or unaffiliated individuals. Teams are now governed by their own schema — click a team to view and manage its data definitions.
           </span>
         </div>
+      </div>}
+
+      {/* NETWORK MAP VIEW */}
+      {view==='network-map'&&!activeCase&&<NetworkMapView
+        teams={teams} subscribedTeams={subscribedTeams} cases={cases}
+        svc={svc} filters={networkMapFilters} setFilters={setNetworkMapFilters}
+        mode={networkMapMode} setMode={setNetworkMapMode}
+        role="provider" T={T||{provider_term:'Team Member',provider_term_plural:'Team Members',client_term:'Individual',client_term_plural:'Individuals'}}
+        onNavigate={(v)=>{setView(v);setActiveCase(null)}}
+      />}
+
+      {/* FEED VIEW */}
+      {view==='feed'&&!activeCase&&<FeedView
+        feedItems={feedItems} feedFilter={feedFilter} setFeedFilter={setFeedFilter}
+        referrals={referrals} subscribedTeams={subscribedTeams} teams={teams}
+        role="provider" T={T||{provider_term:'Team Member',provider_term_plural:'Team Members',client_term:'Individual',client_term_plural:'Individuals'}}
+        onViewReferral={(rid)=>{setActiveReferral(rid);setView('referral-detail')}}
+        onNavigate={(v)=>{setView(v);setActiveCase(null)}}
+      />}
+
+      {/* REFERRALS VIEW — provider's sent and received referrals */}
+      {view==='referrals'&&!activeCase&&<div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20}}>
+          <div>
+            <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Referrals</h2>
+            <p style={{color:'var(--tx-1)',fontSize:12.5,marginTop:4}}>Privacy-controlled handoffs. Each referral uses its own encrypted room with client-consented data.</p>
+          </div>
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:20}}>
+          {[{l:'Sent',v:referrals.filter(r=>r.source_provider===svc.userId).length,c:'blue',i:'send'},
+            {l:'Received',v:referrals.filter(r=>r.destination_assigned===svc.userId||r.source_provider!==svc.userId).length,c:'teal',i:'inbox'},
+            {l:'Active',v:referrals.filter(r=>r.status==='submitted'||r.status==='accepted'||r.status==='in_progress').length,c:'gold',i:'clock'},
+            {l:'Completed',v:referrals.filter(r=>r.status==='completed').length,c:'green',i:'check'},
+          ].map((s,i)=><div key={i} className="card" style={{padding:14}}><span className="section-label">{s.l.toUpperCase()}</span>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:2}}>
+              <span style={{fontSize:18,fontWeight:700}}>{s.v}</span>
+              <span style={{color:`var(--${s.c})`,opacity:.5}}><I n={s.i} s={15}/></span></div></div>)}
+        </div>
+
+        {referrals.length===0
+          ?<div className="card" style={{textAlign:'center',padding:'40px 20px',borderStyle:'dashed'}}>
+            <I n="arrow-right-circle" s={32}/>
+            <p style={{color:'var(--tx-2)',marginTop:10,fontSize:13}}>No referrals yet</p>
+            <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:4}}>Use the "Refer" button on a case to create a privacy-controlled referral to another team.</p>
+          </div>
+          :<div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {referrals.map(ref=>{
+              const isSent = ref.source_provider === svc.userId;
+              return <div key={ref.roomId} className="card" style={{padding:'14px 18px'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:28,height:28,borderRadius:'50%',background:isSent?'var(--blue-dim)':'var(--teal-dim)',
+                      display:'flex',alignItems:'center',justifyContent:'center',color:isSent?'var(--blue)':'var(--teal)'}}>
+                      <I n={isSent?'send':'inbox'} s={14}/>
+                    </div>
+                    <div>
+                      <span style={{fontSize:14,fontWeight:600}}>{ref.reason||'Referral'}</span>
+                      <span className={`tag ${isSent?'tag-blue':'tag-teal'}`} style={{fontSize:8,marginLeft:8}}>
+                        {isSent?'SENT':'RECEIVED'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`tag ${
+                    ref.status==='completed'?'tag-green':ref.status==='accepted'||ref.status==='in_progress'?'tag-blue':
+                    ref.status==='declined'||ref.status==='withdrawn'?'tag-red':'tag-gold'
+                  }`}>{ref.status?.toUpperCase()}</span>
+                </div>
+                <div style={{display:'flex',gap:16,fontSize:11,color:'var(--tx-2)',marginBottom:6}}>
+                  {isSent && <span>To: {ref.destination_team?.slice(0,20)||'Unknown'}</span>}
+                  {!isSent && <span>From: {ref.source_provider?.split(':')[0]?.replace('@','')}</span>}
+                  <span>{T?.client_term||'Individual'}: {ref.individual?.split(':')[0]?.replace('@','')||'N/A'}</span>
+                  <span style={{fontFamily:'var(--mono)',fontSize:9.5}}>{ref.created?new Date(ref.created).toLocaleDateString():''}</span>
+                </div>
+                {ref.outcome && <div style={{padding:'6px 10px',background:'var(--green-dim)',borderRadius:'var(--r)',marginBottom:6}}>
+                  <span style={{fontSize:11,fontWeight:600,color:'var(--green)'}}>Outcome: {ref.outcome.outcome}</span>
+                  {ref.outcome.services_provided?.length>0&&<span style={{fontSize:10,color:'var(--tx-2)',marginLeft:8}}>
+                    Services: {ref.outcome.services_provided.join(', ')}
+                  </span>}
+                </div>}
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={()=>{setActiveReferral(ref);setView('referral-detail')}} className="b-gho b-sm" style={{display:'flex',alignItems:'center',gap:4}}>
+                    <I n="eye" s={11}/>View Details
+                  </button>
+                  {/* Accept/decline for received referrals */}
+                  {!isSent && ref.status==='submitted' && <>
+                    <button onClick={async()=>{
+                      try {
+                        const meta = await svc.getState(ref.roomId, EVT.REFERRAL_META);
+                        await svc.setState(ref.roomId, EVT.REFERRAL_META, {...meta, status:'accepted', destination_assigned:svc.userId,
+                          status_history:[...(meta.status_history||[]),{status:'accepted',by:svc.userId,at:Date.now()}]});
+                        setReferrals(prev=>prev.map(r=>r.roomId===ref.roomId?{...r,status:'accepted',destination_assigned:svc.userId}:r));
+                        showToast('Referral accepted','success');
+                      } catch(e) { showToast('Failed: '+e.message,'error'); }
+                    }} className="b-grn b-sm" style={{display:'flex',alignItems:'center',gap:4}}>
+                      <I n="check" s={11}/>Accept
+                    </button>
+                    <button onClick={async()=>{
+                      try {
+                        const meta = await svc.getState(ref.roomId, EVT.REFERRAL_META);
+                        await svc.setState(ref.roomId, EVT.REFERRAL_META, {...meta, status:'declined',
+                          status_history:[...(meta.status_history||[]),{status:'declined',by:svc.userId,at:Date.now()}]});
+                        setReferrals(prev=>prev.map(r=>r.roomId===ref.roomId?{...r,status:'declined'}:r));
+                        showToast('Referral declined','warn');
+                      } catch(e) { showToast('Failed: '+e.message,'error'); }
+                    }} className="b-red b-sm" style={{display:'flex',alignItems:'center',gap:4}}>
+                      <I n="x" s={11}/>Decline
+                    </button>
+                  </>}
+                  {/* Record outcome for accepted referrals */}
+                  {!isSent && (ref.status==='accepted'||ref.status==='in_progress') && !ref.outcome &&
+                    <button onClick={async()=>{
+                      const outcome = prompt('Outcome (completed/partial/unable/no_show):');
+                      if (!outcome) return;
+                      const notes = prompt('Notes (optional):') || '';
+                      try {
+                        await svc.setState(ref.roomId, EVT.REFERRAL_OUTCOME, {
+                          outcome, notes, services_provided:[], completed_at:Date.now(), reported_by:svc.userId
+                        });
+                        const meta = await svc.getState(ref.roomId, EVT.REFERRAL_META);
+                        await svc.setState(ref.roomId, EVT.REFERRAL_META, {...meta, status:'completed',
+                          status_history:[...(meta.status_history||[]),{status:'completed',by:svc.userId,at:Date.now()}]});
+                        setReferrals(prev=>prev.map(r=>r.roomId===ref.roomId?{...r,status:'completed',outcome:{outcome,notes,completed_at:Date.now()}}:r));
+                        showToast('Outcome recorded','success');
+                      } catch(e) { showToast('Failed: '+e.message,'error'); }
+                    }} className="b-pri b-sm" style={{display:'flex',alignItems:'center',gap:4}}>
+                      <I n="check" s={11}/>Record Outcome
+                    </button>}
+                </div>
+              </div>;
+            })}
+          </div>}
+      </div>}
+
+      {/* REFERRAL DETAIL VIEW */}
+      {view==='referral-detail'&&activeReferral&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
+        <button onClick={()=>{setView('referrals');setActiveReferral(null)}} className="b-gho b-sm" style={{marginBottom:14,display:'flex',alignItems:'center',gap:4}}>
+          <I n="back" s={13}/>All Referrals
+        </button>
+        <div style={{marginBottom:20}}>
+          <h2 style={{fontFamily:'var(--serif)',fontSize:20,fontWeight:700}}>{activeReferral.reason||'Referral'}</h2>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:6,flexWrap:'wrap'}}>
+            <span className="tag tag-blue"><I n="lock" s={9}/>Encrypted Referral Room</span>
+            <span className={`tag ${
+              activeReferral.status==='completed'?'tag-green':activeReferral.status==='accepted'||activeReferral.status==='in_progress'?'tag-blue':
+              activeReferral.status==='declined'||activeReferral.status==='withdrawn'?'tag-red':'tag-gold'
+            }`}>{activeReferral.status?.toUpperCase()}</span>
+          </div>
+        </div>
+        <div className="card" style={{marginBottom:16}}>
+          <span className="section-label">REFERRAL DETAILS</span>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 20px',marginTop:8}}>
+            {[['Source',activeReferral.source_provider?.split(':')[0]?.replace('@','')],
+              ['Destination',activeReferral.destination_team?.slice(0,24)],
+              [T?.client_term||'Individual',activeReferral.individual?.split(':')[0]?.replace('@','')],
+              ['Status',activeReferral.status],
+              ['Created',activeReferral.created?new Date(activeReferral.created).toLocaleString():''],
+              ['Assigned To',activeReferral.destination_assigned?.split(':')[0]?.replace('@','')||'Unassigned'],
+            ].map(([label,val])=><div key={label}>
+              <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{label.toUpperCase()}</span>
+              <span style={{fontSize:12.5,fontWeight:500,display:'block',marginTop:2}}>{val||'—'}</span>
+            </div>)}
+          </div>
+        </div>
+        {activeReferral.refs?.fields && Object.keys(activeReferral.refs.fields).length>0 && <div className="card" style={{marginBottom:16}}>
+          <span className="section-label">CONSENTED FIELDS</span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
+            {Object.keys(activeReferral.refs.fields).map(k=><span key={k} className="tag tag-teal">{k}</span>)}
+          </div>
+          <p style={{fontSize:10,color:'var(--tx-3)',marginTop:8}}>Each field encrypted with unique AES-256-GCM key. {T?.client_term||'Individual'} can revoke access at any time.</p>
+        </div>}
+        {/* Status history */}
+        <div className="card" style={{marginBottom:16}}>
+          <span className="section-label">STATUS HISTORY</span>
+          <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:8}}>
+            {(activeReferral.status_history||[]).map((sh,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 0',borderBottom:'1px solid var(--border-0)'}}>
+              <div style={{width:8,height:8,borderRadius:'50%',background:`var(--${
+                sh.status==='completed'?'green':sh.status==='accepted'||sh.status==='in_progress'?'blue':
+                sh.status==='declined'||sh.status==='withdrawn'?'red':'gold'
+              })`}}/>
+              <span style={{fontSize:12,fontWeight:500}}>{sh.status}</span>
+              <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)',marginLeft:'auto'}}>{sh.at?new Date(sh.at).toLocaleString():''}</span>
+            </div>)}
+          </div>
+        </div>
+        {activeReferral.outcome && <div className="card" style={{background:'var(--green-dim)',border:'1px solid rgba(61,214,140,.15)'}}>
+          <span className="section-label" style={{color:'var(--green)'}}>OUTCOME</span>
+          <div style={{marginTop:8}}>
+            <span style={{fontSize:14,fontWeight:600,color:'var(--green)',display:'block'}}>{activeReferral.outcome.outcome}</span>
+            {activeReferral.outcome.services_provided?.length>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
+              {activeReferral.outcome.services_provided.map(s=><span key={s} className="tag tag-green" style={{fontSize:8}}>{s}</span>)}
+            </div>}
+            {activeReferral.outcome.notes&&<p style={{fontSize:12,color:'var(--tx-1)',marginTop:6,lineHeight:1.5}}>{activeReferral.outcome.notes}</p>}
+          </div>
+        </div>}
       </div>}
 
       {/* TEAM DETAIL VIEW */}
@@ -15552,6 +16629,13 @@ const ProviderApp = ({session, onLogout, showToast}) => {
               <button onClick={()=>{setTransferModal(activeCaseData);setTransferTarget('')}} className="b-gho b-sm" style={{display:'flex',alignItems:'center',gap:5}}>
                 <I n="users" s={12}/>Transfer
               </button>}
+            <button onClick={()=>{
+              setReferralModal(activeCaseData);
+              setReferralDest('');setReferralReason('');setReferralConsent(false);
+              setReferralFields({});
+            }} className="b-gho b-sm" style={{display:'flex',alignItems:'center',gap:5}}>
+              <I n="arrow-right-circle" s={12}/>Refer
+            </button>
           </div>
           {/* Assignment info */}
           {(()=>{
@@ -16307,6 +17391,77 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             <button className="b-red b-sm" style={{marginLeft:'auto'}}>Leave Network</button>
           </div>}
 
+          {/* ═══ Service Directory — discoverable teams in this network ═══ */}
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <I n="radio" s={16} c="var(--teal)"/>
+                <span style={{fontSize:15,fontWeight:700}}>Service Directory</span>
+                <span className="tag tag-teal" style={{fontSize:9}}>{teamDirectory.length}</span>
+              </div>
+            </div>
+            <p style={{fontSize:11,color:'var(--tx-2)',marginBottom:12}}>Teams that have opted into the network directory. Subscribe to receive operational updates like service changes and capacity.</p>
+            {teamDirectory.length===0
+              ?<div style={{textAlign:'center',padding:'20px',border:'1px dashed var(--border-1)',borderRadius:'var(--r)'}}>
+                <I n="radio" s={24} c="var(--tx-3)"/>
+                <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:8}}>No teams listed in the directory yet. Team leads can opt in when creating or editing teams.</p>
+              </div>
+              :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:10}}>
+                {teamDirectory.map((listing,i)=>{
+                  const isAlreadySubscribed = subscribedTeams.some(t=>t.roomId===listing.team_room_id);
+                  const isOwnTeam = teams.some(t=>t.roomId===listing.team_room_id);
+                  return <div key={i} className="card" style={{padding:0,overflow:'hidden'}}>
+                    <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border-0)'}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                        <span style={{fontSize:13,fontWeight:600}}>{listing.name}</span>
+                        <span className={`tag ${
+                          listing.capacity_status==='accepting'?'tag-green':listing.capacity_status==='waitlist'?'tag-gold':'tag-red'
+                        }`} style={{fontSize:8}}>{(listing.capacity_status||'unknown').toUpperCase()}</span>
+                      </div>
+                      {listing.org_name&&<span className="tag tag-blue" style={{fontSize:8}}>{listing.org_name}</span>}
+                    </div>
+                    {listing.services?.length>0&&<div style={{padding:'8px 16px',borderBottom:'1px solid var(--border-0)'}}>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                        {listing.services.map(s=><span key={s} className="tag tag-teal" style={{fontSize:8}}>{s}</span>)}
+                      </div>
+                    </div>}
+                    <div style={{padding:'10px 16px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                      <span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
+                        {listing.approval_mode==='auto'?'Auto-approve':'Requires approval'}
+                      </span>
+                      {isOwnTeam
+                        ?<span className="tag tag-gold" style={{fontSize:8}}>YOUR TEAM</span>
+                        :isAlreadySubscribed
+                          ?<span className="tag tag-green" style={{fontSize:8}}>SUBSCRIBED</span>
+                          :<button onClick={async()=>{
+                            try {
+                              // Join the team room to receive updates
+                              await svc.joinRoom(listing.team_room_id);
+                              // Add self to subscribers list
+                              const existingSubs = await svc.getState(listing.team_room_id, EVT.TEAM_SUBSCRIBERS) || {approval_mode:'manual',subscribers:[]};
+                              const status = existingSubs.approval_mode==='auto'?'approved':'pending';
+                              const updatedSubs = [...(existingSubs.subscribers||[]),
+                                {userId:svc.userId,status,subscribed_channels:['service-updates'],subscribed_at:Date.now()}
+                              ];
+                              await svc.setState(listing.team_room_id, EVT.TEAM_SUBSCRIBERS, {...existingSubs,subscribers:updatedSubs});
+                              if (status==='approved') {
+                                const teamMeta = await svc.getState(listing.team_room_id, EVT.TEAM_META) || {};
+                                const serviceInfo = await svc.getState(listing.team_room_id, EVT.TEAM_SERVICE_INFO);
+                                setSubscribedTeams(prev=>[...prev,{roomId:listing.team_room_id,...teamMeta,serviceInfo,connectionType:'subscriber'}]);
+                                showToast(`Subscribed to ${listing.name}`,'success');
+                              } else {
+                                showToast(`Subscription request sent to ${listing.name} — awaiting approval`,'info');
+                              }
+                            } catch(e) { showToast('Subscribe failed: '+e.message,'error'); }
+                          }} className="b-gho b-sm" style={{display:'flex',alignItems:'center',gap:4}}>
+                            <I n="radio" s={11}/>Subscribe
+                          </button>}
+                    </div>
+                  </div>;
+                })}
+              </div>}
+          </div>
+
           <div style={{background:'var(--green-dim)',border:'1px solid rgba(61,214,140,.15)',borderRadius:'var(--r)',padding:'12px 16px',fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6,marginTop:16}}>
             <strong style={{color:'var(--green)'}}>Polycentric governance:</strong> Shared prompts propagate Network → Org → Provider → Client. Observations vary locally; interpretations feeding into shared metrics use network-level definitions for consistency.
           </div>
@@ -16970,6 +18125,75 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       {orgRoom&&<div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:16,fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
         <strong style={{color:'var(--blue)'}}>Org affiliation:</strong> This team will be tagged with your org "{orgMeta.name||'Organization'}" but is not restricted to org members.
       </div>}
+
+      {/* ─── Operational Subscription Config (default OFF — privacy first) ─── */}
+      <div style={{border:'1px solid var(--border-1)',borderRadius:'var(--r-lg)',padding:'14px 16px',marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:newTeamPublishService?12:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <I n="radio" s={14} c={newTeamPublishService?'var(--teal)':'var(--tx-3)'}/>
+            <div>
+              <span style={{fontSize:12.5,fontWeight:600}}>Publish service information</span>
+              <span style={{fontSize:10,color:'var(--tx-3)',display:'block'}}>Allow others to discover and subscribe to this team</span>
+            </div>
+          </div>
+          <Toggle on={newTeamPublishService} onChange={()=>setNewTeamPublishService(!newTeamPublishService)}/>
+        </div>
+        {newTeamPublishService&&<div style={{borderTop:'1px solid var(--border-0)',paddingTop:12}}>
+          <div style={{marginBottom:10}}>
+            <span className="section-label">SERVICES OFFERED (COMMA-SEPARATED)</span>
+            <input value={newTeamServices} onChange={e=>setNewTeamServices(e.target.value)} placeholder="e.g. housing, mental health, legal aid"/>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            <div>
+              <span className="section-label">HOURS</span>
+              <input value={newTeamHours} onChange={e=>setNewTeamHours(e.target.value)} placeholder="e.g. Mon-Fri 9am-5pm"/>
+            </div>
+            <div>
+              <span className="section-label">CAPACITY</span>
+              <select value={newTeamCapacity} onChange={e=>setNewTeamCapacity(e.target.value)}>
+                <option value="accepting">Accepting</option>
+                <option value="waitlist">Waitlist</option>
+                <option value="full">Full</option>
+              </select>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            <div>
+              <span className="section-label">SUBSCRIBER APPROVAL</span>
+              <select value={newTeamApprovalMode} onChange={e=>setNewTeamApprovalMode(e.target.value)}>
+                <option value="manual">Require approval (recommended)</option>
+                <option value="auto">Auto-approve</option>
+              </select>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8,paddingTop:18}}>
+              <Toggle on={newTeamDirectoryListed} onChange={()=>setNewTeamDirectoryListed(!newTeamDirectoryListed)}/>
+              <span style={{fontSize:11.5}}>List in network directory</span>
+            </div>
+          </div>
+          {/* Channels */}
+          <div style={{marginBottom:6}}>
+            <span className="section-label">CHANNELS</span>
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              {newTeamChannels.map((ch,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'var(--bg-3)',borderRadius:'var(--r)'}}>
+                <I n="rss" s={11} c="var(--teal)"/>
+                <span style={{fontSize:11,fontWeight:500,flex:1}}>{ch.name}</span>
+                <span style={{fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>{ch.audience.join(', ')}</span>
+                {newTeamChannels.length>1&&<button onClick={()=>setNewTeamChannels(prev=>prev.filter((_,j)=>j!==i))}
+                  style={{background:'none',border:'none',color:'var(--red)',cursor:'pointer',padding:2}}><I n="x" s={10}/></button>}
+              </div>)}
+            </div>
+            <button onClick={()=>{
+              const name = prompt('Channel name:');
+              if (!name) return;
+              const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+              setNewTeamChannels(prev=>[...prev,{id,name,audience:['subscriber','member']}]);
+            }} className="b-gho b-xs" style={{marginTop:6,display:'flex',alignItems:'center',gap:4}}>
+              <I n="plus" s={10}/>Add Channel
+            </button>
+          </div>
+        </div>}
+      </div>
+
       <button onClick={handleCreateTeam} className="b-pri" disabled={!newTeamName.trim()} style={{width:'100%',padding:12,fontSize:14}}>
         <I n="users" s={16}/> Create Team
       </button>
@@ -17359,6 +18583,184 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             <I n="users" s={16}/> Transfer Case
           </button>
         </>}
+      </>}
+    </Modal>
+
+    {/* REFERRAL CREATION MODAL */}
+    <Modal open={!!referralModal} onClose={()=>setReferralModal(null)} title="Create Referral" w={580}>
+      {referralModal&&<>
+        <div style={{background:'var(--blue-dim)',border:'1px solid rgba(91,156,245,.15)',borderRadius:'var(--r)',padding:'12px 16px',marginBottom:16,display:'flex',gap:10,alignItems:'flex-start'}}>
+          <I n="shield" s={16} c="var(--blue)"/>
+          <span style={{fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
+            <strong style={{color:'var(--blue)'}}>Privacy-controlled referral.</strong> Each referral uses its own encrypted room. Only consented fields are shared. The {T?.client_term?.toLowerCase()||'individual'} can withdraw at any time.
+          </span>
+        </div>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">REFERRING</span>
+          <div style={{padding:'8px 12px',background:'var(--bg-3)',borderRadius:'var(--r)',display:'flex',alignItems:'center',gap:8}}>
+            <I n="shield" s={14} c="var(--gold)"/>
+            <span style={{fontSize:12.5,fontWeight:500}}>{referralModal.sharedData?.full_name||referralModal.clientUserId||'Unknown'}</span>
+          </div>
+        </div>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">DESTINATION TEAM (ROOM ID) *</span>
+          {teamDirectory.length>0?<>
+            <select value={referralDest} onChange={e=>setReferralDest(e.target.value)} style={{marginBottom:6}}>
+              <option value="">Select from directory...</option>
+              {teamDirectory.map((d,i)=><option key={i} value={d.team_room_id}>{d.name}{d.org_name?` (${d.org_name})`:''}{d.capacity_status?` — ${d.capacity_status}`:''}</option>)}
+            </select>
+            <input value={referralDest} onChange={e=>setReferralDest(e.target.value)} placeholder="Or paste team room ID" style={{fontSize:11}}/>
+          </>:<input value={referralDest} onChange={e=>setReferralDest(e.target.value)} placeholder="!team_room_id:server.org"/>}
+        </div>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">REASON *</span>
+          <textarea value={referralReason} onChange={e=>setReferralReason(e.target.value)}
+            placeholder="Why is this referral needed?" style={{minHeight:60}}/>
+        </div>
+        {/* Field-level consent (same pattern as bridge field sharing) */}
+        <div style={{marginBottom:12}}>
+          <span className="section-label">CONSENTED FIELDS — {T?.client_term?.toUpperCase()||'INDIVIDUAL'} DATA TO SHARE</span>
+          <p style={{fontSize:10.5,color:'var(--tx-3)',marginBottom:8}}>Only share what is necessary. Each field is encrypted with a unique key.</p>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:0}}>
+            {Object.entries(referralModal.sharedData||{}).map(([k,v])=>
+              <div key={k} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid var(--border-0)',marginRight:12}}>
+                <span style={{fontSize:11.5,color:v?'var(--tx-0)':'var(--tx-3)'}}>{k.replace(/^custom_/,'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}</span>
+                <Toggle on={!!referralFields[k]} onChange={()=>setReferralFields(prev=>({...prev,[k]:!prev[k]}))} disabled={!v}/>
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Consent attestation */}
+        <div style={{marginBottom:16,display:'flex',alignItems:'flex-start',gap:10,padding:'10px 14px',background:'var(--gold-dim)',borderRadius:'var(--r)',border:'1px solid rgba(218,165,32,.15)'}}>
+          <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${referralConsent?'var(--green)':'var(--border-2)'}`,
+            background:referralConsent?'var(--green)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,marginTop:2}}
+            onClick={()=>setReferralConsent(!referralConsent)}>
+            {referralConsent&&<I n="check" s={11} c="var(--bg-0)"/>}
+          </div>
+          <span style={{fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6}}>
+            I have informed consent from this {T?.client_term?.toLowerCase()||'individual'} to share the selected data for this referral.
+          </span>
+        </div>
+        <button onClick={handleCreateReferral} className="b-pri"
+          disabled={!referralDest.trim()||!referralReason.trim()||!referralConsent||Object.values(referralFields).filter(Boolean).length===0}
+          style={{width:'100%',padding:12,fontSize:14}}>
+          <I n="arrow-right-circle" s={16}/> Create Encrypted Referral
+        </button>
+      </>}
+    </Modal>
+
+    {/* TEAM UPDATE MODAL */}
+    <Modal open={!!teamUpdateModal} onClose={()=>setTeamUpdateModal(null)} title={`Post Update — ${teamUpdateModal?.name||''}`} w={520}>
+      {teamUpdateModal&&<>
+        <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:16,lineHeight:1.6}}>
+          Post an operational update to this team. Updates reach audiences based on the selected channel.
+        </p>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">CHANNEL</span>
+          <select value={teamUpdateChannel} onChange={e=>setTeamUpdateChannel(e.target.value)}>
+            <option value="">Select channel...</option>
+            {(teamUpdateModal.channels?.channels||[{id:'service-updates',name:'Service Updates'}]).map(ch=>
+              <option key={ch.id} value={ch.id}>{ch.name} ({(ch.audience||['member']).join(', ')})</option>)}
+          </select>
+        </div>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">TITLE (OPTIONAL)</span>
+          <input value={teamUpdateTitle} onChange={e=>setTeamUpdateTitle(e.target.value)} placeholder="Brief title for this update"/>
+        </div>
+        <div style={{marginBottom:16}}>
+          <span className="section-label">UPDATE *</span>
+          <textarea value={teamUpdateBody} onChange={e=>setTeamUpdateBody(e.target.value)}
+            placeholder="What do you want to communicate?" style={{minHeight:80}}/>
+        </div>
+        <button onClick={handlePostTeamUpdate} className="b-pri"
+          disabled={!teamUpdateBody.trim()}
+          style={{width:'100%',padding:12,fontSize:14}}>
+          <I n="megaphone" s={16}/> Post Update
+        </button>
+      </>}
+    </Modal>
+
+    {/* TEAM SERVICE SETTINGS MODAL */}
+    <Modal open={!!teamSettingsModal} onClose={()=>setTeamSettingsModal(null)} title={`Service Settings — ${teamSettingsModal?.name||''}`} w={560}>
+      {teamSettingsModal&&<>
+        <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:16,lineHeight:1.6}}>
+          Configure what information this team publishes. Default is private — only enable what you need.
+        </p>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">SERVICES OFFERED</span>
+          <input value={teamSettingsDraft.services||''} onChange={e=>setTeamSettingsDraft(d=>({...d,services:e.target.value}))}
+            placeholder="e.g. housing assistance, mental health (comma-separated)"/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">HOURS</span>
+          <input value={teamSettingsDraft.hours||''} onChange={e=>setTeamSettingsDraft(d=>({...d,hours:e.target.value}))}
+            placeholder="e.g. Mon-Fri 9am-5pm"/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">CAPACITY STATUS</span>
+          <select value={teamSettingsDraft.capacity||'accepting'} onChange={e=>setTeamSettingsDraft(d=>({...d,capacity:e.target.value}))}>
+            <option value="accepting">Accepting</option>
+            <option value="waitlist">Waitlist</option>
+            <option value="full">Full</option>
+          </select>
+        </div>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">DESCRIPTION</span>
+          <textarea value={teamSettingsDraft.description||''} onChange={e=>setTeamSettingsDraft(d=>({...d,description:e.target.value}))}
+            placeholder="Brief description of this team's services" style={{minHeight:60}}/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <span className="section-label">SUBSCRIBER APPROVAL</span>
+          <select value={teamSettingsDraft.approvalMode||'manual'} onChange={e=>setTeamSettingsDraft(d=>({...d,approvalMode:e.target.value}))}>
+            <option value="manual">Require approval (recommended)</option>
+            <option value="auto">Auto-approve</option>
+          </select>
+        </div>
+        <div style={{marginBottom:16,display:'flex',alignItems:'center',gap:10}}>
+          <Toggle on={!!teamSettingsDraft.directoryListed} onChange={()=>setTeamSettingsDraft(d=>({...d,directoryListed:!d.directoryListed}))}/>
+          <span style={{fontSize:12,color:'var(--tx-1)'}}>List in network service directory</span>
+        </div>
+        <button className="b-pri" style={{width:'100%',padding:12,fontSize:14}} onClick={async()=>{
+          try{
+            const serviceData = {
+              services_offered:(teamSettingsDraft.services||'').split(',').map(s=>s.trim()).filter(Boolean),
+              hours:teamSettingsDraft.hours||'',
+              capacity_status:teamSettingsDraft.capacity||'accepting',
+              description:teamSettingsDraft.description||'',
+              visible_to:teamSettingsDraft.visible||'network',
+              updated:Date.now()
+            };
+            await svc.setState(teamSettingsModal.roomId, EVT.TEAM_SERVICE_INFO, serviceData);
+            // Update subscriber approval mode
+            const existingSubs = await svc.getState(teamSettingsModal.roomId, EVT.TEAM_SUBSCRIBERS)||{approval_mode:'manual',subscribers:[]};
+            await svc.setState(teamSettingsModal.roomId, EVT.TEAM_SUBSCRIBERS, {...existingSubs, approval_mode:teamSettingsDraft.approvalMode||'manual'});
+            // Handle directory listing
+            if (teamSettingsDraft.directoryListed && networkRoom) {
+              const existingDir = await svc.getState(networkRoom, EVT.TEAM_DIRECTORY)||{listings:[]};
+              const filtered = (existingDir.listings||[]).filter(l=>l.team_room_id!==teamSettingsModal.roomId);
+              filtered.push({
+                team_room_id:teamSettingsModal.roomId,
+                name:teamSettingsModal.name,
+                org_name:teamSettingsModal.org_name||'',
+                services:serviceData.services_offered,
+                capacity_status:serviceData.capacity_status,
+                approval_mode:teamSettingsDraft.approvalMode||'manual',
+                listed_at:Date.now(),
+                listed_by:svc.userId
+              });
+              await svc.setState(networkRoom, EVT.TEAM_DIRECTORY, {listings:filtered, updated:Date.now()});
+            } else if (!teamSettingsDraft.directoryListed && networkRoom) {
+              const existingDir = await svc.getState(networkRoom, EVT.TEAM_DIRECTORY)||{listings:[]};
+              const filtered = (existingDir.listings||[]).filter(l=>l.team_room_id!==teamSettingsModal.roomId);
+              await svc.setState(networkRoom, EVT.TEAM_DIRECTORY, {listings:filtered, updated:Date.now()});
+            }
+            showToast('Service settings updated','success');
+            setTeamSettingsModal(null);
+            initProvider();
+          }catch(e){showToast('Failed to update settings: '+e.message,'error')}
+        }}>
+          <I n="check" s={16}/> Save Settings
+        </button>
       </>}
     </Modal>
   </div>;
