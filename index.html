@@ -676,9 +676,9 @@ const ThemeToggle = ({style:sx}) => {
 
 /* ═══════════════════ PER-FIELD CRYPTO (AES-256-GCM) ═══════════════════
  * Operator Manifest:
- *   INS(aes_key, crypto.subtle, field_encryption)
- *   ALT(plaintext → ciphertext, aes_gcm_key, field_confidentiality)
- *   ALT(ciphertext → plaintext, aes_gcm_key, field_confidentiality)
+ *   INS(crypto.aes_key, {via: crypto.subtle}) — field_encryption
+ *   ALT(crypto.plaintext, {transform: ciphertext, key: aes_gcm}) — field_confidentiality
+ *   ALT(crypto.ciphertext, {transform: plaintext, key: aes_gcm}) — field_confidentiality
  *
  * Triad Summary:
  *   Existence:       INS (key creation)
@@ -687,13 +687,13 @@ const ThemeToggle = ({style:sx}) => {
  *   No REC — frame is stable. Encryption changes representation, not meaning.
  * ═══════════════════════════════════════════════════════════════════════ */
 const FieldCrypto = {
-  // INS(aes_key, crypto.subtle, field_encryption) — create new 256-bit symmetric key
+  // INS(crypto.aes_key, {via: crypto.subtle}) — field_encryption — create new 256-bit symmetric key
   async generateKey() {
     const key = await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt','decrypt']);
     const raw = await crypto.subtle.exportKey('raw', key);
     return btoa(String.fromCharCode(...new Uint8Array(raw)));
   },
-  // ALT(plaintext → ciphertext, aes_gcm_key, field_confidentiality)
+  // ALT(crypto.plaintext, {transform: ciphertext, key: aes_gcm}) — field_confidentiality
   async encrypt(plaintext, keyB64) {
     const keyBuf = Uint8Array.from(atob(keyB64), c => c.charCodeAt(0));
     const key = await crypto.subtle.importKey('raw', keyBuf, 'AES-GCM', false, ['encrypt']);
@@ -701,7 +701,7 @@ const FieldCrypto = {
     const enc = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(plaintext));
     return { ciphertext: btoa(String.fromCharCode(...new Uint8Array(enc))), iv: btoa(String.fromCharCode(...iv)) };
   },
-  // ALT(ciphertext → plaintext, aes_gcm_key, field_confidentiality)
+  // ALT(crypto.ciphertext, {transform: plaintext, key: aes_gcm}) — field_confidentiality
   async decrypt(cipherB64, ivB64, keyB64) {
     try {
       const keyBuf = Uint8Array.from(atob(keyB64), c => c.charCodeAt(0));
@@ -716,10 +716,10 @@ const FieldCrypto = {
 
 /* ═══════════════════ LOCAL VAULT CRYPTO (IndexedDB at-rest encryption) ═══════════════════
  * Operator Manifest:
- *   INS(vault_key, hkdf(token+userId+deviceId), at_rest_encryption)
- *   ALT(plaintext → ciphertext, vault_key, local_persistence)
- *   ALT(ciphertext → plaintext, vault_key, local_retrieval)
- *   NUL(vault_key, logout|tab_close, key_destruction)
+ *   INS(crypto.vault_key, {via: hkdf, inputs: token+userId+deviceId}) — at_rest_encryption
+ *   ALT(crypto.plaintext, {transform: ciphertext, key: vault_key}) — local_persistence
+ *   ALT(crypto.ciphertext, {transform: plaintext, key: vault_key}) — local_retrieval
+ *   NUL(crypto.vault_key, {reason: logout|tab_close}) — key_destruction
  *
  * Triad Summary:
  *   Existence:       INS (derive key), NUL (destroy key on logout)
@@ -734,7 +734,7 @@ const FieldCrypto = {
  * ═══════════════════════════════════════════════════════════════════════ */
 const LocalVaultCrypto = {
   _key: null, _userId: null,
-  // INS(vault_key, hkdf(token+userId+deviceId), at_rest_encryption)
+  // INS(crypto.vault_key, {via: hkdf, inputs: token+userId+deviceId}) — at_rest_encryption
   async deriveKey(userId, accessToken, deviceId) {
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(accessToken), 'HKDF', false, ['deriveKey']);
@@ -746,14 +746,14 @@ const LocalVaultCrypto = {
     return this._key;
   },
   get ready() { return !!this._key; },
-  // ALT(data → encrypted_envelope, vault_key, local_persistence)
+  // ALT(crypto.data, {transform: encrypted_envelope, key: vault_key}) — local_persistence
   async encrypt(data) {
     if (!this._key) throw new Error('LocalVaultCrypto not initialized');
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, this._key, new TextEncoder().encode(JSON.stringify(data)));
     return { __enc: 1, ct: btoa(String.fromCharCode(...new Uint8Array(ct))), iv: btoa(String.fromCharCode(...iv)) };
   },
-  // ALT(encrypted_envelope → data, vault_key, local_retrieval)
+  // ALT(crypto.encrypted_envelope, {transform: data, key: vault_key}) — local_retrieval
   async decrypt(envelope) {
     if (!this._key) throw new Error('LocalVaultCrypto not initialized');
     if (!envelope?.__enc) return envelope;
@@ -764,15 +764,15 @@ const LocalVaultCrypto = {
       return JSON.parse(new TextDecoder().decode(dec));
     } catch { return null; }
   },
-  // NUL(vault_key, logout, key_destruction) — local data becomes unreadable
+  // NUL(crypto.vault_key, {reason: logout}) — key_destruction — local data becomes unreadable
   clear() { this._key = null; this._userId = null; }
 };
 
 /* ═══════════════════ ENCRYPTED LOCAL CACHE ═══════════════════
  * Operator Manifest:
- *   INS(encrypted_blob, idb_store, local_persistence)   — put
- *   ALT(encrypted_blob → data, vault_key, cache_read)   — get (decrypt on read)
- *   NUL(all_stores, wipe, cache_destruction)             — clear
+ *   INS(cache.encrypted_blob, {store: idb}) — local_persistence — put
+ *   ALT(cache.encrypted_blob, {transform: data, key: vault_key}) — cache_read — get (decrypt on read)
+ *   NUL(cache.all_stores, {reason: wipe}) — cache_destruction — clear
  *
  * Triad Summary:
  *   Existence:       INS (write blobs), NUL (wipe on logout)
@@ -800,7 +800,7 @@ const KhoraEncryptedCache = {
       req.onerror = () => reject(req.error);
     });
   },
-  // INS(encrypted_blob, idb_store, local_persistence) — encrypt-then-write
+  // INS(cache.encrypted_blob, {store: idb}) — local_persistence — encrypt-then-write
   async put(storeName, key, value) {
     if (!LocalVaultCrypto.ready) return;
     const db = await this.open();
@@ -812,7 +812,7 @@ const KhoraEncryptedCache = {
       tx.onerror = () => reject(tx.error);
     });
   },
-  // ALT(encrypted_blob → data, vault_key, cache_read) — read-then-decrypt
+  // ALT(cache.encrypted_blob, {transform: data, key: vault_key}) — cache_read — read-then-decrypt
   async get(storeName, key) {
     if (!LocalVaultCrypto.ready) return null;
     const db = await this.open();
@@ -827,7 +827,7 @@ const KhoraEncryptedCache = {
       req.onerror = () => reject(req.error);
     });
   },
-  // ALT(encrypted_blob[] → data[], vault_key, bulk_cache_read) — cursor-based decrypt
+  // ALT(cache.encrypted_blob[], {transform: data[], key: vault_key}) — bulk_cache_read — cursor-based decrypt
   async getAll(storeName) {
     if (!LocalVaultCrypto.ready) return {};
     const db = await this.open();
@@ -845,7 +845,7 @@ const KhoraEncryptedCache = {
       req.onerror = () => reject(req.error);
     });
   },
-  // NUL(all_stores, wipe, cache_destruction) — purge all encrypted data
+  // NUL(cache.all_stores, {reason: wipe}) — cache_destruction — purge all encrypted data
   async clear() {
     try {
       const db = await this.open();
@@ -862,12 +862,12 @@ const KhoraEncryptedCache = {
 
 /* ═══════════════════ EO OPERATION LAYER ═══════════════════
  * Operator Manifest (meta — this IS the EO engine):
- *   DES(operator_vocabulary, nine_canonical_ops, ontological_foundation)
- *   CON(from_op → to_op, adjacency_matrix, transition_graph)
- *   INS(intermediate_ops[], adjacency_violation, auto_repair)
- *   CON(current_op → predecessor, entity_key, provenance_chain)
- *   DES(khora:eo_event, custom_event, ui_notification)
- *   ALT(userId → sha256_hash, salt, anonymization)
+ *   DES(eo.operator_vocabulary, {nine_canonical_ops}) — ontological_foundation
+ *   CON(eo.transition.from_op, {to: to_op, via: adjacency_matrix}) — transition_graph
+ *   INS(eo.intermediate_ops, {adjacency_violation, auto_repair}) — auto_repair
+ *   CON(eo.provenance.current_op, {predecessor, key: entity_key}) — provenance_chain
+ *   DES(eo.dom_event, {type: khora:eo, dispatch: custom_event}) — ui_notification
+ *   ALT(eo.userId, {transform: sha256_hash, salt}) — anonymization
  *
  * projectCurrentState replays: INS, ALT, NUL, SUP, DES
  *
@@ -878,7 +878,7 @@ const KhoraEncryptedCache = {
  *   All three triads active. This is the EO engine itself —
  *   meta-operators operating on operators.
  * ═══════════════════════════════════════════════════════════ */
-// DES(operator_vocabulary, nine_canonical_ops, ontological_foundation)
+// DES(eo.operator_vocabulary, {nine_canonical_ops}) — ontological_foundation
 const OPERATORS = ['NUL','DES','INS','SEG','CON','SYN','ALT','SUP','REC'];
 
 // Operator adjacency matrix (§5.2) — row can transition to column
@@ -888,7 +888,7 @@ const OP_ADJ = {
   ALT:['SYN','ALT','SUP'], SUP:['ALT','SUP','REC'], REC:['NUL','SUP','REC'],
 };
 
-// CON(from_op → to_op, adjacency_matrix, transition_path)
+// CON(eo.transition.from_op, {to: to_op, via: adjacency_matrix}) — transition_path
 // BFS pathfinding for auto-intermediate emission
 function findOpPath(from, to) {
   if (from === to || OP_ADJ[from]?.includes(to)) return [to];
@@ -903,9 +903,14 @@ function findOpPath(from, to) {
   return [to]; // fallback
 }
 
+// dot(segments...) — builds dot-notation target paths, filtering out falsy segments
+function dot(...segments) { return segments.filter(Boolean).join('.'); }
+// targetField(t) — extracts the last segment of a dot-notation target
+function targetField(t) { if (!t) return null; const parts = t.split('.'); return parts[parts.length - 1]; }
+
 // Per-entity operation history (session-local)
 const entityOpHist = {};
-function eKey(roomId, field) { return `${roomId}::${field||'_root'}`; }
+function eKey(roomId, target) { return `${roomId}::${target||'_root'}`; }
 
 let opSeq = 0;
 function genOpId() { return `op_${Date.now().toString(36)}${(opSeq++).toString(36)}${Math.random().toString(36).slice(2,5)}`; }
@@ -918,45 +923,45 @@ function extractHomeserver(matrixId) {
 }
 
 // Emit an EO operation — validates transitions, auto-emits intermediates
-// Now enriches every event with provenance metadata (created_by, origin_server)
+// Enriches every event with provenance metadata (created_by, origin_server)
 // and builds provenance chains linking each op to its predecessor on the same entity.
 // Resilient: catches sendEvent failures and retries once, logs all failures visibly.
 //
-// Internal transformations:
-//   INS(intermediate_ops[], adjacency_violation, auto_repair)  — when transition is invalid
-//   CON(current_op → predecessor, entity_key, provenance_chain) — links to prior op
-//   DES(khora:eo_event, custom_event, ui_notification) — dispatches to DOM listeners
-async function emitOp(roomId, op, target, context, frame, provenance = []) {
+// Format: OPERATOR(target [dot notation], operand)
+//   INS(eo.intermediate_ops, {adjacency_violation, auto_repair}) — when transition is invalid
+//   CON(eo.provenance.chain, {current → predecessor}) — links to prior op
+//   DES(eo.dom_event, {khora:eo, ui_notification}) — dispatches to DOM listeners
+async function emitOp(roomId, op, target, operand, frame, provenance = []) {
   if (!roomId) { console.error('emitOp: no roomId provided for', op, target); return null; }
   try {
-    const ek = eKey(roomId, target?.field || target?.entity);
+    const ek = eKey(roomId, target);
     const lastEntry = entityOpHist[ek];
     const lastOp = lastEntry?.op;
-    // INS(intermediate_ops[], adjacency_violation, auto_repair)
+    // INS(eo.intermediate_ops, {adjacency_violation, auto_repair})
     // Auto-emit intermediate operations if transition is invalid
     if (lastOp && !OP_ADJ[lastOp]?.includes(op)) {
       const path = findOpPath(lastOp, op);
       for (let i = 0; i < path.length - 1; i++) {
         const midId = genOpId();
-        const mid = { id: midId, op: path[i], target, context: { auto_intermediate: true, from: lastOp, to: op }, frame, provenance: lastEntry ? [lastEntry.id] : [], created_by: svc.userId, origin_server: extractHomeserver(svc.userId), ts: Date.now() };
+        const mid = { id: midId, op: path[i], target, operand: { auto_intermediate: true, from: lastOp, to: op }, frame, provenance: lastEntry ? [lastEntry.id] : [], created_by: svc.userId, origin_server: extractHomeserver(svc.userId), ts: Date.now() };
         await svc.sendEvent(roomId, EVT.OP, mid);
         entityOpHist[ek] = { op: path[i], id: midId };
       }
     }
-    // CON(current_op → predecessor, entity_key, provenance_chain)
+    // CON(eo.provenance.chain, {current → predecessor})
     const prevEntry = entityOpHist[ek];
     const chainedProvenance = [...provenance, ...(prevEntry?.id ? [prevEntry.id] : [])];
-    const event = { id: genOpId(), op, target, context, frame, provenance: chainedProvenance, created_by: svc.userId, origin_server: extractHomeserver(svc.userId), ts: Date.now() };
+    const event = { id: genOpId(), op, target, operand, frame, provenance: chainedProvenance, created_by: svc.userId, origin_server: extractHomeserver(svc.userId), ts: Date.now() };
     await svc.sendEvent(roomId, EVT.OP, event);
     entityOpHist[ek] = { op, id: event.id };
-    // DES(khora:eo_event, custom_event, ui_notification)
+    // DES(eo.dom_event, {khora:eo, ui_notification})
     // Dispatch custom DOM event so listeners (ActivityStream, notifications) can react immediately
     window.dispatchEvent(new CustomEvent('khora:eo', { detail: { roomId, event } }));
     return event;
   } catch (e) {
-    console.error('emitOp FAILED:', op, target?.field || target?.entity, '→', e.message, { roomId, op, target, context });
+    console.error('emitOp FAILED:', op, target, '→', e.message, { roomId, op, target, operand });
     // Still update local history so subsequent ops don't break adjacency tracking
-    const ek = eKey(roomId, target?.field || target?.entity);
+    const ek = eKey(roomId, target);
     entityOpHist[ek] = { op, id: 'failed_' + Date.now() };
     return null;
   }
@@ -964,37 +969,38 @@ async function emitOp(roomId, op, target, context, frame, provenance = []) {
 
 // Compute current state from operation history (§9.1)
 // Replays five operator types to reconstruct current entity state:
-//   INS → creates field with value (existence)
-//   ALT → overwrites value within stable frame (interpretation)
-//   NUL → nullifies field, marks source (existence removal)
-//   SUP → holds multiple valid values simultaneously (interpretation)
-//   DES → sets entity designation/type (existence naming)
+//   INS(target, {value}) → creates field with value (existence)
+//   ALT(target, {from, to}) → overwrites value within stable frame (interpretation)
+//   NUL(target, {reason}) → nullifies field, marks source (existence removal)
+//   SUP(target, {states}) → holds multiple valid values simultaneously (interpretation)
+//   DES(target, {designation}) → sets entity designation/type (existence naming)
 function projectCurrentState(operations, frameType) {
   const state = {};
   const relevant = operations.filter(o => o.frame?.type === frameType).sort((a,b) => a.ts - b.ts);
   for (const op of relevant) {
+    const field = targetField(op.target);
     switch (op.op) {
-      case 'INS': // INS(field, value, frame) — instantiate field with value
-        if (op.target?.field) state[op.target.field] = { value: op.target.value ?? op.context?.value, source_op: op.id, epistemic: op.frame?.epistemic, ts: op.ts };
+      case 'INS': // INS(target, {value}) — instantiate field with value
+        if (field) state[field] = { value: op.operand?.value, source_op: op.id, epistemic: op.frame?.epistemic, ts: op.ts };
         break;
-      case 'ALT': // ALT(field, old→new, frame) — value change within existing frame
-        if (op.target?.field && state[op.target.field]) { state[op.target.field].value = op.context?.to; state[op.target.field].source_op = op.id; state[op.target.field].ts = op.ts; }
+      case 'ALT': // ALT(target, {from, to}) — value change within existing frame
+        if (field && state[field]) { state[field].value = op.operand?.to; state[field].source_op = op.id; state[field].ts = op.ts; }
         break;
-      case 'NUL': // NUL(field, reason, frame) — existence removal
-        if (op.target?.field) state[op.target.field] = { value: null, nullified_by: op.id, ts: op.ts };
+      case 'NUL': // NUL(target, {reason}) — existence removal
+        if (field) state[field] = { value: null, nullified_by: op.id, ts: op.ts };
         break;
-      case 'SUP': // SUP(field, [values], frame) — multiple valid values coexist
-        if (op.target?.field) state[op.target.field] = { values: op.context?.states, superposition: true, source_op: op.id, ts: op.ts };
+      case 'SUP': // SUP(target, {states}) — multiple valid values coexist
+        if (field) state[field] = { values: op.operand?.states, superposition: true, source_op: op.id, ts: op.ts };
         break;
-      case 'DES': // DES(entity, designation, frame) — type/name assignment
-        if (op.target?.entity) state[`${op.target.entity}.designation`] = { value: op.target.designation, source_op: op.id, ts: op.ts };
+      case 'DES': // DES(target, {designation}) — type/name assignment
+        if (field) state[`${field}.designation`] = { value: op.operand?.designation, source_op: op.id, ts: op.ts };
         break;
     }
   }
   return state;
 }
 
-// ALT(userId → sha256_hash, salt, anonymization) — one-way lossy transform for metrics
+// ALT(metrics.userId, {transform: sha256_hash, salt}) — anonymization — one-way lossy transform for metrics
 async function cohortHash(userId, salt) {
   const data = new TextEncoder().encode(userId + (salt || 'khora_default_salt'));
   const hash = await crypto.subtle.digest('SHA-256', data);
@@ -1003,11 +1009,11 @@ async function cohortHash(userId, salt) {
 
 /* ═══════════════════ EMAIL VERIFICATION UTILITIES (§10.5) ═══════════════════
  * Operator Manifest:
- *   INS(verification_code, crypto.getRandomValues, challenge_creation)
- *   ALT(plaintext_code → sha256_hash, web_crypto, one_way_transform)
- *   CON(hashed_code → org_room_state, webhook_delivery, out_of_band_challenge)
- *   DES(email_identity, code_match, verified_attestation)
- *   NUL(challenge, max_attempts|expiry, lockout)
+ *   INS(email.verification_code, {via: crypto.getRandomValues}) — challenge_creation
+ *   ALT(email.plaintext_code, {transform: sha256_hash, via: web_crypto}) — one_way_transform
+ *   CON(email.hashed_code, {dest: org_room_state, via: webhook_delivery}) — out_of_band_challenge
+ *   DES(email.identity, {attestation: code_match}) — verified_attestation
+ *   NUL(email.challenge, {reason: max_attempts|expiry}) — lockout
  *
  * Triad Summary:
  *   Existence:       INS (code generation), NUL (expiry/lockout)
@@ -1020,14 +1026,14 @@ async function cohortHash(userId, salt) {
  * in Matrix room state — the plaintext code is delivered out-of-band (email/webhook).
  * ════════════════════════════════════════════════════════════════════════════════ */
 const EmailVerification = {
-  // INS(verification_code, crypto.getRandomValues, challenge_creation)
+  // INS(email.verification_code, {via: crypto.getRandomValues}) — challenge_creation
   generateCode() {
     const arr = crypto.getRandomValues(new Uint8Array(4));
     const num = (arr[0] << 24 | arr[1] << 16 | arr[2] << 8 | arr[3]) >>> 0;
     return String(num % 1000000).padStart(6, '0');
   },
 
-  // ALT(plaintext_code → sha256_hash, web_crypto, one_way_transform)
+  // ALT(email.plaintext_code, {transform: sha256_hash, via: web_crypto}) — one_way_transform
   async hashCode(code) {
     const data = new TextEncoder().encode(code + ':khora_email_verify_v1');
     const hash = await crypto.subtle.digest('SHA-256', data);
@@ -1052,8 +1058,8 @@ const EmailVerification = {
     return domain && requiredDomains.some(d => d.toLowerCase() === domain);
   },
 
-  // INS(challenge, userId+email+hash, verification_initiation)
-  // CON(challenge → org_room_state, state_key, persistence)
+  // INS(email.challenge, {data: userId+email+hash}) — verification_initiation
+  // CON(email.challenge, {dest: org_room_state, key: state_key}) — persistence
   async createChallenge(userId, email) {
     const code = this.generateCode();
     const codeHash = await this.hashCode(code);
@@ -1073,8 +1079,8 @@ const EmailVerification = {
     };
   },
 
-  // DES(email_identity, code_match, verified_attestation) on success
-  // NUL(challenge, expired|max_attempts, lockout) on failure
+  // DES(email.identity, {attestation: code_match}) — verified_attestation on success
+  // NUL(email.challenge, {reason: expired|max_attempts}) — lockout on failure
   async validateChallenge(challenge, submittedCode) {
     if (!challenge || challenge.status !== 'pending') return { valid: false, reason: 'no_active_challenge' };
     if (Date.now() > challenge.expires) return { valid: false, reason: 'expired' };
@@ -1103,7 +1109,7 @@ const EmailVerification = {
     return true;
   },
 
-  // CON(plaintext_code → email_inbox, webhook_relay, out_of_band_delivery)
+  // CON(email.plaintext_code, {dest: email_inbox, via: webhook_relay}) — out_of_band_delivery
   async sendCodeViaWebhook(email, code, orgName) {
     try {
       const resp = await fetch(`${WEBHOOK_BASE}/email-verify`, {
@@ -1124,7 +1130,7 @@ const EmailVerification = {
 
 /* ═══════════════════ EVENT TYPES (§11) ═══════════════════
  * Operator Manifest:
- *   DES(event_types, io.khora.*, protocol_vocabulary)
+ *   DES(protocol.event_types, {namespace: io.khora.*}) — protocol_vocabulary
  *
  * This entire section is pure DES — it designates the vocabulary of
  * event types, maturity levels, propagation levels, governance constants,
@@ -1227,7 +1233,7 @@ const EVT = {
 };
 
 /* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */
-// DES(lifecycle_states, [draft→trial→normative→de_facto→deprecated], schema_governance)
+// DES(schema.lifecycle_states, {values: [draft, trial, normative, de_facto, deprecated]}) — schema_governance
 const MATURITY_LEVELS = {
   draft:      { id: 'draft',      label: 'Draft',      color: 'blue',   icon: '🔵', desc: 'Proposed, not yet reviewed' },
   trial:      { id: 'trial',      label: 'Trial',      color: 'gold',   icon: '🟡', desc: 'Approved for testing, may change' },
@@ -1237,7 +1243,7 @@ const MATURITY_LEVELS = {
 };
 
 /* ═══════════════════ PROPAGATION LEVELS (MVP §CON Semantics) ═══════════════════ */
-// DES(coupling_strengths, [required→standard→recommended→optional], network_governance)
+// DES(schema.coupling_strengths, {values: [required, standard, recommended, optional]}) — network_governance
 const PROPAGATION_LEVELS = {
   required:    { id: 'required',    label: 'Required',    color: 'red',    desc: 'Tight coupling — auto-applied to orgs, immutable' },
   standard:    { id: 'standard',    label: 'Standard',    color: 'gold',   desc: 'Expected coupling — auto-applied, notify on divergence' },
@@ -1246,7 +1252,7 @@ const PROPAGATION_LEVELS = {
 };
 
 /* ═══════════════════ GOVERNANCE CONSTANTS (MVP §Screen 5) ═══════════════════ */
-// DES(governance_vocabulary, consent+proposals+rhythms, polycentric_governance)
+// DES(governance.vocabulary, {consent, proposals, rhythms}) — polycentric_governance
 const CONSENT_POSITIONS = {
   adopt_as_is:          { id: 'adopt_as_is',          label: 'Adopt as-is',           icon: '✅', color: 'green' },
   adopt_with_extension: { id: 'adopt_with_extension', label: 'Adopt with extension',  icon: '🔄', color: 'blue' },
@@ -1289,7 +1295,7 @@ const CROSSWALK_TYPES = {
 };
 
 /* ═══════════════════ RESOURCE TRACKING CONSTANTS (§Resource Build) ═══════════════════ */
-// DES(resource_vocabulary, categories+opacity+relations+permissions, resource_tracking)
+// DES(resources.vocabulary, {categories, opacity, relations, permissions}) — resource_tracking
 
 /** Resource categories — the top-level classification for resource types */
 const RESOURCE_CATEGORIES = [
@@ -1432,7 +1438,7 @@ function buildDefaultResourcePermissions() {
 
 /* ═══════════════════ ROLE INFERENCE (MVP §Screen 1) ═══════════════════
  * Operator Manifest:
- *   DES(user_roles, room_membership_scan, identity_classification)
+ *   DES(identity.user_roles, {via: room_membership_scan}) — identity_classification
  *
  * Triad Summary:
  *   Existence:       DES (classify user into roles)
@@ -1450,7 +1456,7 @@ const ROLES = {
   network:   { id: 'network',   label: 'Network Coordinator',icon: 'globe',    color: 'green',  desc: 'Network governance steward' },
 };
 
-// DES(user_roles, room_membership_scan, identity_classification)
+// DES(identity.user_roles, {via: room_membership_scan}) — identity_classification
 // Scans all rooms to determine user's active roles via structural evidence
 function inferRolesFromRooms(scannedState, userId) {
   const roles = new Set();
@@ -1485,16 +1491,16 @@ function inferRolesFromRooms(scannedState, userId) {
 
 /* ═══════════════════ MATRIX SERVICE ═══════════════════
  * Operator Manifest:
- *   INS(matrix_session, credentials, authentication)                — login
- *   INS(vault_key, hkdf, at_rest_encryption)                       — login key derivation
- *   NUL(legacy_stores, purge, security_cleanup)                     — login cleanup
- *   DES(session, whoami_check, token_validation)                    — restoreSession
- *   INS(matrix_room, e2ee+state, room_creation)                    — createRoom
- *   INS(bridge_room, power_levels, client_sovereign_creation)       — createClientRoom
- *   ALT(room_state, state_event, protocol_mutation)                 — setState
- *   INS(timeline_event, room, event_emission)                       — sendEvent
- *   DES(room_topology, sync_state, room_classification)             — scanRooms
- *   NUL(session+keys+cache, logout, full_teardown)                  — logout
+ *   INS(matrix.session, {credentials}) — authentication                — login
+ *   INS(crypto.vault_key, {via: hkdf}) — at_rest_encryption           — login key derivation
+ *   NUL(matrix.legacy_stores, {reason: purge}) — security_cleanup     — login cleanup
+ *   DES(matrix.session, {check: whoami}) — token_validation           — restoreSession
+ *   INS(matrix.room, {e2ee, state}) — room_creation                   — createRoom
+ *   INS(matrix.bridge_room, {power_levels}) — client_sovereign_creation — createClientRoom
+ *   ALT(matrix.room_state, {state_event}) — protocol_mutation         — setState
+ *   INS(matrix.timeline_event, {room}) — event_emission               — sendEvent
+ *   DES(matrix.room_topology, {via: sync_state}) — room_classification — scanRooms
+ *   NUL(matrix.session+keys+cache, {reason: logout}) — full_teardown  — logout
  *
  * Triad Summary:
  *   Existence:       INS (sessions, rooms, events), NUL (logout, purge)
@@ -1562,7 +1568,7 @@ class KhoraService {
     throw new Error('Rate limited — too many requests. Please try again.');
   }
 
-  // INS(matrix_session, credentials, authentication) → INS(vault_key, hkdf, at_rest_encryption) → NUL(legacy_stores, purge, cleanup)
+  // INS(matrix.session, {credentials}) — authentication → INS(crypto.vault_key, {via: hkdf}) — at_rest_encryption → NUL(matrix.legacy_stores, {reason: purge}) — cleanup
   async login(homeserver, user, pass) {
     const baseUrl = homeserver.startsWith('http') ? homeserver : `https://${homeserver}`;
     this._baseUrl = baseUrl;
@@ -1600,7 +1606,7 @@ class KhoraService {
     }
   }
 
-  // DES(session, whoami_check, token_validation) → INS(matrix_client, valid_token, reconnection) | NUL(session, expired, destruction)
+  // DES(matrix.session, {check: whoami}) — token_validation → INS(matrix.client, {valid_token}) — reconnection | NUL(matrix.session, {reason: expired}) — destruction
   async restoreSession() {
     const raw = localStorage.getItem('khora_session');
     if (!raw) return null;
@@ -1697,7 +1703,7 @@ class KhoraService {
     throw new Error('Rate limited — too many requests. Please try again.');
   }
 
-  // INS(matrix_room, e2ee+state, room_creation) — Megolm encryption enabled by default
+  // INS(matrix.room, {e2ee, state}) — room_creation — Megolm encryption enabled by default
   async createRoom(name, topic, extraState = []) {
     const initial_state = [
       { type: 'm.room.encryption', state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' } },
@@ -1712,7 +1718,7 @@ class KhoraService {
     }
   }
 
-  // INS(bridge_room, power_levels, client_sovereign_creation) — client PL 100, provider PL 50
+  // INS(matrix.bridge_room, {power_levels}) — client_sovereign_creation — client PL 100, provider PL 50
   async createClientRoom(name, topic, extraState = [], clientMatrixId = null) {
     const initial_state = [
       { type: 'm.room.encryption', state_key: '', content: { algorithm: 'm.megolm.v1.aes-sha2' } },
@@ -1769,13 +1775,13 @@ class KhoraService {
     try { return await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`); } catch { return null; }
   }
 
-  // ALT(room_state, state_event, protocol_mutation) — write state to Matrix room
+  // ALT(matrix.room_state, {state_event}) — protocol_mutation — write state to Matrix room
   async setState(roomId, type, content, sk = '') {
     if (this.client) { await this._withRetry(() => this.client.sendStateEvent(roomId, type, content, sk)); }
     else { await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`, content); }
   }
 
-  // INS(timeline_event, room, event_emission) — with crypto fallback for E2EE errors
+  // INS(matrix.timeline_event, {room}) — event_emission — with crypto fallback for E2EE errors
   async sendEvent(roomId, type, content) {
     if (this.client) {
       try {
@@ -1877,7 +1883,7 @@ class KhoraService {
     } catch { return []; }
   }
 
-  // DES(room_topology, sync_state, room_classification) — read-only scan, caches to encrypted IDB
+  // DES(matrix.room_topology, {via: sync_state}) — room_classification — read-only scan, caches to encrypted IDB
   // Batch-fetch all Khora state across joined rooms in a single request.
   // When the SDK is available, reads local sync state (no HTTP calls).
   // When using the API fallback, uses /sync with a tight filter — one request
@@ -1942,7 +1948,7 @@ class KhoraService {
     }
   }
 
-  // NUL(legacy_idb, store_names, security_cleanup)
+  // NUL(matrix.legacy_idb, {targets: store_names}) — security_cleanup
   // Purge unencrypted IndexedDB databases created by the Matrix SDK sync layer
   // or legacy application caches. Preserves crypto stores (Olm/Megolm key material
   // needed for E2EE continuity) and our own encrypted vault.
@@ -1964,11 +1970,11 @@ class KhoraService {
     }
   }
 
-  // NUL(session+keys+cache, logout, full_teardown) — destroys all local state
+  // NUL(matrix.session+keys+cache, {reason: logout}) — full_teardown — destroys all local state
   async logout() {
     if (this.client) { this.client.stopClient(); try { await this.client.logout(); } catch {} }
     this.client = null; this._token = null; this._userId = null;
-    // NUL(vault_key, logout, key_destruction) — local encrypted data becomes unreadable
+    // NUL(crypto.vault_key, {reason: logout}) — key_destruction — local encrypted data becomes unreadable
     LocalVaultCrypto.clear();
     // Wipe encrypted local cache and close database connection
     try { await KhoraEncryptedCache.clear(); KhoraEncryptedCache.close(); } catch {}
@@ -2027,8 +2033,8 @@ const svc = new KhoraService();
 
 /* ═══════════════════ WEBHOOK / AIRTABLE BRIDGE ═══════════════════
  * Operator Manifest:
- *   CON(browser → n8n_endpoint, access_token, webhook_transport)
- *   SYN(tables[] + records[], parallel_fetch, hydrated_dataset)
+ *   CON(webhook.browser, {dest: n8n_endpoint, auth: access_token}) — webhook_transport
+ *   SYN(webhook.tables+records, {via: parallel_fetch}) — hydrated_dataset
  *
  * Triad Summary:
  *   Existence:       —
@@ -2042,7 +2048,7 @@ const svc = new KhoraService();
  * ═══════════════════════════════════════════════════════════════════ */
 const WEBHOOK_BASE = 'https://n8n.intelechia.com/webhook';
 
-// CON(browser → n8n_endpoint, access_token, webhook_transport)
+// CON(webhook.browser, {dest: n8n_endpoint, auth: access_token}) — webhook_transport
 async function webhookFetch(path, token) {
   const sep = path.includes('?') ? '&' : '?';
   const url = `${WEBHOOK_BASE}${path}${token ? `${sep}access_token=${encodeURIComponent(token)}` : ''}`;
@@ -2054,7 +2060,7 @@ async function webhookFetch(path, token) {
   return resp.json();
 }
 
-// SYN(tables[] + records[], parallel_fetch, hydrated_dataset) — merges table metadata with record data
+// SYN(webhook.tables+records, {via: parallel_fetch}) — hydrated_dataset — merges table metadata with record data
 async function hydrateFromWebhooks(token) {
   const { tables } = await webhookFetch('/api/tables', token);
   const allTables = {};
@@ -3131,11 +3137,11 @@ function getFrameworkFields(enabledIds) {
 
 /* ═══════════════════ ANONYMIZATION (§B.2) ═══════════════════
  * Operator Manifest:
- *   NUL(pii_field, block_policy, data_suppression)         — block method
- *   SEG(dob → age_bucket, range_boundaries, k_anonymity)   — age_range method
- *   SEG(numeric → bracket, range_rules, statistical_binning)— bracket method
- *   ALT(address → geohash, hashing, location_anonymization) — area_hash method
- *   SYN(observation + anon_demographics, cohort_hash, metric_emission) — emitMetric
+ *   NUL(metrics.pii_field, {policy: block}) — data_suppression         — block method
+ *   SEG(metrics.dob, {transform: age_bucket, boundaries: range}) — k_anonymity   — age_range method
+ *   SEG(metrics.numeric, {transform: bracket, rules: range}) — statistical_binning — bracket method
+ *   ALT(metrics.address, {transform: geohash, via: hashing}) — location_anonymization — area_hash method
+ *   SYN(metrics.observation+anon_demographics, {via: cohort_hash}) — metric_emission — emitMetric
  *
  * Triad Summary:
  *   Existence:       NUL (PII suppression)
@@ -3145,10 +3151,10 @@ function getFrameworkFields(enabledIds) {
  *   reinterpretation would violate the irreversibility guarantee.
  * ═══════════════════════════════════════════════════════════ */
 // Transforms a single field according to DEFAULT_TRANSFORMS rules:
-//   block    → NUL(pii_field, privacy_policy, data_suppression) — returns null
-//   age_range→ SEG(dob → age_bucket, range_boundaries, k_anonymity)
-//   bracket  → SEG(numeric → bracket, range_rules, statistical_binning)
-//   area_hash→ ALT(address → geohash, hashing, location_anonymization)
+//   block    → NUL(metrics.pii_field, {policy: privacy}) — data_suppression — returns null
+//   age_range→ SEG(metrics.dob, {transform: age_bucket, boundaries: range}) — k_anonymity
+//   bracket  → SEG(metrics.numeric, {transform: bracket, rules: range}) — statistical_binning
+//   area_hash→ ALT(metrics.address, {transform: geohash, via: hashing}) — location_anonymization
 function anonymizeField(key, value) {
   const t = DEFAULT_TRANSFORMS[key];
   if (!t) return {key, value};
@@ -3167,7 +3173,7 @@ function anonymizeField(key, value) {
   return {key, value};
 }
 
-// SYN(observation + anon_demographics, cohort_hash, metric_emission)
+// SYN(metrics.observation+anon_demographics, {via: cohort_hash}) — metric_emission
 // Anonymizes identity, then synthesizes observation + demographics into a single metric event
 async function emitMetric(metricsRoom, clientId, observation, demographics, program) {
   const hash = await cohortHash(clientId);
@@ -3182,7 +3188,7 @@ async function emitMetric(metricsRoom, clientId, observation, demographics, prog
 }
 
 /* ═══════════════════ RESOURCE PERMISSION UTILITIES ═══════════════════ */
-// DES(permission_check, grants+role, access_control) — read-only classification, no mutations
+// DES(resources.permission_check, {grants, role}) — access_control — read-only classification, no mutations
 
 /**
  * Check whether a user matches a permission grant.
@@ -3250,17 +3256,17 @@ function formatPermissionGrant(grant) {
 
 /* ═══════════════════ RESOURCE TRACKING SERVICE (§Resource Build) ═══════════════════
  * Operator Manifest:
- *   DES(resource_type, category+unit+constraints, resource_catalog)     — createResourceType
- *   INS(permissions, default_grants, access_control)                    — createResourceType
- *   ALT(resource_type.{field}, updated_values, catalog_mutation)        — updateResourceType
- *   ALT(permissions, grant_changes, access_control_mutation)            — updateResourcePermissions
- *   CON(network_type → org_catalog, propagation_level, schema_cascade)  — propagateResourceType
- *   CON(org → resource_type, relation_type, capacity_link)              — establishRelation
- *   INS(inventory, initial_stock, supply_initialization)                — establishRelation
- *   ALT(inventory.available, ±quantity, stock_adjustment)               — restock/adjust
- *   INS(allocation, bridge_room, individual_grant)                      — allocateResource
- *   INS(vault_shadow, client_vault, sovereign_record)                   — allocateResource
- *   SYN(allocation + anon_demographics, cohort_hash, resource_metric)   — emitResourceMetric
+ *   DES(resources.types.{id}, {category, unit, constraints}) — resource_catalog     — createResourceType
+ *   INS(resources.permissions, {default_grants}) — access_control                  — createResourceType
+ *   ALT(resources.types.{id}.{field}, {updated_values}) — catalog_mutation         — updateResourceType
+ *   ALT(resources.permissions, {grant_changes}) — access_control_mutation          — updateResourcePermissions
+ *   CON(resources.propagation.{typeId}, {propagation_level}) — schema_cascade      — propagateResourceType
+ *   CON(resources.relations.{id}, {relation_type}) — capacity_link                 — establishRelation
+ *   INS(resources.inventory, {initial_stock}) — supply_initialization              — establishRelation
+ *   ALT(resources.inventory.available, {adjustment}) — stock_adjustment            — restock/adjust
+ *   INS(bridge.allocations.{id}, {allocation_data}) — individual_grant             — allocateResource
+ *   INS(vault.allocations.{id}, {shadow_record}) — sovereign_record                — allocateResource
+ *   SYN(metrics.allocation+anon_demographics, {via: cohort_hash}) — resource_metric — emitResourceMetric
  *
  * Triad Summary:
  *   Existence:       DES (type creation), INS (inventory, allocations, vault shadows)
@@ -3387,7 +3393,7 @@ const ResourceService = {
    * Create a resource type in the catalog (network or org room).
    * Emits DES operation. Returns event ID.
    */
-  // DES(resource_type, category+unit+constraints, resource_catalog) + INS(permissions, default_grants, access_control)
+  // DES(resources.types.{id}, {designation, category, unit, permissions}) — resource_catalog + INS(resources.permissions, {default_grants}) — access_control
   async createResourceType(roomId, typeData, roomType) {
     const level = roomType === 'network' ? 'network' : roomType === 'individual' ? 'individual' : 'org';
     if (level === 'network' && !typeData.source?.propagation) {
@@ -3449,8 +3455,8 @@ const ResourceService = {
 
     // Emit DES operation
     await emitOp(roomId, 'DES',
-      { entity: resourceType.id, designation: resourceType.name },
-      { category: resourceType.category, unit: resourceType.unit, source_level: level, permissions },
+      dot('resources', 'types', resourceType.id),
+      { designation: resourceType.name, category: resourceType.category, unit: resourceType.unit, source_level: level, permissions },
       { type: roomType === 'network' ? 'network' : roomType === 'individual' ? 'individual' : 'org', room: roomId, epistemic: 'GIVEN' }
     );
 
@@ -3462,7 +3468,7 @@ const ResourceService = {
    * If propagation level changes, requires adopted_via reference (governance action).
    * Caller must have controller permission.
    */
-  // ALT(resource_type.{field}, updated_values, catalog_mutation)
+  // ALT(resources.types.{id}.{field}, {updated_values}) — catalog_mutation
   async updateResourceType(roomId, typeId, changes, roomType, callerRole) {
     const existing = await svc.getState(roomId, EVT.RESOURCE_TYPE, typeId);
     if (!existing) throw new Error(`Resource type ${typeId} not found`);
@@ -3486,7 +3492,7 @@ const ResourceService = {
     for (const [key, val] of Object.entries(changes)) {
       if (JSON.stringify(existing[key]) !== JSON.stringify(val)) {
         await emitOp(roomId, 'ALT',
-          { field: `resource_type.${key}`, entity: typeId },
+          dot('resources', 'types', typeId, key),
           { from: existing[key], to: val },
           { type: roomType === 'network' ? 'network' : 'org', room: roomId, epistemic: 'GIVEN' }
         );
@@ -3500,7 +3506,7 @@ const ResourceService = {
    * Update permissions on a resource type. Caller must be a current controller.
    * Writes to both the resource type state and a dedicated RESOURCE_PERM state event.
    */
-  // ALT(permissions, grant_changes, access_control_mutation)
+  // ALT(resources.types.{id}.permissions, {grant_changes}) — access_control_mutation
   async updateResourcePermissions(roomId, typeId, newPermissions, callerRole) {
     const existing = await svc.getState(roomId, EVT.RESOURCE_TYPE, typeId);
     if (!existing) throw new Error(`Resource type ${typeId} not found`);
@@ -3536,7 +3542,7 @@ const ResourceService = {
 
     // Emit ALT for permissions change
     await emitOp(roomId, 'ALT',
-      { field: 'resource_type.permissions', entity: typeId },
+      dot('resources', 'types', typeId, 'permissions'),
       { permissions },
       { type: 'org', room: roomId, epistemic: 'MEANT' }
     );
@@ -3549,7 +3555,7 @@ const ResourceService = {
    * Respects propagation levels: required (immutable), standard (extendable),
    * recommended (visible), optional (catalog only).
    */
-  // CON(network_type → org_catalog, propagation_level, schema_cascade)
+  // CON(resources.propagation.{typeId}, {propagation_level}) — schema_cascade
   async propagateResourceType(networkRoomId, orgRoomId, typeId) {
     const networkType = await svc.getState(networkRoomId, EVT.RESOURCE_TYPE, typeId);
     if (!networkType) throw new Error(`Resource type ${typeId} not found in network room`);
@@ -3576,8 +3582,8 @@ const ResourceService = {
 
     // Emit CON operation for the propagation relationship
     await emitOp(orgRoomId, 'CON',
-      { source: networkRoomId, dest: orgRoomId, relation: 'propagates' },
-      { type_id: typeId, propagation },
+      dot('resources', 'propagation', typeId),
+      { source: networkRoomId, dest: orgRoomId, relation: 'propagates', type_id: typeId, propagation },
       { type: 'org', room: orgRoomId, epistemic: 'GIVEN' }
     );
 
@@ -3590,7 +3596,7 @@ const ResourceService = {
    * Establish a relation between an org and a resource type.
    * Defaults opacity to SOVEREIGN (0). Emits CON operation.
    */
-  // CON(org → resource_type, relation_type, capacity_link) + INS(inventory, initial_stock, supply_initialization)
+  // CON(resources.relations.{id}, {relation_type, source, dest}) — capacity_link + INS(resources.inventory, {initial_stock}) — supply_initialization
   async establishRelation(orgRoomId, relationData) {
     if (!RESOURCE_RELATION_TYPES.includes(relationData.relation_type)) {
       throw new Error(`Invalid relation type: ${relationData.relation_type}. Must be one of: ${RESOURCE_RELATION_TYPES.join(', ')}`);
@@ -3622,8 +3628,8 @@ const ResourceService = {
 
     // Emit CON operation
     await emitOp(orgRoomId, 'CON',
-      { source: orgRoomId, dest: relation.resource_type_id, relation: relation.relation_type },
-      { relation_id: relation.id, capacity: relation.capacity },
+      dot('resources', 'relations', relation.id),
+      { source: orgRoomId, dest: relation.resource_type_id, relation_type: relation.relation_type, relation_id: relation.id, capacity: relation.capacity },
       { type: 'org', room: orgRoomId, epistemic: 'GIVEN' }
     );
 
@@ -3672,8 +3678,8 @@ const ResourceService = {
 
     // Emit SEG operation
     await emitOp(orgRoomId, 'SEG',
-      { relation: relationId, opacity: newOpacity, disclosed_fields: relation.disclosed_fields },
-      { from_opacity: oldOpacity, to_opacity: newOpacity, direction: newOpacity > oldOpacity ? 'disclosure' : 'withdrawal' },
+      dot('resources', 'relations', relationId, 'opacity'),
+      { relation: relationId, opacity: newOpacity, disclosed_fields: relation.disclosed_fields, from_opacity: oldOpacity, to_opacity: newOpacity, direction: newOpacity > oldOpacity ? 'disclosure' : 'withdrawal' },
       { type: 'org', room: orgRoomId, epistemic: 'MEANT' }
     );
 
@@ -3686,7 +3692,7 @@ const ResourceService = {
    * Restock inventory for a resource relation.
    * Adds quantity to total_capacity and available. Emits INS operation.
    */
-  // ALT(inventory.available, +quantity, supply_replenishment)
+  // INS(resources.inventory.{relationId}, {quantity}) — supply_replenishment
   async restockInventory(orgRoomId, relationId, quantity, metadata) {
     const existing = await svc.getState(orgRoomId, EVT.RESOURCE_INVENTORY, relationId);
     const now = Date.now();
@@ -3718,7 +3724,7 @@ const ResourceService = {
 
     // Emit INS operation
     await emitOp(orgRoomId, 'INS',
-      { field: 'inventory', entity: relationId },
+      dot('resources', 'inventory', relationId),
       { quantity, total_capacity: inventory.total_capacity, available: inventory.available, metadata },
       { type: 'org', room: orgRoomId, epistemic: 'GIVEN' }
     );
@@ -3730,7 +3736,7 @@ const ResourceService = {
    * Adjust inventory for write-offs, corrections, or manual adjustments.
    * Emits ALT operation with reason.
    */
-  // ALT(inventory, ±adjustment+reason, correction)
+  // ALT(resources.inventory.{relationId}, {adjustment, reason}) — correction
   async adjustInventory(orgRoomId, relationId, adjustment, reason) {
     const inventory = await svc.getState(orgRoomId, EVT.RESOURCE_INVENTORY, relationId);
     if (!inventory) throw new Error(`No inventory found for relation ${relationId}`);
@@ -3746,7 +3752,7 @@ const ResourceService = {
     await svc.setState(orgRoomId, EVT.RESOURCE_INVENTORY, inventory, relationId);
 
     await emitOp(orgRoomId, 'ALT',
-      { field: 'inventory', entity: relationId },
+      dot('resources', 'inventory', relationId),
       { adjustment, reason, available: inventory.available, total_capacity: inventory.total_capacity },
       { type: 'org', room: orgRoomId, epistemic: 'GIVEN' }
     );
@@ -3764,7 +3770,7 @@ const ResourceService = {
    *
    * Returns { allocation, bridgeEventId, vaultEventId, inventoryEventId }
    */
-  // INS(allocation, bridge_room, individual_grant) + ALT(inventory, -quantity, stock_decrement) + INS(vault_shadow, client_vault, sovereign_record)
+  // INS(bridge.allocations.{id}, {allocation_data}) — individual_grant + ALT(resources.inventory.{relation_id}.available, {-quantity}) — stock_decrement + INS(vault.allocations.{id}, {shadow_record}) — sovereign_record
   // ⚠️ Three-part write: bridge allocation + inventory decrement + vault shadow. Partial failure = inconsistency.
   async allocateResource(bridgeRoomId, allocationData, orgRoomId, vaultRoomId) {
     // STEP 1: Validate constraints
@@ -3838,7 +3844,7 @@ const ResourceService = {
 
     // Emit INS operation for bridge allocation
     await emitOp(bridgeRoomId, 'INS',
-      { field: 'allocation', entity: allocation.id },
+      dot('bridge', 'allocations', allocation.id),
       { resource_type: resourceType.name, quantity: allocation.quantity, unit: allocation.unit },
       { type: 'bridge', room: bridgeRoomId, epistemic: 'GIVEN' }
     );
@@ -3866,7 +3872,7 @@ const ResourceService = {
 
       // Emit INS operation for vault shadow
       await emitOp(vaultRoomId, 'INS',
-        { field: 'vault_record', entity: allocation.id },
+        dot('vault', 'allocations', allocation.id),
         { resource_name: resourceType.name, quantity: allocation.quantity },
         { type: 'vault', room: vaultRoomId, epistemic: 'GIVEN' }
       );
@@ -3886,7 +3892,7 @@ const ResourceService = {
         await svc.setState(orgRoomId, EVT.RESOURCE_INVENTORY, inventory, allocation.relation_id);
 
         await emitOp(orgRoomId, 'ALT',
-          { field: 'inventory.available', entity: allocation.relation_id },
+          dot('resources', 'inventory', allocation.relation_id, 'available'),
           { decremented_by: allocation.quantity, available: inventory.available, allocated: inventory.allocated },
           { type: 'org', room: orgRoomId, epistemic: 'GIVEN' }
         );
@@ -3982,11 +3988,9 @@ const ResourceService = {
 
     // Emit appropriate EO operation
     const eoOp = event.event === 'revoked' ? 'NUL' : 'ALT';
-    const eoTarget = event.event === 'revoked'
-      ? { field: 'allocation', entity: event.allocation_id }
-      : { field: 'status', entity: event.allocation_id };
 
-    await emitOp(bridgeRoomId, eoOp, eoTarget,
+    await emitOp(bridgeRoomId, eoOp,
+      dot('bridge', 'allocations', event.allocation_id, 'lifecycle'),
       { event: event.event, quantity: event.quantity },
       { type: 'bridge', room: bridgeRoomId, epistemic: 'GIVEN' }
     );
@@ -4130,22 +4134,22 @@ const ResourceService = {
     switch (resolution.link_status) {
       case 'confirmed':
         await emitOp(orgRoomId, 'CON',
-          { source: relationId, dest: resolution.linked_to, link_type: resolution.link_type },
-          { resolution: 'confirmed_overlap' },
+          dot('org', 'dedup', relationId),
+          { source: relationId, dest: resolution.linked_to, link_type: resolution.link_type, resolution: 'confirmed_overlap' },
           { type: 'org', room: orgRoomId, epistemic: 'MEANT' }
         );
         break;
       case 'attested_non_additive':
         await emitOp(orgRoomId, 'DES',
-          { entity: relationId, designation: 'non_additive' },
-          { resolution: 'attested_non_additive' },
+          dot('org', 'dedup', relationId),
+          { designation: 'non_additive', resolution: 'attested_non_additive' },
           { type: 'org', room: orgRoomId, epistemic: 'MEANT' }
         );
         break;
       case 'unresolved':
         await emitOp(orgRoomId, 'SUP',
-          { entities: [relationId, resolution.linked_to], superposition: 'potential_overlap' },
-          { resolution: 'unresolved' },
+          dot('org', 'dedup', relationId),
+          { entities: [relationId, resolution.linked_to], superposition: 'potential_overlap', resolution: 'unresolved' },
           { type: 'org', room: orgRoomId, epistemic: 'MEANT' }
         );
         break;
@@ -4181,8 +4185,8 @@ const ResourceService = {
 
     // Emit REC operation (recentering from org to network)
     await emitOp(networkRoomId, 'REC',
-      { entity: typeId, recentered_from: 'org', to: 'network' },
-      { proposal_id: proposal.id, org_room: orgRoomId, propagation: proposedPropagation },
+      dot('network', 'resources', typeId),
+      { recentered_from: 'org', to: 'network', proposal_id: proposal.id, org_room: orgRoomId, propagation: proposedPropagation },
       { type: 'network', room: networkRoomId, epistemic: 'MEANT' }
     );
 
@@ -4307,7 +4311,7 @@ const ResourceService = {
 
       // Emit NUL on withdrawn projections
       await emitOp(orgRoomId, 'NUL',
-        { field: 'resource_projection', entity: relationId },
+        dot('resources', 'projection', relationId),
         { from_opacity: oldOpacity, to_opacity: newOpacity, withdrawn: true },
         { type: 'org', room: orgRoomId, epistemic: 'MEANT' }
       );
@@ -4321,7 +4325,7 @@ const ResourceService = {
    * Follows the existing metrics anonymization pipeline.
    * Strips PII, buckets amounts, hashes cohort.
    */
-  // SYN(allocation + anon_demographics, cohort_hash, resource_metric) + NUL(raw_identity, pipeline, pii_strip)
+  // SYN(metrics.allocation+anon_demographics, {via: cohort_hash}) — resource_metric + NUL(metrics.raw_identity, {via: pipeline}) — pii_strip
   async emitResourceMetric(metricsRoomId, allocation, resourceType, clientId) {
     const hash = await cohortHash(clientId);
 
@@ -4405,7 +4409,7 @@ const ResourceService = {
    * Load default resource types into a network room.
    * All seed types are created as draft maturity, optional propagation.
    */
-  // INS(seed_resource_types[], DEFAULT_RESOURCE_TYPES, initial_catalog) — batch DES for each type
+  // INS(resources.seed_types[], {source: DEFAULT_RESOURCE_TYPES}) — initial_catalog — batch DES for each type
   async loadSeedResourceTypes(networkRoomId) {
     const loaded = [];
     for (const seed of DEFAULT_RESOURCE_TYPES) {
@@ -4431,12 +4435,12 @@ const ResourceService = {
 
 /* ═══════════════════ CLIENT DATA IMPORT ENGINE ═══════════════════
  * Operator Manifest (per-record pipeline):
- *   INS(encryption_key, crypto.subtle, per_record_isolation)
- *   ALT(fields → ciphertext, per_record_key, field_encryption)
- *   SEG(demographics, transform_rules, anonymization)
- *   INS(client_record_room, identity+record_state, room_creation)
- *   SYN(record + anon_demographics, cohort_hash, metric_emission)
- *   INS(import_manifest, batch_metadata, audit_trail)
+ *   INS(crypto.encryption_key, {via: crypto.subtle}) — per_record_isolation
+ *   ALT(import.fields, {transform: ciphertext, key: per_record_key}) — field_encryption
+ *   SEG(import.demographics, {rules: transform_rules}) — anonymization
+ *   INS(import.client_record_room, {identity, record_state}) — room_creation
+ *   SYN(import.record+anon_demographics, {via: cohort_hash}) — metric_emission
+ *   INS(import.manifest, {batch_metadata}) — audit_trail
  *
  * Triad Summary:
  *   Existence:       INS (keys, rooms, manifest)
@@ -4533,7 +4537,7 @@ function autoMapColumns(sourceHeaders) {
 }
 
 // ── Per-record encryption + room creation ──
-// Pipeline per row: INS(key) → ALT(encrypt) → SEG(anonymize) → INS(room) → SYN(metric)
+// Pipeline per row: INS(crypto.key, {}) → ALT(import.fields, {encrypt}) → SEG(import.demographics, {anonymize}) → INS(import.room, {}) → SYN(import.metric, {})
 // Creates one client_record room per row. Each record gets a unique
 // AES-256-GCM key. Only anonymized demographics are emitted as metrics.
 async function importClientRecords(records, mapping, metricsRoom, onProgress) {
@@ -7533,7 +7537,7 @@ const classifyEvent = (ev, roomInfo) => {
   const type = ev.getType(); const content = ev.getContent();
   // Native EO operations
   if (type === EVT.OP) return { op:content.op||'INS', epistemic:content.frame?.epistemic||'GIVEN',
-    label:`${content.op} Operation`, desc:content.target?.field||content.target?.entity||content.target?.type||'' };
+    label:`${content.op} Operation`, desc:content.target||'' };
   if (ev.isState && ev.isState()) {
     switch (type) {
       case EVT.IDENTITY: return {op:'INS',epistemic:'GIVEN',label:'Identity Declaration',desc:`Type: ${content.account_type}`};
@@ -7696,9 +7700,7 @@ const RecordProvenance = ({ roomId, entityKey, label, session }) => {
             if (seenIds.has(ev.getId()) || ev.getType() !== EVT.OP) return;
             seenIds.add(ev.getId());
             const c = ev.getContent();
-            const tField = c.target?.field; const tEntity = c.target?.entity;
-            const tType = c.target?.type;
-            if (tField === entityKey || tEntity === entityKey || tType === entityKey) {
+            if (c.target === entityKey || (typeof c.target === 'string' && c.target.includes(entityKey))) {
               allOps.push({ ...c, _sender: ev.getSender(), _eventTs: ev.getTs() });
             }
           };
@@ -7715,9 +7717,7 @@ const RecordProvenance = ({ roomId, entityKey, label, session }) => {
           for (const ev of room.currentState.getStateEvents()) {
             if (ev.getType() === EVT.OP) {
               const c = ev.getContent();
-              const tField = c.target?.field; const tEntity = c.target?.entity;
-              const tType = c.target?.type;
-              if (tField === entityKey || tEntity === entityKey || tType === entityKey) {
+              if (c.target === entityKey || (typeof c.target === 'string' && c.target.includes(entityKey))) {
                 if (!allOps.find(o => o.id === c.id)) {
                   allOps.push({ ...c, _sender: ev.getSender(), _eventTs: ev.getTs() });
                 }
@@ -7740,7 +7740,7 @@ const RecordProvenance = ({ roomId, entityKey, label, session }) => {
       const d = e.detail;
       if (d && d.roomId === roomId) {
         const t = d.event?.target;
-        if (t && (t.field === entityKey || t.entity === entityKey || t.type === entityKey)) {
+        if (t && (t === entityKey || (typeof t === 'string' && t.includes(entityKey)))) {
           setOps(null); // force reload
         }
       }
@@ -7840,7 +7840,7 @@ const RecordProvenance = ({ roomId, entityKey, label, session }) => {
             <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
               <span className={`tag tag-${opColor}`} style={{fontSize:8.5,fontFamily:'var(--mono)',fontWeight:700}}>{o.op}</span>
               <span style={{fontSize:10.5,fontWeight:600,color:'var(--tx-1)'}}>{opDesc.verb}</span>
-              {o.context?.auto_intermediate && <span className="tag tag-orange" style={{fontSize:7.5}}>AUTO</span>}
+              {o.operand?.auto_intermediate && <span className="tag tag-orange" style={{fontSize:7.5}}>AUTO</span>}
               {o.frame?.epistemic && <span className={`tag tag-${o.frame.epistemic==='GIVEN'?'teal':'gold'}`} style={{fontSize:7.5}}>{o.frame.epistemic}</span>}
             </div>
             <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,fontSize:10,color:'var(--tx-3)'}}>
@@ -7848,12 +7848,12 @@ const RecordProvenance = ({ roomId, entityKey, label, session }) => {
               {sender && <span title={sender} style={{fontFamily:'var(--mono)'}}>{fmtUserId(sender)}</span>}
               {o.origin_server && <span style={{fontFamily:'var(--mono)',color:'var(--tx-3)'}}>{o.origin_server}</span>}
             </div>
-            {/* Context details */}
-            {o.context && !o.context.auto_intermediate && <div style={{marginTop:3,fontSize:10,color:'var(--tx-2)'}}>
-              {o.context.value && <span>value: {String(o.context.value).slice(0,50)}</span>}
-              {o.context.from && o.context.to && <span>changed: {String(o.context.from).slice(0,25)} → {String(o.context.to).slice(0,25)}</span>}
-              {o.context.source && <span style={{marginLeft:6,fontStyle:'italic'}}>{o.context.source}</span>}
-              {o.context.reason && <span style={{marginLeft:6}}>{o.context.reason}</span>}
+            {/* Operand details */}
+            {o.operand && !o.operand.auto_intermediate && <div style={{marginTop:3,fontSize:10,color:'var(--tx-2)'}}>
+              {o.operand.value && <span>value: {String(o.operand.value).slice(0,50)}</span>}
+              {o.operand.from && o.operand.to && <span>changed: {String(o.operand.from).slice(0,25)} → {String(o.operand.to).slice(0,25)}</span>}
+              {o.operand.source && <span style={{marginLeft:6,fontStyle:'italic'}}>{o.operand.source}</span>}
+              {o.operand.reason && <span style={{marginLeft:6}}>{o.operand.reason}</span>}
             </div>}
             {/* Provenance chain */}
             {o.provenance && o.provenance.length > 0 && <div style={{marginTop:2,fontSize:9,color:'var(--tx-3)',fontFamily:'var(--mono)'}}>
@@ -7875,12 +7875,13 @@ const toChoreoOp = (ev) => {
   if (ev.type === EVT.OP && content.op) {
     return {
       op: content.op,
-      target: content.target || {},
-      context: {
+      target: content.target || '',
+      operand: {
         table: roomType,
-        type: content.context?.type || ev.type,
-        source: content.context?.source || 'khora',
-        ...(content.context?.auto_intermediate ? { auto_intermediate: true } : {}),
+        type: content.operand?.type || ev.type,
+        source: content.operand?.source || 'khora',
+        ...(content.operand?.auto_intermediate ? { auto_intermediate: true } : {}),
+        ...Object.fromEntries(Object.entries(content.operand || {}).filter(([k]) => !['type','source','auto_intermediate'].includes(k))),
       },
       frame: {
         epistemic: (content.frame?.epistemic || content.frame?.type || 'given').toLowerCase(),
@@ -7891,38 +7892,39 @@ const toChoreoOp = (ev) => {
     };
   }
 
-  // Map Matrix state/timeline events into Choreo grammar
-  const target = {};
-  const context = { table: roomType, type: ev.type, source: 'matrix' };
+  // Map Matrix state/timeline events into Choreo grammar — build dot-notation target
+  const targetParts = [roomType];
+  if (ev.stateKey) targetParts.push(ev.stateKey);
+  if (content.name) targetParts.push(content.name);
+  const target = targetParts.filter(Boolean).join('.');
+  const operand = { table: roomType, type: ev.type, source: 'matrix' };
   const frame = {
     epistemic: (ev.epistemic || 'given').toLowerCase(),
     authority: ev.sender,
     confidence: 1.0,
   };
 
-  // Extract meaningful target fields from content
-  if (content.account_type) target.type = content.account_type;
-  if (ev.stateKey) target.id = ev.stateKey;
-  if (content.name) target.name = content.name;
-  if (content.fields) target.fields = Object.keys(content.fields);
-  if (content.providers) target.providers = (content.providers || []).length;
-  if (content.status) target.status = content.status;
-  if (content.membership) target.membership = content.membership;
-  if (content.client) target.client = content.client;
-  if (content.provider) target.provider = content.provider;
-  if (content.question) target.question = content.question.slice(0, 60);
-  if (content.body) target.body = content.body.slice(0, 80);
-  if (content.quantity != null) target.quantity = content.quantity;
-  if (content.unit) target.unit = content.unit;
-  if (content.category) target.category = content.category;
-  if (content.relationship_type) context.relationship_type = content.relationship_type;
-  if (content.algorithm) target.algorithm = content.algorithm;
-  if (content.allocated_to) target.allocated_to = content.allocated_to;
-  if (content.event) target.lifecycle_event = content.event;
-  if (content.value != null) target.value = content.value;
-  if (content.prompt_id) target.prompt_id = content.prompt_id;
+  // Extract meaningful operand fields from content
+  if (content.account_type) operand.account_type = content.account_type;
+  if (content.fields) operand.fields = Object.keys(content.fields);
+  if (content.providers) operand.providers = (content.providers || []).length;
+  if (content.status) operand.status = content.status;
+  if (content.membership) operand.membership = content.membership;
+  if (content.client) operand.client = content.client;
+  if (content.provider) operand.provider = content.provider;
+  if (content.question) operand.question = content.question.slice(0, 60);
+  if (content.body) operand.body = content.body.slice(0, 80);
+  if (content.quantity != null) operand.quantity = content.quantity;
+  if (content.unit) operand.unit = content.unit;
+  if (content.category) operand.category = content.category;
+  if (content.relationship_type) operand.relationship_type = content.relationship_type;
+  if (content.algorithm) operand.algorithm = content.algorithm;
+  if (content.allocated_to) operand.allocated_to = content.allocated_to;
+  if (content.event) operand.lifecycle_event = content.event;
+  if (content.value != null) operand.value = content.value;
+  if (content.prompt_id) operand.prompt_id = content.prompt_id;
 
-  return { op: ev.op, target, context, frame };
+  return { op: ev.op, target, operand, frame };
 };
 
 const ActivityStream = ({session}) => {
@@ -8186,17 +8188,18 @@ const ActivityStream = ({session}) => {
                   Absence: {ABSENCE_MAP[choreo.op]?.label}
                 </div>
               </div>
-              {/* target */}
+              {/* target — dot-notation path */}
               <div style={{padding:'10px 12px',borderRight:'1px solid var(--border-0)'}}>
                 <span className="section-label" style={{fontSize:8}}>TARGET</span>
-                <pre style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',marginTop:4,whiteSpace:'pre-wrap',wordBreak:'break-all',lineHeight:1.5,maxHeight:120,overflow:'auto'}}>
-{JSON.stringify(choreo.target, null, 2)}</pre>
+                <div style={{fontFamily:'var(--mono)',fontSize:12,color:'var(--tx-0)',marginTop:4,wordBreak:'break-all',lineHeight:1.5}}>
+                  {typeof choreo.target === 'string' ? choreo.target : JSON.stringify(choreo.target, null, 2)}
+                </div>
               </div>
-              {/* context */}
+              {/* operand — data payload */}
               <div style={{padding:'10px 12px',borderRight:'1px solid var(--border-0)'}}>
-                <span className="section-label" style={{fontSize:8}}>CONTEXT</span>
+                <span className="section-label" style={{fontSize:8}}>OPERAND</span>
                 <div style={{marginTop:4,display:'flex',flexDirection:'column',gap:3}}>
-                  {Object.entries(choreo.context).map(([k,v]) => (
+                  {Object.entries(choreo.operand).map(([k,v]) => (
                     <div key={k} style={{display:'flex',gap:6,alignItems:'baseline'}}>
                       <span style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--tx-3)',minWidth:50}}>{k}:</span>
                       <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',wordBreak:'break-all'}}>{String(v)}</span>
@@ -8237,7 +8240,7 @@ const ActivityStream = ({session}) => {
             {/* Raw JSON (Choreo format) */}
             {isJsonExp&&<div style={{borderTop:'1px solid var(--border-0)',padding:'10px 12px',background:'var(--bg-0)'}}>
               <pre style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-1)',whiteSpace:'pre-wrap',wordBreak:'break-all',lineHeight:1.5,maxHeight:300,overflow:'auto'}}>
-{JSON.stringify({ op: choreo.op, target: choreo.target, context: choreo.context, frame: choreo.frame, _meta: { id: ev.id, ts: ev.ts ? new Date(ev.ts).toISOString() : null, sender: ev.sender, room: ev.roomId, matrix_type: ev.type } }, null, 2)}</pre>
+{JSON.stringify({ op: choreo.op, target: choreo.target, operand: choreo.operand, frame: choreo.frame, _meta: { id: ev.id, ts: ev.ts ? new Date(ev.ts).toISOString() : null, sender: ev.sender, room: ev.roomId, matrix_type: ev.type } }, null, 2)}</pre>
             </div>}
           </div>}
         </div>;
@@ -8249,7 +8252,7 @@ const ActivityStream = ({session}) => {
       <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:'var(--mono)'}}>
         <thead>
           <tr style={{borderBottom:'2px solid var(--border-1)'}}>
-            {['#','OP','TABLE','EPISTEMIC','TARGET','CONTEXT SOURCE','AUTHORITY','CONF','TIME'].map(h=>
+            {['#','OP','TABLE','EPISTEMIC','TARGET','OPERAND SOURCE','AUTHORITY','CONF','TIME'].map(h=>
               <th key={h} style={{padding:'8px 6px',textAlign:'left',fontSize:9,fontWeight:600,color:'var(--tx-2)',letterSpacing:'.06em',whiteSpace:'nowrap'}}>{h}</th>
             )}
           </tr>
@@ -8264,10 +8267,10 @@ const ActivityStream = ({session}) => {
               onMouseEnter={e=>e.currentTarget.style.background='var(--bg-2)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
               <td style={{padding:'6px',color:'var(--tx-3)',fontSize:9}}>{seqId}</td>
               <td style={{padding:'6px'}}><span className={`tag tag-${opC}`} style={{fontSize:9,fontFamily:'var(--mono)'}}>{ev.op}</span></td>
-              <td style={{padding:'6px',color:'var(--tx-1)'}}>{choreo.context.table}</td>
+              <td style={{padding:'6px',color:'var(--tx-1)'}}>{choreo.operand.table}</td>
               <td style={{padding:'6px'}}><span className={`tag ${ev.epistemic==='GIVEN'?'tag-teal':'tag-gold'}`} style={{fontSize:8.5}}>{choreo.frame.epistemic}</span></td>
               <td style={{padding:'6px',color:'var(--tx-1)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ev.desc||ev.label}</td>
-              <td style={{padding:'6px',color:'var(--tx-2)'}}>{choreo.context.source}</td>
+              <td style={{padding:'6px',color:'var(--tx-2)'}}>{choreo.operand.source}</td>
               <td style={{padding:'6px',color:'var(--tx-2)',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{choreo.frame.authority}</td>
               <td style={{padding:'6px',color:choreo.frame.confidence>=0.8?'var(--green)':choreo.frame.confidence>=0.5?'var(--gold)':'var(--red)'}}>{choreo.frame.confidence}</td>
               <td style={{padding:'6px',color:'var(--tx-3)',fontSize:9,whiteSpace:'nowrap'}}>{ev.ts?new Date(ev.ts).toLocaleTimeString():''}</td>
@@ -8676,7 +8679,7 @@ const PersonalDashboard = ({session, providers, observations, myResources, vault
               id: ev.getId(), category: 'fields', ts, provName, orgName, sender,
               icon: 'git-commit', iconBg: 'var(--teal-dim)', iconColor: 'var(--teal)',
               title: `${content.op || 'EO'} operation by ${provName}`,
-              desc: `${content.target?.field || content.target?.entity || content.target?.type || 'entity'} — ${content.frame?.epistemic || 'MEANT'}`,
+              desc: `${content.target || 'entity'} — ${content.frame?.epistemic || 'MEANT'}`,
               tags: [{label:content.op||'OP',cls:'tag-teal'},{label:content.frame?.epistemic||'MEANT',cls:content.frame?.epistemic==='GIVEN'?'tag-teal':'tag-gold'}]
             });
           }
@@ -8970,7 +8973,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     return cats;
   }, [customFieldDefs, frameworkFields]);
 
-  // INS(custom_field_def, user_defined, schema_extension) — client creates custom vault field
+  // INS(vault.custom_field_def, {user_defined}) — schema_extension — client creates custom vault field
   const handleAddCustomField = async () => {
     const label = newFieldLabel.trim();
     if (!label) return;
@@ -8978,18 +8981,18 @@ const ClientApp = ({session, onLogout, showToast}) => {
     if (allFields.some(f => f.key === key)) { showToast('A field with that name already exists','error'); return; }
     const def = {key, label, category: newFieldCategory, sensitive: newFieldSensitive, custom: true};
     const updated = [...customFieldDefs, def];
-    await emitOp(vaultRoom, 'INS', {field:key,entity:'custom_field_def'}, {label,category:newFieldCategory,sensitive:newFieldSensitive}, vaultFrame());
+    await emitOp(vaultRoom, 'INS', dot('vault','custom_field_def',key), {label,category:newFieldCategory,sensitive:newFieldSensitive}, vaultFrame());
     await saveSnapshot(undefined, undefined, undefined, updated);
     setAddFieldModal(false); setNewFieldLabel(''); setNewFieldCategory('details'); setNewFieldSensitive(false);
     showToast(`Custom field "${label}" created`, 'success');
   };
 
-  // NUL(custom_field, client_deleted, schema_retraction) — removes field definition and data
+  // NUL(vault.custom_field, {reason: client_deleted}) — schema_retraction — removes field definition and data
   const handleDeleteCustomField = async (fieldKey) => {
     const updated = customFieldDefs.filter(f => f.key !== fieldKey);
     const updatedData = {...vaultData};
     delete updatedData[fieldKey];
-    await emitOp(vaultRoom, 'NUL', {field:fieldKey,entity:'custom_field_def'}, {reason:'client_deleted'}, vaultFrame());
+    await emitOp(vaultRoom, 'NUL', dot('vault','custom_field_def',fieldKey), {reason:'client_deleted'}, vaultFrame());
     await saveSnapshot(updatedData, undefined, undefined, updated);
     showToast('Custom field removed', 'warn');
   };
@@ -8997,11 +9000,11 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const vaultFrame = (room) => ({type:'vault',room:room||vaultRoom,role:'client',epistemic:'GIVEN'});
   const bridgeFrame = (room) => ({type:'bridge',room,role:'client',epistemic:'MEANT'});
 
-  // INS(vault_room, identity+snapshot+schema, sovereign_creation) — creates the client's entire data sovereignty container
+  // INS(vault.room, {identity, snapshot, schema}) — sovereign_creation — creates the client's entire data sovereignty container
   // Operator Manifest for initVault:
-  //   INS(vault_room, identity+snapshot, sovereign_creation) — if no vault exists
-  //   DES(schema_catalog, forms+definitions, canonical_vocabulary) — seeds personal schema
-  //   CON(auto_join, invited_rooms, client_record_claim) — joins pending invites
+  //   INS(vault.room, {identity, snapshot}) — sovereign_creation — if no vault exists
+  //   DES(vault.schema_catalog, {forms, definitions}) — canonical_vocabulary — seeds personal schema
+  //   CON(vault.auto_join, {invited_rooms}) — client_record_claim — joins pending invites
   //   No REC — vault frame is client-sovereign and stable.
   const initVault = async () => {
     setLoading(true);
@@ -9162,7 +9165,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     setMyResources(resources);
   };
 
-  // ALT(vault_snapshot, updated_fields, atomic_persistence) — single state write for all vault data
+  // ALT(vault.snapshot, {updated_fields}) — atomic_persistence — single state write for all vault data
   const saveSnapshot = async (fields, obs, mc, cfd, ef) => {
     const snapshot = {fields:fields??vaultData, observations:obs??observations, metrics_consent:mc??metricsConsent, custom_field_defs:cfd??customFieldDefs, enabled_frameworks:ef??enabledFrameworks,
       last_modified_by: svc.userId, last_modified_at: Date.now(), origin_server: extractHomeserver(svc.userId)};
@@ -9176,21 +9179,21 @@ const ClientApp = ({session, onLogout, showToast}) => {
   };
 
   // Edit identity fields — emits INS, ALT, or NUL per field depending on change type
-  // INS(field.value, client_input, vault_population) — new field
-  // ALT(field.value, old→new, vault_update) — changed field
-  // NUL(field.value, client_cleared, vault_clearance) — cleared field
+  // INS(vault.field.value, {source: client_input}) — vault_population — new field
+  // ALT(vault.field.value, {from: old, to: new}) — vault_update — changed field
+  // NUL(vault.field.value, {reason: client_cleared}) — vault_clearance — cleared field
   const handleEditSave = async () => {
     const updated = {...vaultData, ...editData};
     for (const [key, val] of Object.entries(editData)) {
       if (val && !vaultData[key]) {
         // INS — field first populated
-        await emitOp(vaultRoom, 'INS', {field:key,value:val}, {source:'client_input'}, vaultFrame());
+        await emitOp(vaultRoom, 'INS', dot('vault','fields',key), {value:val,source:'client_input'}, vaultFrame());
       } else if (val && vaultData[key] && val !== vaultData[key]) {
         // ALT — value change within stable frame
-        await emitOp(vaultRoom, 'ALT', {field:key,entity:'client_profile'}, {from:vaultData[key],to:val,source:'client_input'}, vaultFrame());
+        await emitOp(vaultRoom, 'ALT', dot('vault','client_profile',key), {from:vaultData[key],to:val,source:'client_input'}, vaultFrame());
       } else if (!val && vaultData[key]) {
         // NUL — existence removal
-        await emitOp(vaultRoom, 'NUL', {field:key,entity:'client_profile'}, {reason:'client_cleared',previous_value:vaultData[key]}, vaultFrame());
+        await emitOp(vaultRoom, 'NUL', dot('vault','client_profile',key), {reason:'client_cleared',previous_value:vaultData[key]}, vaultFrame());
       }
     }
     await saveSnapshot(updated);
@@ -9203,15 +9206,15 @@ const ClientApp = ({session, onLogout, showToast}) => {
     }
   };
 
-  // INS(observation, client_report, GIVEN_attestation) — this is the GIVEN entry point
-  // If metrics consent enabled: → SYN(observation + anon_demographics, cohort_hash, metric_emission)
+  // INS(vault.observation, {source: client_report}) — GIVEN_attestation — this is the GIVEN entry point
+  // If metrics consent enabled: → SYN(metrics.observation+anon_demographics, {via: cohort_hash}) — metric_emission
   const handleRecordObservation = async () => {
     if (!obsValue || !obsModal) return;
     const obs = { id:genOpId(), category:obsModal.key, value:obsValue, date:obsDate, prompt_id:obsModal.id,
       schema_version:obsModal.version||1, free_text:obsFreeText||undefined, ts:Date.now(),
       created_by: svc.userId, origin_server: extractHomeserver(svc.userId) };
-    await emitOp(vaultRoom, 'INS', {type:'observation',category:obsModal.key,value:obsValue,date:obsDate},
-      {reported_by:'client',method:'self_report',prompt:obsModal.question,free_text:obsFreeText||undefined}, vaultFrame());
+    await emitOp(vaultRoom, 'INS', dot('vault','observations',obsModal.key),
+      {value:obsValue,date:obsDate,reported_by:'client',method:'self_report',prompt:obsModal.question,free_text:obsFreeText||undefined}, vaultFrame());
     const newObs = [...observations, obs];
     await saveSnapshot(undefined, newObs);
     setObsModal(null); setObsValue(''); setObsFreeText('');
@@ -9226,7 +9229,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     }
   };
 
-  // CON(client → provider, bridge_room, relationship_establishment) + INS(bridge_room, e2ee+meta+refs, secure_channel)
+  // CON(vault.providers.{id}, {bridge_room, initiated_by: client}) — relationship_establishment + INS(bridge.room, {e2ee, meta, refs}) — secure_channel
   const handleAddProvider = async () => {
     if (!newProviderId.trim()) return;
     try {
@@ -9235,8 +9238,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
         {type:EVT.BRIDGE_REFS,state_key:'',content:{fields:{}}},
       ]);
       await svc.invite(bridgeId, newProviderId);
-      await emitOp(vaultRoom, 'CON', {source:svc.userId,destination:newProviderId,relationship:RELATIONSHIP_TYPES.client_provider.id},
-        {bridge_room:bridgeId,initiated_by:'client'}, vaultFrame());
+      await emitOp(vaultRoom, 'CON', dot('vault','providers',newProviderId),
+        {relationship:RELATIONSHIP_TYPES.client_provider.id,bridge_room:bridgeId,initiated_by:'client'}, vaultFrame());
       const newProv = {bridgeRoomId:bridgeId,providerUserId:newProviderId,sharedFields:{},providerName:newProviderId,transferable:true};
       await saveProviderIndex([...providers, newProv]);
       setAddProviderModal(false); setNewProviderId('');
@@ -9244,7 +9247,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Failed: '+e.message,'error'); }
   };
 
-  // ALT(bridge_refs, re_encrypted_fields, selective_sync) — encrypts shared fields with fresh keys
+  // ALT(bridge.refs, {re_encrypted_fields}) — selective_sync — encrypts shared fields with fresh keys
   const syncFieldsToBridge = async (bridgeRoomId, sharedFields, data) => {
     const refs = {};
     for (const [fk, shared] of Object.entries(sharedFields)) {
@@ -9257,20 +9260,20 @@ const ClientApp = ({session, onLogout, showToast}) => {
     await svc.setState(bridgeRoomId, EVT.BRIDGE_REFS, {fields:refs, updated:Date.now()});
   };
 
-  // SEG(field_visibility, shared|revoked, access_partitioning) — key rotation on each toggle
+  // SEG(bridge.field_visibility, {state: shared|revoked}) — access_partitioning — key rotation on each toggle
   const handleToggleField = async (pi, fk) => {
     const prov = providers[pi];
     const newShared = {...prov.sharedFields, [fk]:!prov.sharedFields[fk]};
     const ups = [...providers]; ups[pi] = {...prov, sharedFields:newShared};
     await saveProviderIndex(ups);
-    await emitOp(prov.bridgeRoomId, 'SEG', {field:fk,visibility:newShared[fk]?'shared':'revoked'},
-      {provider:prov.providerUserId}, bridgeFrame(prov.bridgeRoomId), newShared[fk]?[]:[`prev_seg_${fk}`]);
+    await emitOp(prov.bridgeRoomId, 'SEG', dot('bridge','fields',fk),
+      {visibility:newShared[fk]?'shared':'revoked',provider:prov.providerUserId}, bridgeFrame(prov.bridgeRoomId), newShared[fk]?[]:[`prev_seg_${fk}`]);
     await syncFieldsToBridge(prov.bridgeRoomId, newShared, vaultData);
     const label = allFields.find(f=>f.key===fk)?.label||fk;
     showToast(newShared[fk]?`Shared ${label} — new key issued`:`Revoked ${label} — key destroyed`, newShared[fk]?'success':'warn');
   };
 
-  // ALT(bridge.transferable, boolean_flip, transferability_policy)
+  // ALT(bridge.transferable, {boolean_flip}) — transferability_policy
   // Toggle whether this client allows their case to be transferred between providers within the org
   const handleToggleTransferable = async (pi) => {
     const prov = providers[pi];
@@ -9279,8 +9282,8 @@ const ClientApp = ({session, onLogout, showToast}) => {
       // Update bridge meta (client has PL 100 — full control)
       const currentMeta = await svc.getState(prov.bridgeRoomId, EVT.BRIDGE_META);
       await svc.setState(prov.bridgeRoomId, EVT.BRIDGE_META, {...currentMeta, transferable: newVal});
-      await emitOp(prov.bridgeRoomId, 'ALT', {entity:'bridge',field:'transferable',value:newVal},
-        {reason:newVal?'client_enabled_transfer':'client_disabled_transfer'}, bridgeFrame(prov.bridgeRoomId));
+      await emitOp(prov.bridgeRoomId, 'ALT', dot('bridge','transferable'),
+        {value:newVal,reason:newVal?'client_enabled_transfer':'client_disabled_transfer'}, bridgeFrame(prov.bridgeRoomId));
       // Update local provider index
       const ups = [...providers]; ups[pi] = {...prov, transferable: newVal};
       await saveProviderIndex(ups);
@@ -9288,10 +9291,10 @@ const ClientApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Failed to update transfer setting: '+e.message, 'error'); }
   };
 
-  // ⚠️ HIGHEST-RISK VAULT OPERATION: NUL(old_bridge) → INS(new_bridge) → CON(re_establish)
-  // NUL(old_bridge, hard_revoke, relationship_destruction) — tombstone old room
-  // INS(new_bridge, fresh_keys, clean_room) — create replacement
-  // CON(client → provider, new_bridge, relationship_re_establishment) — re-link
+  // ⚠️ HIGHEST-RISK VAULT OPERATION: NUL(bridge.old, {}) → INS(bridge.new, {}) → CON(bridge.connection, {})
+  // NUL(bridge.old, {reason: hard_revoke}) — relationship_destruction — tombstone old room
+  // INS(bridge.new, {fresh_keys}) — clean_room — create replacement
+  // CON(bridge.connection, {new_bridge, initiated_by: client}) — relationship_re_establishment — re-link
   // All old keys destroyed. All shared data re-encrypted with new keys.
   const handleHardRevoke = async (pi) => {
     const prov = providers[pi];
@@ -9300,14 +9303,14 @@ const ClientApp = ({session, onLogout, showToast}) => {
         {type:EVT.BRIDGE_META,state_key:'',content:{client:svc.userId,provider:prov.providerUserId,relationship_type:RELATIONSHIP_TYPES.client_provider.id,created:Date.now(),status:'active',previous:prov.bridgeRoomId,transferable:prov.transferable!==false,org_id:null,assigned_staff:[prov.providerUserId],created_by:svc.userId,origin_server:extractHomeserver(svc.userId)}},
         {type:EVT.BRIDGE_REFS,state_key:'',content:{fields:{}}},
       ]);
-      await emitOp(prov.bridgeRoomId, 'NUL', {entity:'bridge',field:'relationship'}, {reason:'hard_revoke'}, bridgeFrame(prov.bridgeRoomId));
+      await emitOp(prov.bridgeRoomId, 'NUL', dot('bridge','relationship'), {reason:'hard_revoke'}, bridgeFrame(prov.bridgeRoomId));
       const stillShared = Object.fromEntries(Object.entries(prov.sharedFields).filter(([,v])=>v));
       if (Object.keys(stillShared).length > 0) await syncFieldsToBridge(newBridgeId, stillShared, vaultData);
       await svc.invite(newBridgeId, prov.providerUserId);
       await svc.tombstone(prov.bridgeRoomId, newBridgeId);
       try { await svc.kick(prov.bridgeRoomId, prov.providerUserId, 'Bridge rotated — data revoked'); } catch {}
-      await emitOp(newBridgeId, 'CON', {source:svc.userId,destination:prov.providerUserId,relationship:RELATIONSHIP_TYPES.client_provider.id},
-        {bridge_room:newBridgeId,initiated_by:'client',reason:'hard_revoke_replacement'}, bridgeFrame(newBridgeId));
+      await emitOp(newBridgeId, 'CON', dot('bridge','connection',prov.providerUserId),
+        {relationship:RELATIONSHIP_TYPES.client_provider.id,bridge_room:newBridgeId,initiated_by:'client',reason:'hard_revoke_replacement'}, bridgeFrame(newBridgeId));
       const ups = [...providers]; ups[pi] = {...prov, bridgeRoomId:newBridgeId};
       await saveProviderIndex(ups);
       setHardRevokeTarget(null);
@@ -9315,13 +9318,13 @@ const ClientApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Hard revoke failed: '+e.message,'error'); }
   };
 
-  // NUL(relationship, full_severance, permanent_disconnection) — kicks provider, clears all refs
+  // NUL(vault.relationship, {reason: full_severance}) — permanent_disconnection — kicks provider, clears all refs
   const handleRemoveProvider = async (pi) => {
     const prov = providers[pi];
     try {
       try { await svc.kick(prov.bridgeRoomId, prov.providerUserId); } catch {}
       await svc.setState(prov.bridgeRoomId, EVT.BRIDGE_REFS, {fields:{},revoked:true,updated:Date.now()});
-      await emitOp(vaultRoom, 'NUL', {entity:'team_member_relationship',field:prov.providerUserId},
+      await emitOp(vaultRoom, 'NUL', dot('vault','relationships',prov.providerUserId),
         {reason:'full_severance',bridge:prov.bridgeRoomId}, vaultFrame());
       await saveProviderIndex(providers.filter((_,i)=>i!==pi));
       showToast(`${ROLES.provider.label} removed, all keys destroyed`,'warn');
@@ -9331,7 +9334,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
   // ─── Room claiming: client takes ownership of a provider-created client_record room ───
   const claimFrame = (room) => ({type:'client_record',room,role:'client',epistemic:'GIVEN'});
 
-  // ALT(room_ownership, client_claim, sovereignty_transfer) — client takes PL 100, previous owner drops to PL 50
+  // ALT(room.ownership, {client_claim}) — sovereignty_transfer — client takes PL 100, previous owner drops to PL 50
   const handleClaimRoom = async (record) => {
     try {
       // 0. Ensure we've joined the room (required before writing state)
@@ -9354,7 +9357,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
       });
       // 3. Emit ALT operation recording the ownership transfer
       await emitOp(record.roomId, 'ALT',
-        {entity: 'room_ownership', field: 'owner'},
+        dot('room','ownership','owner'),
         {from: previousOwner, to: svc.userId, reason: 'client_claim'},
         claimFrame(record.roomId));
       // 4. Move from pending to claimed
@@ -9367,19 +9370,19 @@ const ClientApp = ({session, onLogout, showToast}) => {
     } catch (e) { showToast('Claim failed: ' + e.message, 'error'); }
   };
 
-  // NUL(room_member, owner_revocation, access_removal) — kicks user from claimed room
+  // NUL(room.member, {reason: owner_revocation}) — access_removal — kicks user from claimed room
   const handleRevokeFromClaimed = async (record, targetUserId) => {
     try {
       await svc.kick(record.roomId, targetUserId, 'Removed by room owner');
       await emitOp(record.roomId, 'NUL',
-        {entity: 'room_member', field: targetUserId},
+        dot('room','members',targetUserId),
         {reason: 'owner_revocation', removed_by: svc.userId},
         claimFrame(record.roomId));
       showToast(`Removed ${targetUserId} from room`, 'warn');
     } catch (e) { showToast('Remove failed: ' + e.message, 'error'); }
   };
 
-  // NUL(client_record, owner_closed, permanent_decommission) — tombstones room permanently
+  // NUL(room.client_record, {reason: owner_closed}) — permanent_decommission — tombstones room permanently
   const handleDeleteClaimedRoom = async (record) => {
     try {
       // Tombstone the room — marks it as permanently closed
@@ -9387,7 +9390,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
         body: 'This room has been closed by the owner',
       });
       await emitOp(record.roomId, 'NUL',
-        {entity: 'client_record', field: 'room'},
+        dot('room','client_record','room'),
         {reason: 'owner_closed', closed_by: svc.userId},
         claimFrame(record.roomId));
       setClaimedRooms(prev => prev.filter(r => r.roomId !== record.roomId));
@@ -9395,19 +9398,19 @@ const ClientApp = ({session, onLogout, showToast}) => {
     } catch (e) { showToast('Close failed: ' + e.message, 'error'); }
   };
 
-  // ⚠️ REC(metrics_consent, enabled|disabled, data_flow_reinterpretation)
+  // ⚠️ REC(vault.metrics_consent, {state: enabled|disabled}) — data_flow_reinterpretation
   // INTERPRETATION SHIFT: changes what downstream systems receive. When enabled,
   // anonymized demographics flow to metrics rooms. When disabled, flow stops entirely.
   const handleMetricsToggle = async () => {
     const newConsent = {...metricsConsent, enabled:!metricsConsent.enabled,
       categories:!metricsConsent.enabled? DEFAULT_PROMPTS.filter(p=>p.metrics).map(p=>p.category) : []};
-    await emitOp(vaultRoom, 'REC', {rule:'metrics_consent',scope:'vault'},
+    await emitOp(vaultRoom, 'REC', dot('vault','consent','metrics'),
       {consent_level:newConsent.enabled?'anonymized_demographics':'none',categories:newConsent.categories}, vaultFrame());
     await saveSnapshot(undefined, undefined, newConsent);
     showToast(newConsent.enabled?'Metrics consent enabled — anonymized data will flow':'Metrics consent revoked',newConsent.enabled?'success':'warn');
   };
 
-  // ⚠️ REC(sharing_consent, shared|withheld, visibility_reinterpretation)
+  // ⚠️ REC(vault.sharing_consent, {state: shared|withheld}) — visibility_reinterpretation
   // INTERPRETATION SHIFT: reinterprets what team members can see about individuals.
   // Handle sharing consent response — client-side team member proactively chooses whether to withhold content
   const handleClientSharingConsent = async (team, withhold) => {
@@ -9417,7 +9420,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
         m.userId === svc.userId ? {...m, sharing_consent: consentValue} : m
       );
       await svc.setState(team.roomId, EVT.TEAM_MEMBERS, {members: updatedMembers});
-      await emitOp(team.roomId, 'REC', {entity:'sharing_consent',field:svc.userId}, {consent:consentValue,decided_by:svc.userId}, vaultFrame());
+      await emitOp(team.roomId, 'REC', dot('org','consent','sharing',svc.userId), {consent:consentValue,decided_by:svc.userId}, vaultFrame());
       setMyTeams(prev => prev.map(t => t.roomId === team.roomId ? {...t, members: updatedMembers} : t));
       setClientSharingConsentModal(null);
       if (withhold) {
@@ -9432,7 +9435,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const handleSendBridgeMsg = async () => {
     if (!msgText.trim()||!activeBridge) return;
     await svc.sendMessage(activeBridge, msgText, {[`${NS}.type`]:'note'});
-    await emitOp(activeBridge, 'INS', {type:'client_note',field:'message'}, {body:msgText}, bridgeFrame(activeBridge));
+    await emitOp(activeBridge, 'INS', dot('bridge','messages','client_note'), {body:msgText}, bridgeFrame(activeBridge));
     setMsgText(''); setTimeout(()=>loadBridgeMessages(activeBridge),500);
   };
   const openBridge = (bid) => { setActiveBridge(bid); setView('bridge'); loadBridgeMessages(bid); };
@@ -9449,7 +9452,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
     const prov = providers[inboxConvo];
     if (!prov) return;
     await svc.sendMessage(prov.bridgeRoomId, inboxMsgText, {[`${NS}.type`]:'note'});
-    await emitOp(prov.bridgeRoomId, 'INS', {type:'client_note',field:'message'}, {body:inboxMsgText}, bridgeFrame(prov.bridgeRoomId));
+    await emitOp(prov.bridgeRoomId, 'INS', dot('bridge','messages','client_note'), {body:inboxMsgText}, bridgeFrame(prov.bridgeRoomId));
     setInboxMsgText('');
     setTimeout(() => loadInboxMessages(prov.bridgeRoomId), 500);
   };
@@ -10948,7 +10951,7 @@ const NoteCreateModal = ({open, onClose, individuals, staff, svc, rosterRoom, on
       // Emit EO operation to track note creation in the activity stream
       try {
         await emitOp(targetRoom, 'INS',
-          {type:'note', entity:'note', field: noteData.title || 'untitled'},
+          dot(attachTo?'bridge':'roster','notes',noteData.id),
           {note_id: noteData.id, attached_to: attachTo || undefined, author: svc.userId},
           {type: attachTo ? 'bridge' : 'roster', room: targetRoom, role: 'provider', epistemic: 'MEANT'});
       } catch(oe) { console.warn('Note EO event failed:', oe.message); }
@@ -12158,9 +12161,9 @@ const ProfileActivityFeed = ({individual, svc}) => {
                 id: ev.getId(),
                 op: content.op,
                 epistemic: content.frame?.epistemic || 'MEANT',
-                label: content.target?.field || content.target?.entity || content.op + ' Operation',
-                desc: [content.context?.from, content.context?.to].filter(Boolean).join(' → ') ||
-                      content.context?.edit_source || '',
+                label: content.target || content.op + ' Operation',
+                desc: [content.operand?.from, content.operand?.to].filter(Boolean).join(' → ') ||
+                      content.operand?.edit_source || '',
                 sender: ev.getSender(),
                 ts: ev.getTs(),
               });
@@ -13026,11 +13029,11 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       const type = d.type;
       if (type === EVT.OP) {
         const op = d.content?.op;
-        const targetField = d.content?.target?.field || d.content?.target?.entity || '';
+        const targetPath = d.content?.target || '';
         addNotification({
           type: 'data_change',
-          title: `${op || 'EO'} operation: ${targetField}`,
-          description: `${d.sender?.split(':')[0]?.slice(1) || 'Someone'} performed ${op} on ${targetField}`,
+          title: `${op || 'EO'} operation: ${targetPath}`,
+          description: `${d.sender?.split(':')[0]?.slice(1) || 'Someone'} performed ${op} on ${targetPath}`,
         });
       } else if (type === EVT.OBSERVATION) {
         addNotification({
@@ -13471,9 +13474,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       try {
         const roomId = row.bridgeRoom || row.id;
         // Emit EO operation to track the edit
-        await emitOp(roomId, oldValue ? 'ALT' : 'INS', {
-          entity: 'individual', field: fieldKey,
-        }, {
+        await emitOp(roomId, oldValue ? 'ALT' : 'INS',
+          dot('org','individuals',fieldKey), {
           from: oldValue || undefined,
           to: newValue,
           edit_source: 'database_view',
@@ -13547,7 +13549,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         const roomId = rowId;
         try {
           await emitOp(roomId, 'NUL',
-            { entity: 'individual', field: 'status' },
+            dot('org','individuals','status'),
             { from: c ? 'active' : 'created', to: 'removed', edit_source: 'database_bulk' },
             { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
           if (orgRoom && caseAssignments[roomId]) {
@@ -13576,7 +13578,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             setCaseAssignments(updatedAssignments);
           }
           await emitOp(rowId, 'ALT',
-            { entity: 'individual', field: 'assigned_to' },
+            dot('org','individuals','assigned_to'),
             { to: staffName, edit_source: 'database_bulk' },
             { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
         } catch (e) { console.warn('Bulk assign failed for', rowId, e.message); }
@@ -13597,7 +13599,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     });
     try {
       emitOp(orgRoom || rosterRoom, 'ALT',
-        { entity: 'individual_order', field: 'sort_order' },
+        dot('org','individual_order','sort_order'),
         { from: fromIdx, to: toIdx, edit_source: 'database_drag' },
         { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
     } catch (e) { /* silent */ }
@@ -13709,14 +13711,14 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const handleSendMsg = async () => {
     if (!msgText.trim()||!activeCase) return;
     await svc.sendMessage(activeCase, msgText, {[`${NS}.type`]:'note'});
-    await emitOp(activeCase, 'INS', {type:'provider_note',field:'message'}, {body:msgText}, bridgeFrame(activeCase));
+    await emitOp(activeCase, 'INS', dot('bridge','messages','provider_note'), {body:msgText}, bridgeFrame(activeCase));
     setMsgText(''); setTimeout(()=>loadMessages(activeCase),500);
   };
 
   const handleSendRequest = async () => {
     if (!requestText.trim()||!activeCase) return;
     await svc.sendMessage(activeCase, `Information Request: ${requestText}`, {[`${NS}.type`]:'request'});
-    await emitOp(activeCase, 'DES', {type:'information_request',entity:'case'}, {request:requestText}, bridgeFrame(activeCase));
+    await emitOp(activeCase, 'DES', dot('bridge','case','information_request'), {request:requestText}, bridgeFrame(activeCase));
     setRequestText(''); showToast('Request sent to client','success'); setTimeout(()=>loadMessages(activeCase),500);
   };
 
@@ -13732,8 +13734,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     };
     await svc.sendEvent(activeCase, EVT.OBSERVATION, obs);
     await emitOp(activeCase, 'INS',
-      {type:'provider_observation',field:provObsModal.key,value:provObsValue},
-      {prompt:provObsModal.question,notes:provObsNotes||undefined,
+      dot('bridge','observations',provObsModal.key),
+      {value:provObsValue,prompt:provObsModal.question,notes:provObsNotes||undefined,
        epistemic_crossing:provObsModal.category==='assessment'?'GIVEN → MEANT':undefined},
       bridgeFrame(activeCase));
     setProvObservations(prev=>[...prev,obs]);
@@ -13837,10 +13839,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, {assignments: updatedAssignments});
       setCaseAssignments(updatedAssignments);
       // Step 4: Emit EO operation
-      await emitOp(orgRoom, 'ALT', {
-        entity:'case_assignment', field:'provider',
+      await emitOp(orgRoom, 'ALT',
+        dot('org','case_assignment','provider'), {
         from: c.meta.provider, to: transferTarget,
-      }, {
         bridge_room: c.bridgeRoomId,
         client: c.clientUserId,
         reason: 'org_transfer',
@@ -13882,7 +13883,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           });
         } catch (e) { console.warn('Invite failed:', e.message); }
       }
-      await emitOp(roomId, 'DES', {entity:'client_record',field:newClientName}, {created_by:svc.userId,client_id:clientId||undefined,status:clientId?'invited':'created'}, orgFrame());
+      await emitOp(roomId, 'DES', dot('org','client_record',newClientName), {created_by:svc.userId,client_id:clientId||undefined,status:clientId?'invited':'created'}, orgFrame());
       const newRecord = {
         roomId, client_name: newClientName, client_matrix_id: clientId,
         notes: newClientNotes || undefined, owner: svc.userId,
@@ -13892,10 +13893,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       setCreateClientModal(false);
       // Emit EO event to track individual creation
       try {
-        await emitOp(roomId, 'INS', {
-          entity: 'individual',
+        await emitOp(roomId, 'INS',
+          dot('org','individuals',newClientName), {
           designation: newClientName,
-        }, {
           client_name: newClientName,
           client_matrix_id: clientId || undefined,
           edit_source: 'client_creation',
@@ -13919,7 +13919,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       await svc.setState(clientInviteModal.roomId, EVT.IDENTITY, {
         ...clientInviteModal, client_matrix_id: clientId, status: 'invited',
       });
-      await emitOp(clientInviteModal.roomId, 'CON', {entity:'client_record',field:clientId}, {invited_by:svc.userId,status:'invited'}, orgFrame());
+      await emitOp(clientInviteModal.roomId, 'CON', dot('org','client_record',clientId), {invited_by:svc.userId,status:'invited'}, orgFrame());
       setClientRecords(prev => prev.map(r =>
         r.roomId === clientInviteModal.roomId
           ? { ...r, client_matrix_id: clientId, status: 'invited' }
@@ -13955,7 +13955,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           mode:'lead_decides', modified_by:svc.userId, modified_at:Date.now(),
         }},
       ]);
-      await emitOp(roomId, 'DES', {entity:'team',field:newTeamName}, {created_by:svc.userId,org:orgMeta.name||null}, orgFrame());
+      await emitOp(roomId, 'DES', dot('org','teams',newTeamName), {created_by:svc.userId,org:orgMeta.name||null}, orgFrame());
       const newTeam = {
         roomId, name:newTeamName, description:newTeamDesc||'', created:Date.now(),
         created_by:svc.userId, org_id:orgRoom||null, org_name:orgMeta.name||null,
@@ -13981,7 +13981,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       // Update the members list — new members start with sharing_consent:'pending' so they must proactively choose
       const updatedMembers = [...(teamInviteModal.members||[]), {userId:uid,role:'member',joined:Date.now(),sharing_consent:'pending'}];
       await svc.setState(teamInviteModal.roomId, EVT.TEAM_MEMBERS, {members:updatedMembers});
-      await emitOp(teamInviteModal.roomId, 'CON', {entity:'team_member',field:uid}, {invited_by:svc.userId,role:'member'}, orgFrame());
+      await emitOp(teamInviteModal.roomId, 'CON', dot('org','teams','members',uid), {invited_by:svc.userId,role:'member'}, orgFrame());
       setTeams(prev => prev.map(t => t.roomId===teamInviteModal.roomId ? {...t, members:updatedMembers} : t));
       showToast(`Invited ${uid} to team`,'success');
       setTeamInviteUserId('');
@@ -13996,7 +13996,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         m.userId === memberId ? {...m, sharing_consent: consentValue} : m
       );
       await svc.setState(team.roomId, EVT.TEAM_MEMBERS, {members: updatedMembers});
-      await emitOp(team.roomId, 'REC', {entity:'sharing_consent',field:memberId}, {consent:consentValue,decided_by:memberId}, orgFrame());
+      await emitOp(team.roomId, 'REC', dot('org','consent','sharing',memberId), {consent:consentValue,decided_by:memberId}, orgFrame());
       setTeams(prev => prev.map(t => t.roomId === team.roomId ? {...t, members: updatedMembers} : t));
       setSharingConsentModal(null);
       if (withhold) {
@@ -14056,7 +14056,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Error: '+e.message,'error'); }
   };
 
-  // INS(network_room, identity+members, federation_creation) + DES(schema_catalog, forms+definitions, canonical_vocabulary) + INS(seed_resources, defaults, initial_catalog)
+  // INS(network.room, {identity, members}) — federation_creation + DES(network.schema_catalog, {forms, definitions}) — canonical_vocabulary + INS(network.seed_resources, {defaults}) — initial_catalog
   // Create a network — requires an org
   const handleCreateNetwork = async () => {
     if (!networkName.trim()) return;
@@ -14077,7 +14077,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       for (const d of DEFAULT_DEFINITIONS) await svc.setState(nRoom, EVT.SCHEMA_DEF, {...d, propagation:'required', network:networkName}, `net:${d.key}`);
       // Seed default resource types into network catalog (draft maturity, optional propagation)
       try { await ResourceService.loadSeedResourceTypes(nRoom); } catch (e) { console.warn('Resource seed loading failed:', e.message); }
-      await emitOp(nRoom, 'INS', {entity:'network',field:networkName}, {created_by:svc.userId,org:orgMeta.name}, networkFrame(nRoom));
+      await emitOp(nRoom, 'INS', dot('network',networkName), {created_by:svc.userId,org:orgMeta.name}, networkFrame(nRoom));
       setNetworkRoom(nRoom);
       await loadNetworkMembers(nRoom);
       setNetworkModal(false); setNetworkName('');
@@ -14085,7 +14085,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Error: '+e.message,'error'); }
   };
 
-  // CON(org → network, join, membership_link)
+  // CON(network.org, {action: join}) — membership_link
   // Join existing network by room ID — requires an org
   const handleJoinNetwork = async () => {
     if (!joinNetworkId.trim()) return;
@@ -14360,7 +14360,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Error restocking: ' + e.message, 'error'); }
   };
 
-  // INS(org_room, identity+metadata+roster, organization_creation) + DES(org_schema, seeded_forms+definitions, local_vocabulary) + INS(staff_roster, creator_as_admin, initial_membership)
+  // INS(org.room, {identity, metadata, roster}) — organization_creation + DES(org.schema, {seeded_forms, definitions}) — local_vocabulary + INS(org.staff_roster, {creator_as_admin}) — initial_membership
   const handleCreateOrg = async () => {
     if (!setupData.name.trim()) return;
     try {
@@ -14376,9 +14376,9 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         {type:EVT.ORG_OPACITY,state_key:'',content:{level:'translucent',updated:Date.now(),updated_by:svc.userId}},
         {type:EVT.ORG_MSG_ACCESS,state_key:'',content:{read:['admin','case_manager'],respond:['admin'],updated:Date.now()}},
       ]);
-      await emitOp(org, 'DES', {entity:'organization',designation:setupData.name},
-        {type:setupData.type,service_area:setupData.service_area}, orgFrame(org));
-      await emitOp(org, 'INS', {entity:'staff',field:svc.userId},
+      await emitOp(org, 'DES', dot('org','organization'),
+        {designation:setupData.name,type:setupData.type,service_area:setupData.service_area}, orgFrame(org));
+      await emitOp(org, 'INS', dot('org','staff',svc.userId),
         {role:'admin',initiated_by:'org_creation'}, orgFrame(org));
       setOrgRoom(org); setOrgRole('admin');
       setOrgMeta({name:setupData.name,type:setupData.type,service_area:setupData.service_area});
@@ -14421,29 +14421,29 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Failed to join org: '+e.message,'error'); }
   };
 
-  // CON(user → org, invitation, staff_onboarding) — invites user and adds to roster
+  // CON(org.staff.{userId}, {invitation}) — staff_onboarding — invites user and adds to roster
   const handleInviteStaff = async () => {
     if (!inviteUserId.trim()||!orgRoom) return;
     try {
       await svc.invite(orgRoom, inviteUserId);
       const newStaff = [...staff, {userId:inviteUserId,role:inviteRole,joined:Date.now()}];
       await svc.setState(orgRoom, EVT.ORG_ROSTER, {staff:newStaff});
-      await emitOp(orgRoom, 'CON', {source:orgRoom,destination:inviteUserId,relationship:'staff'},
-        {role:inviteRole,invited_by:svc.userId}, orgFrame());
+      await emitOp(orgRoom, 'CON', dot('org','staff',inviteUserId),
+        {relationship:'staff',role:inviteRole,invited_by:svc.userId}, orgFrame());
       setStaff(newStaff);
       setInviteModal(false); setInviteUserId('');
       showToast(`Invited ${inviteUserId} as ${ORG_ROLE_LABELS[inviteRole]}`,'success');
     } catch(e) { showToast('Invite failed: '+e.message,'error'); }
   };
 
-  // NUL(staff_member, removed, membership_severance) — kicks from room and removes from roster
+  // NUL(org.staff_member, {reason: removed}) — membership_severance — kicks from room and removes from roster
   const handleRemoveStaff = async (userId) => {
     if (userId===svc.userId) { showToast('Cannot remove yourself','error'); return; }
     try {
       await svc.kick(orgRoom, userId, 'Removed from organization');
       const newStaff = staff.filter(s=>s.userId!==userId);
       await svc.setState(orgRoom, EVT.ORG_ROSTER, {staff:newStaff});
-      await emitOp(orgRoom, 'NUL', {entity:'staff',field:userId},
+      await emitOp(orgRoom, 'NUL', dot('org','staff',userId),
         {reason:'removed',removed_by:svc.userId}, orgFrame());
       setStaff(newStaff);
       showToast(`Removed ${userId}`,'warn');
@@ -14462,14 +14462,14 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       };
       await svc.setState(orgRoom, EVT.ORG_EMAIL_CONFIG, config);
       setEmailVerifyConfig(config);
-      await emitOp(orgRoom, 'ALT', {entity:'email_verification_config', field:'enabled', value:config.enabled},
-        {domains:config.required_domains, roles:config.require_for_roles}, orgFrame());
+      await emitOp(orgRoom, 'ALT', dot('org','email_verification_config','enabled'),
+        {value:config.enabled,domains:config.required_domains, roles:config.require_for_roles}, orgFrame());
       setEmailConfigModal(false);
       showToast(`Email verification ${config.enabled ? 'enabled' : 'disabled'}`, 'success');
     } catch(e) { showToast('Error saving config: '+e.message, 'error'); }
   };
 
-  // INS(challenge, hashed_code+webhook, verification_initiation) → CON(code → email_inbox, webhook, out_of_band_delivery)
+  // INS(org.email_challenge, {hashed_code, webhook}) — verification_initiation → CON(org.email_code, {dest: email_inbox, via: webhook}) — out_of_band_delivery
   const handleStartEmailVerify = async () => {
     if (!verifyEmail.trim() || !orgRoom) return;
     setVerifyError('');
@@ -14494,14 +14494,14 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       } else {
         showToast('Verification code sent to ' + verifyEmail, 'success');
       }
-      await emitOp(orgRoom, 'INS', {entity:'email_verification', field:svc.userId},
+      await emitOp(orgRoom, 'INS', dot('org','email_verification',svc.userId),
         {email_domain:EmailVerification.extractDomain(verifyEmail), status:'pending'}, orgFrame());
       setVerifyStep('code');
     } catch(e) { setVerifyError('Failed to start verification: ' + e.message); }
     setVerifyPending(false);
   };
 
-  // DES(email_identity, code_validated, verified_attestation) on success | ALT(challenge.attempts, +1, lockout_progression) on failure
+  // DES(org.email_identity, {attestation: code_validated}) — verified_attestation on success | ALT(org.challenge.attempts, {increment: +1}) — lockout_progression on failure
   const handleSubmitVerifyCode = async () => {
     if (!verifyCode.trim() || verifyCode.length !== 6 || !orgRoom) return;
     setVerifyError('');
@@ -14541,8 +14541,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       await svc.setState(orgRoom, EVT.ORG_ROSTER, { staff: newStaff });
       // Clear the challenge
       await svc.setState(orgRoom, EVT.ORG_VERIFY_CHALLENGE, { status: 'completed', verified_at: Date.now() }, svc.userId);
-      await emitOp(orgRoom, 'ALT', {entity:'email_verification', field:svc.userId, value:'verified'},
-        {email_domain:EmailVerification.extractDomain(verifyEmail), verified_at:Date.now()}, orgFrame());
+      await emitOp(orgRoom, 'ALT', dot('org','email_verification',svc.userId),
+        {value:'verified',email_domain:EmailVerification.extractDomain(verifyEmail), verified_at:Date.now()}, orgFrame());
       setStaff(newStaff);
       setMyVerification(verifiedEntry);
       setVerifyStep('done');
@@ -14551,7 +14551,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     setVerifyPending(false);
   };
 
-  // NUL(verification, admin_revoked, attestation_destruction) — admin removes verified status
+  // NUL(org.verification, {reason: admin_revoked}) — attestation_destruction — admin removes verified status
   const handleRevokeVerification = async (userId) => {
     if (!orgRoom || orgRole !== 'admin') return;
     try {
@@ -14559,7 +14559,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         s.userId === userId ? { ...s, email_verification: { status: 'revoked', revoked_at: Date.now(), revoked_by: svc.userId } } : s
       );
       await svc.setState(orgRoom, EVT.ORG_ROSTER, { staff: newStaff });
-      await emitOp(orgRoom, 'NUL', {entity:'email_verification', field:userId},
+      await emitOp(orgRoom, 'NUL', dot('org','email_verification',userId),
         {reason:'admin_revoked', revoked_by:svc.userId}, orgFrame());
       setStaff(newStaff);
       if (userId === svc.userId) setMyVerification({ status: 'revoked' });
@@ -14599,7 +14599,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         updated: Date.now(),
       };
       await svc.setState(rosterRoom, EVT.PROVIDER_PROFILE, profile);
-      await emitOp(rosterRoom, 'ALT', {entity:'provider_profile',field:'profile'}, {display_name:profile.display_name,title:profile.title,updated_by:svc.userId}, orgFrame());
+      await emitOp(rosterRoom, 'ALT', dot('org','provider_profile','profile'), {display_name:profile.display_name,title:profile.title,updated_by:svc.userId}, orgFrame());
       setProviderProfile(profile);
       // Broadcast profile to all bridge rooms so clients can see provider identity
       for (const c of cases) {
@@ -14639,7 +14639,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     try {
       await svc.setState(orgRoom, EVT.ORG_OPACITY, {level, updated: Date.now(), updated_by: svc.userId});
       setOrgOpacity(level);
-      await emitOp(orgRoom, 'ALT', {entity:'org_opacity',field:'level'}, {from:orgOpacity,to:level,changed_by:svc.userId}, orgFrame());
+      await emitOp(orgRoom, 'ALT', dot('org','opacity','level'), {from:orgOpacity,to:level,changed_by:svc.userId}, orgFrame());
       showToast(`Opacity set to ${OPACITY_LABELS[level]}`,'success');
     } catch(e) { showToast('Failed to update opacity: '+e.message,'error'); }
   };
@@ -14650,7 +14650,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     try {
       await svc.setState(orgRoom, EVT.ORG_MSG_ACCESS, {...msgAccessDraft, updated: Date.now()});
       setOrgMsgAccess(msgAccessDraft);
-      await emitOp(orgRoom, 'ALT', {entity:'org_msg_access',field:'roles'}, {read:msgAccessDraft.read,respond:msgAccessDraft.respond}, orgFrame());
+      await emitOp(orgRoom, 'ALT', dot('org','msg_access','roles'), {read:msgAccessDraft.read,respond:msgAccessDraft.respond}, orgFrame());
       setMsgAccessModal(false);
       showToast('Message access roles updated','success');
     } catch(e) { showToast('Failed to update access: '+e.message,'error'); }
@@ -14664,7 +14664,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       await svc.setState(orgRoom, EVT.ORG_TERMINOLOGY, payload);
       setOrgTerminology({...TERMINOLOGY_DEFAULTS, ...terminologyDraft});
       setTerminologyModal(false);
-      await emitOp(orgRoom, 'ALT', {entity:'org_terminology',field:'terms'}, {
+      await emitOp(orgRoom, 'ALT', dot('org','terminology','terms'), {
         client_term: terminologyDraft.client_term,
         provider_term: terminologyDraft.provider_term,
         changed_by: svc.userId
@@ -14707,7 +14707,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       );
       // Invite the peer org room members (the channel inherits access from org rooms)
       try { await svc.invite(channelRoom, peerOrgId); } catch(e) { console.warn('Peer invite:', e.message); }
-      await emitOp(channelRoom, 'INS', {entity:'org_msg_channel',field:'channel'},
+      await emitOp(channelRoom, 'INS', dot('org','channels','channel'),
         {from_org:orgRoom,to_org:peerOrgId}, orgFrame());
       const newChannel = {roomId:channelRoom,orgs:[orgRoom,peerOrgId],
         org_names:{[orgRoom]:orgMeta.name||'',[peerOrgId]:composePeerOrgName||''},type:'org_msg_channel',created:Date.now()};
@@ -14744,7 +14744,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         },
       };
       await svc.sendMessage(activeChannel, orgMsgText, envelope);
-      await emitOp(activeChannel, 'INS', {type:'org_message',field:'message'},
+      await emitOp(activeChannel, 'INS', dot('org','messages','org_message'),
         {opacity:orgOpacity,body_length:orgMsgText.length}, orgFrame());
       setOrgMsgText('');
       setTimeout(()=>loadChannelMessages(activeChannel),500);
@@ -14798,10 +14798,10 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         },
       };
       await svc.sendMessage(inboxConvo, inboxMsgText, envelope);
-      await emitOp(inboxConvo, 'INS', {type:'org_message',field:'message'}, {opacity:orgOpacity,body_length:inboxMsgText.length}, orgFrame());
+      await emitOp(inboxConvo, 'INS', dot('org','messages','org_message'), {opacity:orgOpacity,body_length:inboxMsgText.length}, orgFrame());
     } else {
       await svc.sendMessage(inboxConvo, inboxMsgText, {[`${NS}.type`]:'note'});
-      await emitOp(inboxConvo, 'INS', {type:'provider_note',field:'message'}, {body:inboxMsgText}, bridgeFrame(inboxConvo));
+      await emitOp(inboxConvo, 'INS', dot('bridge','messages','provider_note'), {body:inboxMsgText}, bridgeFrame(inboxConvo));
     }
     setInboxMsgText('');
     setTimeout(() => loadInboxMessages(inboxConvo), 500);
