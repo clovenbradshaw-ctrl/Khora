@@ -8573,6 +8573,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
   const [enabledFrameworks, setEnabledFrameworks] = useState([]); // framework ids toggled on
   const [frameworkModal, setFrameworkModal] = useState(false);
   const [myTeams, setMyTeams] = useState([]);
+  const [clientSharingConsentModal, setClientSharingConsentModal] = useState(null); // {team} — prompts client team member to choose sharing preference
   const [myResources, setMyResources] = useState([]); // resource vault records from bridges
 
   useEffect(() => { initVault(); }, []);
@@ -8993,6 +8994,25 @@ const ClientApp = ({session, onLogout, showToast}) => {
     showToast(newConsent.enabled?'Metrics consent enabled — anonymized data will flow':'Metrics consent revoked',newConsent.enabled?'success':'warn');
   };
 
+  // Handle sharing consent response — client-side team member proactively chooses whether to withhold content
+  const handleClientSharingConsent = async (team, withhold) => {
+    try {
+      const consentValue = withhold ? 'withheld' : 'shared';
+      const updatedMembers = (team.members||[]).map(m =>
+        m.userId === svc.userId ? {...m, sharing_consent: consentValue} : m
+      );
+      await svc.setState(team.roomId, EVT.TEAM_MEMBERS, {members: updatedMembers});
+      await emitOp(team.roomId, 'REC', {entity:'sharing_consent',field:svc.userId}, {consent:consentValue,decided_by:svc.userId}, vaultFrame());
+      setMyTeams(prev => prev.map(t => t.roomId === team.roomId ? {...t, members: updatedMembers} : t));
+      setClientSharingConsentModal(null);
+      if (withhold) {
+        showToast('Content about individuals will not be shared with you in this team', 'warn');
+      } else {
+        showToast('Content about individuals may be shared with you in this team', 'success');
+      }
+    } catch(e) { showToast('Failed to save sharing preference: '+e.message, 'error'); }
+  };
+
   const loadBridgeMessages = async (bid) => { setBridgeMessages(await svc.getMessages(bid)); };
   const handleSendBridgeMsg = async () => {
     if (!msgText.trim()||!activeBridge) return;
@@ -9385,24 +9405,45 @@ const ClientApp = ({session, onLogout, showToast}) => {
           </div>
           {myTeams.length===0?<div className="card" style={{textAlign:'center',padding:'24px 20px',borderStyle:'dashed'}}><I n="users" s={24} c="var(--tx-3)"/><p style={{color:'var(--tx-2)',marginTop:8,fontSize:12}}>Not part of any teams yet. Teams are created by {ROLES.provider.label.toLowerCase()}s to collaborate.</p></div>
           :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))',gap:10}}>
-            {myTeams.map(team=><div key={team.roomId} className="card" style={{padding:'14px 18px'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-                <span style={{fontSize:14,fontWeight:600}}>{team.name||'Unnamed Team'}</span>
-                {team.org_name&&<span className="tag tag-blue" style={{fontSize:8}}>{team.org_name}</span>}
+            {myTeams.map(team=>{const myMembership=(team.members||[]).find(m=>m.userId===svc.userId);return <div key={team.roomId} className="card" style={{padding:0,overflow:'hidden'}}>
+              <div style={{padding:'14px 18px'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                  <span style={{fontSize:14,fontWeight:600}}>{team.name||'Unnamed Team'}</span>
+                  <div style={{display:'flex',gap:4}}>
+                    {team.org_name&&<span className="tag tag-blue" style={{fontSize:8}}>{team.org_name}</span>}
+                    {myMembership?.sharing_consent==='shared'&&<span className="tag tag-green" style={{fontSize:7}}>SHARING</span>}
+                    {myMembership?.sharing_consent==='withheld'&&<span className="tag tag-red" style={{fontSize:7}}>WITHHELD</span>}
+                  </div>
+                </div>
+                {team.description&&<p style={{fontSize:11,color:'var(--tx-2)',lineHeight:1.5,marginBottom:8}}>{team.description}</p>}
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <I n="user" s={11} c="var(--tx-3)"/>
+                  <span style={{fontSize:10.5,color:'var(--tx-2)'}}>
+                    {team.members?.length||0} member{(team.members?.length||0)!==1?'s':''}
+                  </span>
+                </div>
+                {team.members&&team.members.length>0&&<div style={{display:'flex',gap:3,flexWrap:'wrap',marginTop:6}}>
+                  {team.members.slice(0,4).map((m,mi)=>
+                    <span key={mi} style={{fontSize:9,padding:'2px 6px',background:'var(--bg-3)',borderRadius:'var(--r)',color:'var(--tx-1)'}}>{m.display_name||m.userId?.split(':')[0]?.replace('@','')}</span>)}
+                  {team.members.length>4&&<span style={{fontSize:9,color:'var(--tx-3)'}}>+{team.members.length-4}</span>}
+                </div>}
               </div>
-              {team.description&&<p style={{fontSize:11,color:'var(--tx-2)',lineHeight:1.5,marginBottom:8}}>{team.description}</p>}
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <I n="user" s={11} c="var(--tx-3)"/>
-                <span style={{fontSize:10.5,color:'var(--tx-2)'}}>
-                  {team.members?.length||0} member{(team.members?.length||0)!==1?'s':''}
-                </span>
-              </div>
-              {team.members&&team.members.length>0&&<div style={{display:'flex',gap:3,flexWrap:'wrap',marginTop:6}}>
-                {team.members.slice(0,4).map((m,mi)=>
-                  <span key={mi} style={{fontSize:9,padding:'2px 6px',background:'var(--bg-3)',borderRadius:'var(--r)',color:'var(--tx-1)'}}>{m.display_name||m.userId?.split(':')[0]?.replace('@','')}</span>)}
-                {team.members.length>4&&<span style={{fontSize:9,color:'var(--tx-3)'}}>+{team.members.length-4}</span>}
-              </div>}
-            </div>)}
+              {myMembership&&myMembership.sharing_consent==='pending'&&(
+                <div style={{padding:'10px 18px',background:'var(--gold-dim)',borderTop:'1px solid rgba(218,165,32,.15)'}}>
+                  <p style={{fontSize:11,color:'var(--tx-1)',lineHeight:1.6,marginBottom:8}}>
+                    <strong>Content sharing decision required.</strong> Content about individuals served by this team will be shared with you by default. Would you like to withhold it?
+                  </p>
+                  <button onClick={()=>setClientSharingConsentModal({team})} className="b-pri b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
+                    <I n="shield" s={10}/>Make My Choice</button>
+                </div>
+              )}
+              {myMembership&&(myMembership.sharing_consent==='shared'||myMembership.sharing_consent==='withheld')&&(
+                <div style={{padding:'8px 18px',borderTop:'1px solid var(--border-0)',display:'flex',justifyContent:'flex-end'}}>
+                  <button onClick={()=>setClientSharingConsentModal({team})} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
+                    <I n="shield" s={10}/>Change Sharing</button>
+                </div>
+              )}
+            </div>})}
           </div>}
         </div>
 
@@ -9811,6 +9852,41 @@ const ClientApp = ({session, onLogout, showToast}) => {
         <button onClick={()=>setHardRevokeTarget(null)} className="b-gho" style={{flex:1}}>Cancel</button>
         <button onClick={()=>handleHardRevoke(hardRevokeTarget)} className="b-red" style={{flex:1}}><I n="zap" s={13}/>Execute</button>
       </div>
+    </Modal>
+
+    {/* CLIENT SHARING CONSENT MODAL — team member proactively decides whether to withhold shared content */}
+    <Modal open={!!clientSharingConsentModal} onClose={()=>setClientSharingConsentModal(null)} title="Content Sharing Preference" w={480}>
+      {clientSharingConsentModal&&<>
+        <div style={{background:'var(--gold-dim)',border:'1px solid rgba(218,165,32,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginBottom:16}}>
+          <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+            <I n="shield" s={16} c="var(--gold)"/>
+            <p style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.7,margin:0}}>
+              As a member of <strong>{clientSharingConsentModal.team?.name||'this team'}</strong>, content created about the individuals this team serves may be shared with you.
+            </p>
+          </div>
+        </div>
+        <p style={{fontSize:13,fontWeight:600,color:'var(--tx-0)',marginBottom:6}}>
+          Would you like to withhold content about individuals from being shared with you?
+        </p>
+        <p style={{fontSize:11.5,color:'var(--tx-2)',lineHeight:1.6,marginBottom:18}}>
+          By default, relevant content is shared with all team members to support coordination. If you choose to withhold, you will not receive content created about individuals served by this team.
+        </p>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <button onClick={()=>handleClientSharingConsent(clientSharingConsentModal.team, false)}
+            className="b-pri" style={{width:'100%',padding:'12px 16px',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+            <I n="check" s={14}/> No, share content with me
+          </button>
+          <button onClick={()=>handleClientSharingConsent(clientSharingConsentModal.team, true)}
+            className="b-gho" style={{width:'100%',padding:'12px 16px',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',gap:6,color:'var(--red)'}}>
+            <I n="lock" s={14}/> Yes, withhold content from me
+          </button>
+        </div>
+        <div style={{background:'var(--bg-3)',borderRadius:'var(--r)',padding:'10px 14px',marginTop:14}}>
+          <p style={{fontSize:10.5,color:'var(--tx-3)',lineHeight:1.6,margin:0}}>
+            You can change this preference at any time from your teams view. This choice is recorded as an epistemic operation for full auditability.
+          </p>
+        </div>
+      </>}
     </Modal>
 
     {/* ADD CUSTOM FIELD MODAL */}
@@ -11523,6 +11599,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [newTeamDesc, setNewTeamDesc] = useState('');
   const [teamInviteModal, setTeamInviteModal] = useState(null); // team object or null
   const [teamInviteUserId, setTeamInviteUserId] = useState('');
+  const [sharingConsentModal, setSharingConsentModal] = useState(null); // {team, member} or null — prompts team member to choose sharing preference
   // Client data import
   const [importModal, setImportModal] = useState(false);
   // ─── Database / Notes / Profile state ───
@@ -12397,14 +12474,14 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           org_id:orgRoom||null, org_name:orgMeta.name||null,
         }},
         {type:EVT.TEAM_MEMBERS,state_key:'',content:{members:[
-          {userId:svc.userId,role:'lead',joined:Date.now(),display_name:providerProfile.display_name||''}
+          {userId:svc.userId,role:'lead',joined:Date.now(),display_name:providerProfile.display_name||'',sharing_consent:'shared'}
         ]}},
       ]);
       await emitOp(roomId, 'DES', {entity:'team',field:newTeamName}, {created_by:svc.userId,org:orgMeta.name||null}, orgFrame());
       const newTeam = {
         roomId, name:newTeamName, description:newTeamDesc||'', created:Date.now(),
         created_by:svc.userId, org_id:orgRoom||null, org_name:orgMeta.name||null,
-        members:[{userId:svc.userId,role:'lead',joined:Date.now(),display_name:providerProfile.display_name||''}],
+        members:[{userId:svc.userId,role:'lead',joined:Date.now(),display_name:providerProfile.display_name||'',sharing_consent:'shared'}],
         owner:svc.userId,
       };
       setTeams(prev => [...prev, newTeam]);
@@ -12421,14 +12498,33 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       // Invite user to the team room
       if (svc.client) await svc.client.invite(teamInviteModal.roomId, uid);
       else await svc._api('POST', `/rooms/${encodeURIComponent(teamInviteModal.roomId)}/invite`, {user_id:uid});
-      // Update the members list
-      const updatedMembers = [...(teamInviteModal.members||[]), {userId:uid,role:'member',joined:Date.now()}];
+      // Update the members list — new members start with sharing_consent:'pending' so they must proactively choose
+      const updatedMembers = [...(teamInviteModal.members||[]), {userId:uid,role:'member',joined:Date.now(),sharing_consent:'pending'}];
       await svc.setState(teamInviteModal.roomId, EVT.TEAM_MEMBERS, {members:updatedMembers});
       await emitOp(teamInviteModal.roomId, 'CON', {entity:'team_member',field:uid}, {invited_by:svc.userId,role:'member'}, orgFrame());
       setTeams(prev => prev.map(t => t.roomId===teamInviteModal.roomId ? {...t, members:updatedMembers} : t));
       showToast(`Invited ${uid} to team`,'success');
       setTeamInviteUserId('');
     } catch(e) { showToast('Team invite failed: '+e.message,'error'); }
+  };
+
+  // Handle sharing consent response — team member proactively chooses whether to withhold content
+  const handleSharingConsent = async (team, memberId, withhold) => {
+    try {
+      const consentValue = withhold ? 'withheld' : 'shared';
+      const updatedMembers = (team.members||[]).map(m =>
+        m.userId === memberId ? {...m, sharing_consent: consentValue} : m
+      );
+      await svc.setState(team.roomId, EVT.TEAM_MEMBERS, {members: updatedMembers});
+      await emitOp(team.roomId, 'REC', {entity:'sharing_consent',field:memberId}, {consent:consentValue,decided_by:memberId}, orgFrame());
+      setTeams(prev => prev.map(t => t.roomId === team.roomId ? {...t, members: updatedMembers} : t));
+      setSharingConsentModal(null);
+      if (withhold) {
+        showToast('Content about individuals will not be shared with you in this team', 'warn');
+      } else {
+        showToast('Content about individuals may be shared with you in this team', 'success');
+      }
+    } catch(e) { showToast('Failed to save sharing preference: '+e.message, 'error'); }
   };
 
   const copyToClipboard = async (text, label) => {
@@ -13826,16 +13922,38 @@ const ProviderApp = ({session, onLogout, showToast}) => {
                 {(team.members||[]).slice(0,5).map((m,mi)=><div key={mi} style={{display:'flex',alignItems:'center',gap:6}}>
                   <div style={{width:18,height:18,borderRadius:'50%',background:m.role==='lead'?'var(--gold-dim)':'var(--bg-3)',display:'flex',alignItems:'center',justifyContent:'center',color:m.role==='lead'?'var(--gold)':'var(--tx-2)',flexShrink:0}}>
                     <I n={m.role==='lead'?'briefcase':'user'} s={9}/></div>
-                  <span style={{fontSize:11,color:'var(--tx-1)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.display_name||m.userId}</span>
-                  <span className={`tag ${m.role==='lead'?'tag-gold':'tag-blue'}`} style={{fontSize:7.5,marginLeft:'auto'}}>{m.role?.toUpperCase()}</span>
+                  <span style={{fontSize:11,color:'var(--tx-1)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{m.display_name||m.userId}</span>
+                  <span className={`tag ${m.role==='lead'?'tag-gold':'tag-blue'}`} style={{fontSize:7.5}}>{m.role?.toUpperCase()}</span>
+                  {m.sharing_consent==='pending'&&<span className="tag tag-gold" style={{fontSize:7}}>PENDING</span>}
+                  {m.sharing_consent==='withheld'&&<span className="tag tag-red" style={{fontSize:7}}>WITHHELD</span>}
+                  {m.sharing_consent==='shared'&&<span className="tag tag-green" style={{fontSize:7}}>SHARING</span>}
                 </div>)}
                 {(team.members?.length||0)>5&&<span style={{fontSize:10,color:'var(--tx-3)',fontStyle:'italic'}}>+{team.members.length-5} more</span>}
               </div>
             </div>
-            <div style={{padding:'8px 18px 14px',display:'flex',gap:6}}>
+            {/* Sharing consent prompt — shown to the current user if their consent is pending */}
+            {(()=>{const myMembership = (team.members||[]).find(m=>m.userId===svc.userId);
+              return myMembership && myMembership.sharing_consent==='pending' ? (
+                <div style={{padding:'10px 18px',background:'var(--gold-dim)',borderTop:'1px solid rgba(218,165,32,.15)'}}>
+                  <p style={{fontSize:11.5,color:'var(--tx-1)',lineHeight:1.6,marginBottom:8}}>
+                    <strong>Content sharing decision required.</strong> Content about individuals served by this team will be shared with you by default. Would you like to withhold this content from being shared with you?
+                  </p>
+                  <div style={{display:'flex',gap:6}}>
+                    <button onClick={()=>setSharingConsentModal({team,memberId:svc.userId})} className="b-pri b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
+                      <I n="shield" s={10}/>Make My Choice</button>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+            <div style={{padding:'8px 18px 14px',display:'flex',gap:6,flexWrap:'wrap'}}>
               {team.owner===svc.userId&&<button onClick={()=>{setTeamInviteModal(team);setTeamInviteUserId('')}}
                 className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
                 <I n="userPlus" s={11}/>Invite</button>}
+              {(()=>{const myM=(team.members||[]).find(m=>m.userId===svc.userId);
+                return myM&&(myM.sharing_consent==='shared'||myM.sharing_consent==='withheld')?(
+                  <button onClick={()=>setSharingConsentModal({team,memberId:svc.userId})} className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
+                    <I n="shield" s={11}/>Change Sharing</button>
+                ):null;})()}
               <button className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}} onClick={()=>{
                 if(navigator.clipboard) navigator.clipboard.writeText(team.roomId);
                 showToast('Team room ID copied','success');
@@ -15297,7 +15415,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     <Modal open={!!teamInviteModal} onClose={()=>{setTeamInviteModal(null);setTeamInviteUserId('')}} title={`Invite to: ${teamInviteModal?.name||''}`} w={520}>
       {teamInviteModal&&<>
         <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:16,lineHeight:1.6}}>
-          Invite someone to join this team. They'll be added as a member and can participate in team activities.
+          Invite someone to join this team. They'll be added as a member and will be asked whether they want to withhold content about individuals from being shared with them.
         </p>
         <div style={{marginBottom:14}}>
           <span className="section-label">MATRIX ID</span>
@@ -15317,12 +15435,50 @@ const ProviderApp = ({session, onLogout, showToast}) => {
               <I n={m.role==='lead'?'briefcase':'user'} s={12} c={m.role==='lead'?'var(--gold)':'var(--tx-2)'}/>
               <span style={{fontSize:11.5,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.display_name||m.userId}</span>
               <span className={`tag ${m.role==='lead'?'tag-gold':'tag-blue'}`} style={{fontSize:8}}>{m.role?.toUpperCase()}</span>
+              {m.sharing_consent==='pending'&&<span className="tag tag-gold" style={{fontSize:7}}>PENDING</span>}
+              {m.sharing_consent==='withheld'&&<span className="tag tag-red" style={{fontSize:7}}>WITHHELD</span>}
+              {m.sharing_consent==='shared'&&<span className="tag tag-green" style={{fontSize:7}}>SHARING</span>}
             </div>)}
           </div>
         </div>
         <div style={{background:'var(--bg-3)',borderRadius:'var(--r)',padding:'10px 14px'}}>
           <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)',display:'block',marginBottom:4}}>TEAM ROOM ID</span>
           <span style={{fontSize:10.5,fontFamily:'var(--mono)',color:'var(--tx-1)',wordBreak:'break-all'}}>{teamInviteModal.roomId}</span>
+        </div>
+      </>}
+    </Modal>
+
+    {/* SHARING CONSENT MODAL — team member proactively decides whether to withhold shared content */}
+    <Modal open={!!sharingConsentModal} onClose={()=>setSharingConsentModal(null)} title="Content Sharing Preference" w={480}>
+      {sharingConsentModal&&<>
+        <div style={{background:'var(--gold-dim)',border:'1px solid rgba(218,165,32,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginBottom:16}}>
+          <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+            <I n="shield" s={16} c="var(--gold)"/>
+            <p style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.7,margin:0}}>
+              As a member of <strong>{sharingConsentModal.team?.name||'this team'}</strong>, content created about the individuals this team serves may be shared with you.
+            </p>
+          </div>
+        </div>
+        <p style={{fontSize:13,fontWeight:600,color:'var(--tx-0)',marginBottom:6}}>
+          Would you like to withhold content about individuals from being shared with you?
+        </p>
+        <p style={{fontSize:11.5,color:'var(--tx-2)',lineHeight:1.6,marginBottom:18}}>
+          By default, relevant content is shared with all team members to support coordination. If you choose to withhold, you will not receive content created about individuals served by this team.
+        </p>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <button onClick={()=>handleSharingConsent(sharingConsentModal.team, sharingConsentModal.memberId, false)}
+            className="b-pri" style={{width:'100%',padding:'12px 16px',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+            <I n="check" s={14}/> No, share content with me
+          </button>
+          <button onClick={()=>handleSharingConsent(sharingConsentModal.team, sharingConsentModal.memberId, true)}
+            className="b-gho" style={{width:'100%',padding:'12px 16px',fontSize:13,display:'flex',alignItems:'center',justifyContent:'center',gap:6,color:'var(--red)'}}>
+            <I n="lock" s={14}/> Yes, withhold content from me
+          </button>
+        </div>
+        <div style={{background:'var(--bg-3)',borderRadius:'var(--r)',padding:'10px 14px',marginTop:14}}>
+          <p style={{fontSize:10.5,color:'var(--tx-3)',lineHeight:1.6,margin:0}}>
+            You can change this preference at any time from the team view. This choice is recorded as an epistemic operation for full auditability.
+          </p>
         </div>
       </>}
     </Modal>
