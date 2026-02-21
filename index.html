@@ -16727,14 +16727,185 @@ const LoginScreen = ({
     onClick: () => {
       setMode('login');
       setErr('');
+      setExtReg(null);
     }
   }, "Sign In"), /*#__PURE__*/React.createElement("div", {
     className: `tab ${mode === 'register' ? 'active' : ''}`,
     onClick: () => {
       setMode('register');
       setErr('');
+      setExtReg(null);
     }
-  }, "Create Account")), mode === 'register' && /*#__PURE__*/React.createElement("div", {
+  }, "Create Account")), extReg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'var(--teal-dim)',
+      border: '1px solid rgba(62,201,176,.15)',
+      borderRadius: 'var(--r)',
+      padding: 20,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: 'var(--mono)',
+      fontSize: 10,
+      color: 'var(--tx-2)',
+      letterSpacing: '.1em',
+      textTransform: 'uppercase',
+      marginBottom: 6
+    }
+  }, "\u25cf STEP 1"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: 'var(--serif)',
+      fontSize: 18,
+      fontWeight: 700,
+      color: 'var(--tx-0)',
+      marginBottom: 8
+    }
+  }, "Create your account on ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--teal)'
+    }
+  }, extReg.server)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: 'var(--tx-1)',
+      lineHeight: 1.6,
+      marginBottom: 16
+    }
+  }, "This server requires verification (like email or CAPTCHA). Create your account on their website first, then come back to sign in."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: 'var(--mono)',
+      fontSize: 9.5,
+      color: 'var(--tx-2)',
+      letterSpacing: '.1em',
+      textTransform: 'uppercase',
+      marginBottom: 4
+    }
+  }, "YOUR USERNAME"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      background: 'var(--bg-1)',
+      border: '1px solid var(--border-1)',
+      borderRadius: 'var(--r)',
+      padding: '10px 12px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      flex: 1,
+      fontFamily: 'var(--mono)',
+      fontSize: 14,
+      color: 'var(--tx-0)',
+      fontWeight: 600
+    }
+  }, extReg.username), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "b-gho b-xs",
+    onClick: () => {
+      navigator.clipboard.writeText(extReg.username);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    },
+    style: {
+      flexShrink: 0,
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: copied ? "check" : "copy",
+    s: 12
+  }), copied ? "Copied" : "Copy"))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "b-pri",
+    onClick: () => window.open('https://' + extReg.server, '_blank'),
+    style: {
+      width: '100%',
+      padding: 10,
+      fontSize: 13,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6
+    }
+  }, "Open ", extReg.server, " ", /*#__PURE__*/React.createElement(I, {
+    n: "external-link",
+    s: 14
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: '1px solid var(--border-0)',
+      margin: '20px 0'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: 'var(--mono)',
+      fontSize: 10,
+      color: 'var(--tx-2)',
+      letterSpacing: '.1em',
+      textTransform: 'uppercase',
+      marginBottom: 6
+    }
+  }, "\u25cf STEP 2"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: 'var(--serif)',
+      fontSize: 18,
+      fontWeight: 700,
+      color: 'var(--tx-0)',
+      marginBottom: 8
+    }
+  }, "Sign in here"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12.5,
+      color: 'var(--tx-1)',
+      lineHeight: 1.6,
+      marginBottom: 16
+    }
+  }, "Once your account exists on the server, come back and sign in with the same username and password."), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "b-pri",
+    onClick: () => {
+      setExtReg(null);
+      setMode('login');
+      setErr('');
+    },
+    style: {
+      width: '100%',
+      padding: 10,
+      fontSize: 13,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      marginBottom: 10
+    }
+  }, "I\u2019ve created my account ", /*#__PURE__*/React.createElement(I, {
+    n: "arrow-right",
+    s: 14
+  })), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "b-gho",
+    onClick: () => {
+      setExtReg(null);
+    },
+    style: {
+      width: '100%',
+      padding: 8,
+      fontSize: 12,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      color: 'var(--tx-2)'
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "arrow-left",
+    s: 12
+  }), " Pick a different server")), mode === 'register' && !extReg && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
@@ -16780,7 +16951,7 @@ const LoginScreen = ({
     style: {
       color: 'var(--teal)'
     }
-  }, "servers.joinmatrix.org"), ".")), /*#__PURE__*/React.createElement("form", {
+  }, "servers.joinmatrix.org"), ".")), !extReg && /*#__PURE__*/React.createElement("form", {
     onSubmit: go
   }, /*#__PURE__*/React.createElement("div", {
     style: {
