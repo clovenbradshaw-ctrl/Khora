@@ -28,6 +28,23 @@ import { uniqueNamesGenerator, adjectives, animals } from 'https://esm.sh/unique
 window.generateUsername = () => uniqueNamesGenerator({ dictionaries: [adjectives, animals], separator: '-', length: 2, style: 'lowerCase' });
 window._nameGenReady = true;
 </script>
+<!-- Lazy-loaded: in-browser embeddings for field definition fuzzy matching (non-blocking) -->
+<script type="module">
+try {
+  const { pipeline, env } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3');
+  env.allowLocalModels = false;
+  window.__hfPipeline = null;
+  window.__hfReady = false;
+  window.initEmbeddings = async () => {
+    if (window.__hfReady) return window.__hfPipeline;
+    try {
+      window.__hfPipeline = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+      window.__hfReady = true;
+      return window.__hfPipeline;
+    } catch (e) { console.debug('Embeddings model load skipped:', e.message); return null; }
+  };
+} catch (e) { console.debug('transformers.js not available:', e.message); }
+</script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Source+Serif+4:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -1043,6 +1060,11 @@ const EVT = {
   // Teams (flexible groups of people, not tied to a single org)
   TEAM_META:      `${NS}.team.metadata`,
   TEAM_MEMBERS:   `${NS}.team.members`,
+  TEAM_SCHEMA:    `${NS}.team.schema`,
+  TEAM_SCHEMA_RULE:`${NS}.team.schema_rule`,
+  // Field definitions & crosswalks
+  FIELD_DEF:      `${NS}.field.definition`,
+  FIELD_CROSSWALK:`${NS}.field.crosswalk`,
   // Matching / dedup
   MATCH_TOKEN:    `${NS}.match.token`,
   MATCH_HIT:      `${NS}.match.hit`,
@@ -1112,6 +1134,25 @@ const GOV_RHYTHMS = {
   monthly_review:     { id: 'monthly_review',     name: 'Monthly Schema Review',         frequency: 'monthly',    anchor_day: 'first_monday', duration_days: 5, participants: 'org_admins' },
   quarterly_alignment:{ id: 'quarterly_alignment', name: 'Quarterly Framework Alignment', frequency: 'quarterly',  anchor_day: 'first_monday', duration_days: 5, participants: 'network_steward_plus_affected' },
   annual_constitutional:{ id: 'annual_constitutional', name: 'Annual Constitutional Review', frequency: 'annual', anchor_day: 'first_monday', duration_days: 14, participants: 'all_members_supermajority' },
+};
+
+/* ═══════════════════ TEAM CONSENT MODES (§Team Schema Governance) ═══════════════════ */
+const TEAM_CONSENT_MODES = {
+  lead_decides: { id: 'lead_decides', label: 'Lead Decides', icon: 'briefcase', color: 'gold',
+    desc: 'Team lead can change the schema directly. Members are notified.' },
+  majority:     { id: 'majority',     label: 'Majority',     icon: 'users',     color: 'blue',
+    desc: 'Schema changes require approval from more than half of team members.' },
+  unanimous:    { id: 'unanimous',    label: 'Unanimous',    icon: 'shieldCheck',color: 'green',
+    desc: 'All team members must approve schema changes. Any member can block.' },
+};
+
+/* ═══════════════════ CROSSWALK RELATIONSHIP TYPES (§Field Definitions) ═══════════════════ */
+const CROSSWALK_TYPES = {
+  equivalent:  { id: 'equivalent',  label: 'Equivalent',  symbol: '\u2261', color: 'green',  desc: 'Same concept, different name' },
+  narrower:    { id: 'narrower',    label: 'Narrower',    symbol: '\u2282', color: 'blue',   desc: 'Target is a subset of source' },
+  broader:     { id: 'broader',     label: 'Broader',     symbol: '\u2283', color: 'teal',   desc: 'Target is a superset of source' },
+  related:     { id: 'related',     label: 'Related',     symbol: '~',      color: 'gold',   desc: 'Conceptually linked but distinct' },
+  conflicting: { id: 'conflicting', label: 'Conflicting', symbol: '\u2260', color: 'red',    desc: 'Same name, different meaning' },
 };
 
 /* ═══════════════════ RESOURCE TRACKING CONSTANTS (§Resource Build) ═══════════════════ */
@@ -2181,19 +2222,55 @@ const DOMAIN_CONFIG = {
     full_name:{method:'block'}, id_number:{method:'block'}, phone:{method:'block'}, email:{method:'block'},
   },
 
-  /* ── Vault Fields ── */
+  /* ── Vault Fields (with definitions & URIs) ── */
   vaultFields: [
-    {key:'full_name',label:'Full Name',category:'identity',sensitive:false},
-    {key:'dob',label:'Date of Birth',category:'identity',sensitive:true},
-    {key:'id_number',label:'ID Number',category:'identity',sensitive:true},
-    {key:'email',label:'Email',category:'contact',sensitive:false},
-    {key:'phone',label:'Phone',category:'contact',sensitive:false},
-    {key:'address',label:'Address',category:'contact',sensitive:true},
-    {key:'affiliation',label:'Organization / Affiliation',category:'details',sensitive:false},
-    {key:'case_notes',label:'Case Notes',category:'case',sensitive:false},
-    {key:'documents',label:'Documents',category:'case',sensitive:true},
-    {key:'history',label:'Case History',category:'case',sensitive:false},
-    {key:'restricted_notes',label:'Restricted Notes',category:'sensitive',sensitive:true},
+    {key:'full_name',label:'Full Name',category:'identity',sensitive:false,
+      uri:'khora:vault/full_name', data_type:'text',
+      definition:'The full legal name of the individual as it appears on government-issued identification, or as preferred by the individual if no ID is available.',
+      scope:'Legal or preferred name for identification within service contexts. Not aliases or nicknames unless no legal name is known.',
+      authority:{uri:'https://hudexchange.info/resource/3824/',name:'HMIS Data Standards',provision:'Element 3.01',org:'HUD'}},
+    {key:'dob',label:'Date of Birth',category:'identity',sensitive:true,
+      uri:'khora:vault/dob', data_type:'date',
+      definition:'The date on which the individual was born, used for age calculation and eligibility determination.',
+      scope:'Calendar date of birth. If exact date is unknown, use best estimate with a note.',
+      authority:{uri:'https://hudexchange.info/resource/3824/',name:'HMIS Data Standards',provision:'Element 3.03',org:'HUD'}},
+    {key:'id_number',label:'ID Number',category:'identity',sensitive:true,
+      uri:'khora:vault/id_number', data_type:'text',
+      definition:'A government-issued identification number such as SSN (last 4), state ID, or other official identifier.',
+      scope:'Any official ID number used for verification. Partial numbers (e.g., last 4 of SSN) preferred for security. Not internal case numbers.',
+      authority:{uri:'https://hudexchange.info/resource/3824/',name:'HMIS Data Standards',provision:'Element 3.02',org:'HUD'}},
+    {key:'email',label:'Email',category:'contact',sensitive:false,
+      uri:'khora:vault/email', data_type:'email',
+      definition:'The primary email address for electronic communication with the individual.',
+      scope:'Email used for service coordination. Not organizational or employer email unless individual has no personal email.'},
+    {key:'phone',label:'Phone',category:'contact',sensitive:false,
+      uri:'khora:vault/phone', data_type:'phone',
+      definition:'The primary phone number for reaching the individual, including mobile.',
+      scope:'Personal or most reliable phone number. Mobile preferred. Include area code.'},
+    {key:'address',label:'Address',category:'contact',sensitive:true,
+      uri:'khora:vault/address', data_type:'address',
+      definition:'The current physical or mailing address of the individual, if known.',
+      scope:'Last known address or place of stay. For unhoused individuals, may be a shelter address, encampment location, or "no fixed address."'},
+    {key:'affiliation',label:'Organization / Affiliation',category:'details',sensitive:false,
+      uri:'khora:vault/affiliation', data_type:'text',
+      definition:'The organization, employer, or institutional affiliation of the individual, if any.',
+      scope:'Primary organizational connection relevant to services. May be employer, school, faith community, or community organization.'},
+    {key:'case_notes',label:'Case Notes',category:'case',sensitive:false,
+      uri:'khora:vault/case_notes', data_type:'text_long',
+      definition:'Free-text notes documenting interactions, observations, and service activities related to the individual.',
+      scope:'Ongoing case documentation. Not restricted clinical notes or legally privileged information.'},
+    {key:'documents',label:'Documents',category:'case',sensitive:true,
+      uri:'khora:vault/documents', data_type:'document',
+      definition:'Uploaded files or document references associated with the individual, such as ID scans, intake forms, or release authorizations.',
+      scope:'Any document relevant to the individual\'s case. May include scanned IDs, signed forms, referral letters. Not case notes.'},
+    {key:'history',label:'Case History',category:'case',sensitive:false,
+      uri:'khora:vault/history', data_type:'text_long',
+      definition:'A chronological record of key events, status changes, and milestones in the individual\'s case.',
+      scope:'High-level timeline of case progression. Not detailed session notes — those go in Case Notes.'},
+    {key:'restricted_notes',label:'Restricted Notes',category:'sensitive',sensitive:true,
+      uri:'khora:vault/restricted_notes', data_type:'text_long',
+      definition:'Sensitive notes with restricted access, such as clinical observations, safety concerns, or legally protected information.',
+      scope:'Information requiring additional access controls beyond standard case notes. May include mental health observations, substance use details, or safety planning notes.'},
   ],
 
   /* ── Field Categories ── */
@@ -2298,6 +2375,41 @@ const CAT_ICONS = DOMAIN_CONFIG.fieldCatIcons;
 const CAT_COLORS = DOMAIN_CONFIG.fieldCatColors;
 const OBS_CAT_LABELS = DOMAIN_CONFIG.obsCatLabels;
 const OBS_CAT_COLORS = DOMAIN_CONFIG.obsCatColors;
+
+/* ═══════════════════ IN-BROWSER EMBEDDINGS HELPERS (§Field Fuzzy Match) ═══════════════════ */
+const getFieldEmbedding = async (text) => {
+  try {
+    if (!window.initEmbeddings) return null;
+    const pipe = await window.initEmbeddings();
+    if (!pipe) return null;
+    const output = await pipe(text, { pooling: 'mean', normalize: true });
+    return Array.from(output.data);
+  } catch (e) { console.debug('Embedding generation skipped'); return null; }
+};
+
+const cosineSim = (a, b) => {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
+};
+
+const findSimilarFields = async (text, fieldDefs, excludeUris = []) => {
+  try {
+    const embedding = await getFieldEmbedding(text);
+    if (!embedding) return [];
+    const results = [];
+    for (const [uri, def] of Object.entries(fieldDefs)) {
+      if (excludeUris.includes(uri)) continue;
+      const defText = `${def.label}. ${def.definition || ''}. ${def.scope || ''}`;
+      const defEmb = await getFieldEmbedding(defText);
+      if (!defEmb) continue;
+      const sim = cosineSim(embedding, defEmb);
+      if (sim > 0.6) results.push({ uri, def, similarity: sim });
+    }
+    return results.sort((a, b) => b.similarity - a.similarity).slice(0, 3);
+  } catch (e) { console.debug('Similarity search skipped'); return []; }
+};
 
 /* ═══════════════════ ORG ROLES & TYPES ═══════════════════ */
 const ORG_ROLES = DOMAIN_CONFIG.orgRoles;
@@ -7176,6 +7288,10 @@ const classifyEvent = (ev, roomInfo) => {
       case EVT.SCHEMA_TRANSFORM: return {op:'REC',epistemic:'MEANT',label:'Transform Rule',desc:`${Object.keys(content.transforms||{}).length} transforms`};
       case EVT.TEAM_META: return {op:'DES',epistemic:'MEANT',label:'Team Metadata',desc:content.name||'team'};
       case EVT.TEAM_MEMBERS: return {op:'CON',epistemic:'MEANT',label:'Team Members',desc:`${(content.members||[]).length} member${(content.members||[]).length!==1?'s':''}`};
+      case EVT.TEAM_SCHEMA: return {op:'DES',epistemic:'MEANT',label:'Team Schema',desc:`v${content.version||1} — ${(content.fields||[]).length} fields`};
+      case EVT.TEAM_SCHEMA_RULE: return {op:'REC',epistemic:'MEANT',label:'Consent Rule',desc:TEAM_CONSENT_MODES[content.mode]?.label||content.mode};
+      case EVT.FIELD_DEF: return {op:'DES',epistemic:'MEANT',label:'Field Definitions',desc:`${Object.keys(content.definitions||{}).length} definitions`};
+      case EVT.FIELD_CROSSWALK: return {op:'SYN',epistemic:'MEANT',label:'Field Crosswalks',desc:`${(content.crosswalks||[]).length} crosswalks`};
       case EVT.NET_MEMBERS: return {op:'CON',epistemic:'MEANT',label:'Network Members',desc:`${(content.organizations||[]).length} orgs`};
       case EVT.GOV_PROPOSAL: return {op:'INS',epistemic:'MEANT',label:'Governance Proposal',desc:content.summary?.slice(0,50)};
       case EVT.GOV_RHYTHM: return {op:'REC',epistemic:'MEANT',label:'Governance Rhythm',desc:content.name};
@@ -8205,7 +8321,7 @@ const ClientApp = ({session, onLogout, showToast}) => {
       } catch (e) { console.warn('Invited room scan failed:', e.message); }
 
       // Phase 2: Scan joined rooms (now includes any rooms we just auto-joined)
-      const scanned = await svc.scanRooms([EVT.PROVIDER_PROFILE, EVT.TEAM_META, EVT.TEAM_MEMBERS]);
+      const scanned = await svc.scanRooms([EVT.PROVIDER_PROFILE, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.FIELD_DEF]);
       let vault = null, schema = null;
       const detectedPending = [], detectedClaimed = [];
       const bridgeProfiles = {}; // bridgeRoomId → provider profile
@@ -10169,7 +10285,8 @@ const DatabaseView = ({cases, caseAssignments, openCase, T, svc, caseAllocations
   ORG_TYPE_LABELS, ORG_ROLE_LABELS, notes, onNewNote, onNoteClick, onOpenIndividual, onOpenResource,
   resourceTypes, resourceRelations, resourceInventory, rosterRoom, networkRoom, onCreateResource, onRefresh,
   onRestock, onEstablishRelation, canViewResource, canControlResource, canAllocateResource,
-  clientRecords, onCreateClient, onCellEdit, onBulkAction, onReorder, onAddRow}) => {
+  clientRecords, onCreateClient, onCellEdit, onBulkAction, onReorder, onAddRow,
+  fieldDefs, fieldCrosswalks, teams, onSaveFieldDef, onSaveCrosswalk}) => {
 
   const [dbTab, setDbTab] = useState('individuals');
 
@@ -10303,7 +10420,8 @@ const DatabaseView = ({cases, caseAssignments, openCase, T, svc, caseAllocations
     <div className="db-tabs">
       {[{id:'individuals',label:'Individuals',count:allIndividuals.length,icon:'users'},
         {id:'notes',label:'Notes',count:(notes||[]).length,icon:'msg'},
-        {id:'resources',label:'Resources',count:(resourceTypes||[]).length,icon:'layers'}
+        {id:'resources',label:'Resources',count:(resourceTypes||[]).length,icon:'layers'},
+        {id:'definitions',label:'Definitions',count:Object.keys(fieldDefs||{}).length,icon:'grid'}
       ].map(tab => <button key={tab.id}
         className={'db-tab'+(dbTab===tab.id?' active':'')}
         onClick={()=>setDbTab(tab.id)}>
@@ -10378,6 +10496,808 @@ const DatabaseView = ({cases, caseAssignments, openCase, T, svc, caseAllocations
       canAllocateResource={canAllocateResource}
       individuals={cases}
     />}
+
+    {/* Definitions Tab — Field Dictionary */}
+    {dbTab==='definitions' && <FieldDictionaryView
+      fieldDefs={fieldDefs||{}}
+      fieldCrosswalks={fieldCrosswalks||[]}
+      teams={teams||[]}
+      onSaveFieldDef={onSaveFieldDef}
+      onSaveCrosswalk={onSaveCrosswalk}
+    />}
+  </div>;
+};
+
+/* ─── FieldDictionaryView — global data dictionary for all field definitions ─── */
+const FieldDictionaryView = ({fieldDefs, fieldCrosswalks, teams, onSaveFieldDef, onSaveCrosswalk}) => {
+  const [expandedUri, setExpandedUri] = useState(null);
+  const [crosswalkPopover, setCrosswalkPopover] = useState(null);
+  const [addCrosswalkFor, setAddCrosswalkFor] = useState(null);
+  const [potentialCrosswalks, setPotentialCrosswalks] = useState([]);
+  const [scanningCrosswalks, setScanningCrosswalks] = useState(false);
+  const scanDone = React.useRef(false);
+
+  // Background scan for potential crosswalks (runs once when tab opens)
+  React.useEffect(() => {
+    if (scanDone.current || Object.keys(fieldDefs||{}).length < 2) return;
+    scanDone.current = true;
+    (async () => {
+      try {
+        setScanningCrosswalks(true);
+        const existingPairs = new Set((fieldCrosswalks||[]).map(xw=>`${xw.from_uri}|${xw.to_uri}`));
+        const defs = Object.values(fieldDefs||{});
+        const potentials = [];
+        for (let i = 0; i < defs.length && potentials.length < 5; i++) {
+          const di = defs[i];
+          const textI = `${di.label}. ${di.definition||''}`;
+          const embI = await getFieldEmbedding(textI);
+          if (!embI) { setScanningCrosswalks(false); return; }
+          for (let j = i + 1; j < defs.length; j++) {
+            const dj = defs[j];
+            if (existingPairs.has(`${di.uri}|${dj.uri}`) || existingPairs.has(`${dj.uri}|${di.uri}`)) continue;
+            const textJ = `${dj.label}. ${dj.definition||''}`;
+            const embJ = await getFieldEmbedding(textJ);
+            if (!embJ) continue;
+            const sim = cosineSim(embI, embJ);
+            if (sim > 0.85) potentials.push({from:di, to:dj, similarity:sim});
+          }
+        }
+        setPotentialCrosswalks(potentials);
+        setScanningCrosswalks(false);
+      } catch { setScanningCrosswalks(false); }
+    })();
+  }, [fieldDefs, fieldCrosswalks]);
+  const [xwTargetUri, setXwTargetUri] = useState('');
+  const [xwRelationship, setXwRelationship] = useState('equivalent');
+  const [xwNotes, setXwNotes] = useState('');
+
+  const getCrosswalksForUri = (uri) =>
+    (fieldCrosswalks||[]).filter(xw => xw.from_uri === uri || (xw.bidirectional && xw.to_uri === uri));
+
+  const getTeamsUsing = (uri) =>
+    (teams||[]).filter(t => t.schema?.fields?.some(f => f.uri === uri));
+
+  const getSource = (uri) => {
+    if (uri?.startsWith('khora:vault/')) return {label:'Vault',color:'gold'};
+    if (uri?.startsWith('khora:team/')) return {label:'Team',color:'purple'};
+    if (uri?.startsWith('khora:org/')) return {label:'Org',color:'blue'};
+    return {label:'External',color:'teal'};
+  };
+
+  const defs = Object.values(fieldDefs||{});
+  const DEF_COLS = [
+    {key:'label', label:'Field', fixed:true},
+    {key:'key', label:'Key'},
+    {key:'category', label:'Category'},
+    {key:'definition', label:'Definition'},
+    {key:'data_type', label:'Type'},
+    {key:'source', label:'Source'},
+    {key:'authority_name', label:'Authority'},
+    {key:'crosswalks', label:'Also Known As'},
+    {key:'version', label:'v'},
+    {key:'sensitive', label:''},
+  ];
+
+  const defRows = defs.map(d => ({
+    ...d,
+    source: getSource(d.uri)?.label || 'Unknown',
+    authority_name: d.authority?.name || '',
+    crosswalks: getCrosswalksForUri(d.uri).length,
+  }));
+
+  const getDefVal = (row, key) => {
+    if (key === 'sensitive') return row.sensitive ? 'Yes' : 'No';
+    return row[key] || '';
+  };
+
+  const renderDefCell = (row, col) => {
+    if (col.key === 'label') return <div>
+      <span style={{fontWeight:600}}>{row.label}</span>
+      <div style={{fontSize:9,fontFamily:'var(--mono)',color:'var(--tx-3)',marginTop:2}}>{row.uri}</div>
+    </div>;
+    if (col.key === 'key') return <span style={{fontFamily:'var(--mono)',fontSize:11}}>{row.key}</span>;
+    if (col.key === 'category') {
+      const cl = CAT_LABELS[row.category] || row.category;
+      const cc = CAT_COLORS[row.category] || 'blue';
+      return <span className={`tag tag-${cc}`} style={{fontSize:9}}>{cl}</span>;
+    }
+    if (col.key === 'definition') return <div style={{fontSize:11.5,lineHeight:1.5,color:'var(--tx-1)',maxWidth:300}}>
+      {(row.definition||'').length > 120 ? (row.definition||'').slice(0,120)+'...' : (row.definition||'')}
+    </div>;
+    if (col.key === 'data_type') return <span className="tag tag-blue" style={{fontSize:8}}>{(row.data_type||'text').toUpperCase()}</span>;
+    if (col.key === 'source') {
+      const src = getSource(row.uri);
+      return <span className={`tag tag-${src.color}`} style={{fontSize:8}}>{src.label}</span>;
+    }
+    if (col.key === 'authority_name') return row.authority
+      ? <span style={{fontSize:10.5,color:'var(--teal)'}} title={row.authority.uri}>
+          {row.authority.org ? <strong>{row.authority.org}</strong> : ''} {row.authority.provision||''}
+        </span>
+      : <span style={{color:'var(--tx-3)',fontSize:10}}>—</span>;
+    if (col.key === 'crosswalks') {
+      const xws = getCrosswalksForUri(row.uri);
+      if (xws.length === 0) return <span style={{color:'var(--tx-3)',fontSize:10}}>—</span>;
+      return <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+        {xws.slice(0,3).map(xw => {
+          const rel = CROSSWALK_TYPES[xw.relationship] || CROSSWALK_TYPES.related;
+          const targetUri = xw.from_uri === row.uri ? xw.to_uri : xw.from_uri;
+          const targetDef = fieldDefs[targetUri];
+          return <span key={xw.id} className={`tag tag-${rel.color}`} style={{fontSize:8,cursor:'pointer'}}
+            onClick={e=>{e.stopPropagation();setCrosswalkPopover({uri:row.uri,xws});}}>
+            {rel.symbol} {targetDef?.label || targetUri.split('/').pop()}
+          </span>;
+        })}
+        {xws.length > 3 && <span style={{fontSize:9,color:'var(--tx-3)'}}>+{xws.length-3}</span>}
+      </div>;
+    }
+    if (col.key === 'version') return <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-2)'}}>v{row.version||1}</span>;
+    if (col.key === 'sensitive') return row.sensitive ? <I n="lock" s={11} c="var(--red)"/> : null;
+    return row[col.key] || '';
+  };
+
+  return <div>
+    {/* Potential crosswalks banner (from background embedding scan) */}
+    {potentialCrosswalks.length > 0 && <div style={{padding:'10px 14px',background:'var(--teal-dim)',border:'1px solid rgba(61,214,140,.15)',borderRadius:'var(--r)',marginBottom:12,display:'flex',alignItems:'center',gap:10}}>
+      <I n="grid" s={14} c="var(--teal)"/>
+      <div style={{flex:1}}>
+        <span style={{fontSize:12,fontWeight:600,color:'var(--teal)'}}>{potentialCrosswalks.length} potential crosswalk{potentialCrosswalks.length!==1?'s':''} detected</span>
+        <span style={{fontSize:11,color:'var(--tx-2)',marginLeft:8}}>Fields that may refer to the same concept.</span>
+      </div>
+      <button className="b-gho b-xs" style={{color:'var(--teal)'}} onClick={()=>{
+        // Expand the first potential match
+        if (potentialCrosswalks[0]) setExpandedUri(potentialCrosswalks[0].from.uri);
+      }}>Review</button>
+    </div>}
+    <DataTable
+      data={defRows}
+      columns={DEF_COLS}
+      defaultVisibleCols={['label','category','definition','source','authority_name','crosswalks','sensitive']}
+      groupOptions={[{key:'category',label:'Category'},{key:'source',label:'Source'}]}
+      getVal={getDefVal}
+      renderCell={renderDefCell}
+      label="field definitions"
+      onRowClick={(row) => setExpandedUri(expandedUri === row.uri ? null : row.uri)}
+      selectedId={expandedUri}
+    />
+
+    {/* Expanded definition detail */}
+    {expandedUri && fieldDefs[expandedUri] && (() => {
+      const d = fieldDefs[expandedUri];
+      const src = getSource(d.uri);
+      const xws = getCrosswalksForUri(d.uri);
+      const usedBy = getTeamsUsing(d.uri);
+      return <div className="card" style={{marginTop:10,padding:'16px 20px',borderLeft:`3px solid var(--${src.color})`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:700}}>{d.label}</div>
+            <div style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)',marginTop:2}}>{d.uri}</div>
+          </div>
+          <div style={{display:'flex',gap:4}}>
+            <span className={`tag tag-${src.color}`} style={{fontSize:9}}>{src.label}</span>
+            <span className="tag tag-blue" style={{fontSize:9}}>{(d.data_type||'text').toUpperCase()}</span>
+            {d.sensitive && <span className="tag tag-red" style={{fontSize:9}}><I n="lock" s={8}/>Sensitive</span>}
+          </div>
+        </div>
+
+        <div style={{marginTop:12}}>
+          <span className="section-label">DEFINITION</span>
+          <p style={{fontSize:12.5,lineHeight:1.6,color:'var(--tx-1)',marginTop:4}}>{d.definition || 'No definition provided.'}</p>
+        </div>
+
+        {d.scope && <div style={{marginTop:10}}>
+          <span className="section-label">SCOPE</span>
+          <p style={{fontSize:12,lineHeight:1.5,color:'var(--tx-2)',marginTop:4}}>{d.scope}</p>
+        </div>}
+
+        {d.authority && <div style={{marginTop:10}}>
+          <span className="section-label">AUTHORITY</span>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:4}}>
+            <span className="tag tag-teal" style={{fontSize:9}}>{d.authority.org || 'External'}</span>
+            <span style={{fontSize:11.5,color:'var(--tx-1)'}}>{d.authority.name}</span>
+            {d.authority.provision && <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-2)'}}>{d.authority.provision}</span>}
+          </div>
+        </div>}
+
+        {/* Also known as — crosswalks */}
+        <div style={{marginTop:12}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <span className="section-label">ALSO KNOWN AS</span>
+            <button className="b-gho b-xs" onClick={()=>setAddCrosswalkFor(addCrosswalkFor===d.uri?null:d.uri)}
+              style={{display:'flex',alignItems:'center',gap:3}}><I n="plus" s={10}/>Link</button>
+          </div>
+          {xws.length === 0 && addCrosswalkFor !== d.uri
+            ? <p style={{fontSize:11,color:'var(--tx-3)',marginTop:4}}>No crosswalks. Link this field to equivalent definitions in other contexts.</p>
+            : <div style={{marginTop:6,display:'flex',flexDirection:'column',gap:4}}>
+              {xws.map(xw => {
+                const rel = CROSSWALK_TYPES[xw.relationship] || CROSSWALK_TYPES.related;
+                const targetUri = xw.from_uri === d.uri ? xw.to_uri : xw.from_uri;
+                const targetDef = fieldDefs[targetUri];
+                return <div key={xw.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--bg-2)',borderRadius:'var(--r)',border:'1px solid var(--border-0)'}}>
+                  <span style={{fontWeight:700,color:`var(--${rel.color})`,fontSize:14}} title={rel.desc}>{rel.symbol}</span>
+                  <div style={{flex:1}}>
+                    <span style={{fontSize:12,fontWeight:600}}>{targetDef?.label || targetUri}</span>
+                    {targetDef?.definition && <div style={{fontSize:10.5,color:'var(--tx-2)',marginTop:1}}>{targetDef.definition.slice(0,80)}{targetDef.definition.length>80?'...':''}</div>}
+                  </div>
+                  <span className={`tag tag-${rel.color}`} style={{fontSize:8}}>{rel.label}</span>
+                  {xw.notes && <span style={{fontSize:10,color:'var(--tx-3)'}} title={xw.notes}><I n="msg" s={10}/></span>}
+                </div>;
+              })}
+            </div>}
+          {/* Add crosswalk inline form */}
+          {addCrosswalkFor === d.uri && <div style={{marginTop:8,padding:'10px 12px',background:'var(--bg-2)',border:'1px solid var(--border-1)',borderRadius:'var(--r)'}}>
+            <div style={{fontSize:11,fontWeight:600,marginBottom:6}}>Link to another definition</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'flex-end'}}>
+              <div style={{flex:1,minWidth:180}}>
+                <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Target field or URI</label>
+                <select value={xwTargetUri} onChange={e=>setXwTargetUri(e.target.value)} className="ipt" style={{fontSize:11,padding:'5px 8px'}}>
+                  <option value="">Select a field...</option>
+                  {Object.values(fieldDefs).filter(fd=>fd.uri!==d.uri).map(fd=>
+                    <option key={fd.uri} value={fd.uri}>{fd.label} ({fd.uri})</option>)}
+                </select>
+              </div>
+              <div style={{minWidth:120}}>
+                <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Relationship</label>
+                <select value={xwRelationship} onChange={e=>setXwRelationship(e.target.value)} className="ipt" style={{fontSize:11,padding:'5px 8px'}}>
+                  {Object.values(CROSSWALK_TYPES).map(ct=>
+                    <option key={ct.id} value={ct.id}>{ct.symbol} {ct.label}</option>)}
+                </select>
+              </div>
+              <div style={{minWidth:120}}>
+                <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Notes (optional)</label>
+                <input type="text" value={xwNotes} onChange={e=>setXwNotes(e.target.value)} className="ipt" placeholder="Why these are linked..." style={{fontSize:11,padding:'5px 8px'}}/>
+              </div>
+              <button className="b-pri b-xs" disabled={!xwTargetUri} onClick={()=>{
+                if (onSaveCrosswalk && xwTargetUri) {
+                  const xw = {
+                    id:'xw_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+                    from_uri:d.uri, to_uri:xwTargetUri,
+                    relationship:xwRelationship,
+                    bidirectional:xwRelationship==='equivalent'||xwRelationship==='related',
+                    notes:xwNotes||'',
+                    created_at:Date.now(),
+                  };
+                  onSaveCrosswalk(xw);
+                  setXwTargetUri(''); setXwNotes(''); setAddCrosswalkFor(null);
+                }
+              }}>Save</button>
+              <button className="b-gho b-xs" onClick={()=>{setAddCrosswalkFor(null);setXwTargetUri('');setXwNotes('');}}>Cancel</button>
+            </div>
+          </div>}
+        </div>
+
+        {/* Teams using this field */}
+        {usedBy.length > 0 && <div style={{marginTop:12}}>
+          <span className="section-label">USED BY TEAMS</span>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
+            {usedBy.map(t => <span key={t.roomId} className="tag tag-purple" style={{fontSize:9}}>{t.name||'Unnamed'}</span>)}
+          </div>
+        </div>}
+      </div>;
+    })()}
+  </div>;
+};
+
+/* ─── TeamDetailView — expanded team view with Overview / Schema / Activity tabs ─── */
+const TeamDetailView = ({team, teams, svc, fieldDefs, fieldCrosswalks, showToast, onBack, onInvite, onUpdateTeam, onSaveFieldDef, onSaveCrosswalk}) => {
+  const [teamTab, setTeamTab] = useState('overview');
+  const [addFieldModal, setAddFieldModal] = useState(false);
+  const [editFieldUri, setEditFieldUri] = useState(null);
+  // Add field form state
+  const [fieldDraft, setFieldDraft] = useState({key:'',label:'',definition:'',scope:'',category:'case',data_type:'text',sensitive:false,authority:null});
+  const [addExistingField, setAddExistingField] = useState(false);
+  const [selectedExistingUri, setSelectedExistingUri] = useState('');
+  // Embedding-based similarity suggestions
+  const [similarFields, setSimilarFields] = useState([]);
+  const [searchingSimilar, setSearchingSimilar] = useState(false);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('khora_dismissed_xw_suggestions')||'[]'); } catch { return []; }
+  });
+  const similarTimerRef = React.useRef(null);
+
+  const isLead = team.owner === svc?.userId;
+  const schema = team.schema || {version:1,fields:[],pending_changes:[],change_log:[]};
+  const schemaRule = team.schemaRule || {mode:'lead_decides'};
+  const consentMode = TEAM_CONSENT_MODES[schemaRule.mode] || TEAM_CONSENT_MODES.lead_decides;
+
+  // Resolve field URIs to full definitions
+  const resolvedFields = (schema.fields||[]).map(sf => {
+    const def = fieldDefs[sf.uri] || DOMAIN_CONFIG.vaultFields.find(v=>v.uri===sf.uri);
+    return {...sf, def: def || {uri:sf.uri, key:sf.uri.split('/').pop(), label:sf.uri.split('/').pop(), definition:''}};
+  });
+
+  // Get crosswalks for a field
+  const getCrosswalksForUri = (uri) =>
+    (fieldCrosswalks||[]).filter(xw => xw.from_uri === uri || (xw.bidirectional && xw.to_uri === uri));
+
+  const getSource = (uri) => {
+    if (uri?.startsWith('khora:vault/')) return {label:'Vault',color:'gold'};
+    if (uri?.startsWith('khora:team/')) return {label:'Team',color:'purple'};
+    if (uri?.startsWith('khora:org/')) return {label:'Org',color:'blue'};
+    return {label:'External',color:'teal'};
+  };
+
+  // Consent threshold helpers
+  const getMemberCount = () => (team.members||[]).length;
+  const getThreshold = () => {
+    if (schemaRule.mode === 'lead_decides') return 0;
+    if (schemaRule.mode === 'majority') return Math.floor(getMemberCount() / 2) + 1;
+    return getMemberCount(); // unanimous
+  };
+
+  const canModifySchema = () => {
+    if (schemaRule.mode === 'lead_decides') return isLead;
+    return true; // anyone can propose in majority/unanimous
+  };
+
+  // Apply a schema change
+  const applySchemaChange = async (change) => {
+    const currentSchema = {...schema};
+    if (schemaRule.mode === 'lead_decides' && isLead) {
+      // Apply immediately
+      if (change.action === 'add_field') {
+        currentSchema.fields = [...(currentSchema.fields||[]), {uri:change.uri, required:change.required||false, added_version:currentSchema.version+1}];
+      } else if (change.action === 'remove_field') {
+        currentSchema.fields = (currentSchema.fields||[]).filter(f=>f.uri!==change.uri);
+      }
+      currentSchema.version = (currentSchema.version||1) + 1;
+      currentSchema.last_modified = Date.now();
+      currentSchema.modified_by = svc.userId;
+      currentSchema.change_log = [...(currentSchema.change_log||[]), {version:currentSchema.version, summary:change.summary||change.action, by:svc.userId, ts:Date.now()}];
+      try {
+        await svc.setState(team.roomId, EVT.TEAM_SCHEMA, currentSchema);
+        onUpdateTeam({...team, schema:currentSchema});
+        showToast(`Schema updated to v${currentSchema.version}`,'success');
+      } catch(e) { showToast('Schema update failed: '+e.message,'error'); }
+    } else {
+      // Add as pending change
+      const pending = {
+        id: 'chg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+        ...change,
+        proposed_by: svc.userId,
+        proposed_at: Date.now(),
+        approvals: schemaRule.mode === 'lead_decides' ? {} : {[svc.userId]: Date.now()},
+        blocks: {},
+      };
+      currentSchema.pending_changes = [...(currentSchema.pending_changes||[]), pending];
+      try {
+        await svc.setState(team.roomId, EVT.TEAM_SCHEMA, currentSchema);
+        onUpdateTeam({...team, schema:currentSchema});
+        showToast('Schema change proposed — awaiting approval','info');
+      } catch(e) { showToast('Failed: '+e.message,'error'); }
+    }
+  };
+
+  // Approve or block a pending change
+  const respondToChange = async (changeId, position) => {
+    const currentSchema = {...schema};
+    const pc = (currentSchema.pending_changes||[]).find(c=>c.id===changeId);
+    if (!pc) return;
+
+    if (position === 'approve') {
+      pc.approvals = {...(pc.approvals||{}), [svc.userId]:Date.now()};
+    } else {
+      pc.blocks = {...(pc.blocks||{}), [svc.userId]:Date.now()};
+    }
+
+    // Check if threshold met
+    const approvalCount = Object.keys(pc.approvals||{}).length;
+    const blockCount = Object.keys(pc.blocks||{}).length;
+    const threshold = getThreshold();
+
+    if (schemaRule.mode === 'unanimous' && blockCount > 0) {
+      // Blocked — remove pending change
+      currentSchema.pending_changes = (currentSchema.pending_changes||[]).filter(c=>c.id!==changeId);
+      showToast('Schema change blocked','warning');
+    } else if (approvalCount >= threshold) {
+      // Auto-apply
+      if (pc.action === 'add_field') {
+        currentSchema.fields = [...(currentSchema.fields||[]), {uri:pc.uri, required:pc.required||false, added_version:currentSchema.version+1}];
+      } else if (pc.action === 'remove_field') {
+        currentSchema.fields = (currentSchema.fields||[]).filter(f=>f.uri!==pc.uri);
+      }
+      currentSchema.version = (currentSchema.version||1) + 1;
+      currentSchema.last_modified = Date.now();
+      currentSchema.modified_by = svc.userId;
+      currentSchema.change_log = [...(currentSchema.change_log||[]), {version:currentSchema.version, summary:pc.summary||pc.action, by:pc.proposed_by, ts:Date.now()}];
+      currentSchema.pending_changes = (currentSchema.pending_changes||[]).filter(c=>c.id!==changeId);
+      showToast(`Schema updated to v${currentSchema.version} — approved by ${approvalCount} members`,'success');
+    }
+
+    try {
+      await svc.setState(team.roomId, EVT.TEAM_SCHEMA, currentSchema);
+      onUpdateTeam({...team, schema:currentSchema});
+    } catch(e) { showToast('Failed: '+e.message,'error'); }
+  };
+
+  // Change consent mode
+  const changeConsentMode = async (newMode) => {
+    const newRule = {mode:newMode, modified_by:svc.userId, modified_at:Date.now()};
+    try {
+      await svc.setState(team.roomId, EVT.TEAM_SCHEMA_RULE, newRule);
+      onUpdateTeam({...team, schemaRule:newRule});
+      showToast(`Consent mode changed to ${TEAM_CONSENT_MODES[newMode]?.label}`,'success');
+    } catch(e) { showToast('Failed: '+e.message,'error'); }
+  };
+
+  // Add existing field from vault/other defs
+  const handleAddExistingField = async () => {
+    if (!selectedExistingUri) return;
+    await applySchemaChange({action:'add_field', uri:selectedExistingUri, required:false, summary:`Added ${fieldDefs[selectedExistingUri]?.label || selectedExistingUri}`});
+    setAddExistingField(false);
+    setSelectedExistingUri('');
+  };
+
+  // Save new custom field definition + add to schema
+  const handleSaveNewField = async () => {
+    if (!fieldDraft.label || !fieldDraft.definition) { showToast('Label and definition are required','warning'); return; }
+    const key = fieldDraft.key || fieldDraft.label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+    const uri = `khora:team/${team.roomId}/${key}`;
+    const def = {
+      uri, key, label:fieldDraft.label, version:1,
+      definition:fieldDraft.definition, scope:fieldDraft.scope||'',
+      category:fieldDraft.category||'case', sensitive:fieldDraft.sensitive||false,
+      data_type:fieldDraft.data_type||'text', authority:fieldDraft.authority||null,
+      created_by:svc.userId, created_at:Date.now(), supersedes:null,
+    };
+    // Save the definition
+    if (onSaveFieldDef) await onSaveFieldDef(def);
+    // Add to team schema
+    await applySchemaChange({action:'add_field', uri, required:false, summary:`Added "${fieldDraft.label}"`});
+    setAddFieldModal(false);
+    setFieldDraft({key:'',label:'',definition:'',scope:'',category:'case',data_type:'text',sensitive:false,authority:null});
+  };
+
+  return <div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
+    <button onClick={onBack} className="b-gho b-sm" style={{marginBottom:14,display:'flex',alignItems:'center',gap:4}}>
+      <I n="back" s={13}/>All Teams
+    </button>
+
+    {/* Team Header */}
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+      <div>
+        <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>{team.name||'Unnamed Team'}</h2>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
+          {isLead&&<span className="tag tag-gold" style={{fontSize:9}}>LEAD</span>}
+          {team.org_name&&<span className="tag tag-blue" style={{fontSize:9}}>{team.org_name}</span>}
+          <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)'}}>{team.members?.length||0} members</span>
+          <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)'}}>{schema.fields?.length||0} fields</span>
+          <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)'}}>v{schema.version||1}</span>
+        </div>
+        {team.description&&<p style={{fontSize:12,color:'var(--tx-2)',marginTop:6,lineHeight:1.5}}>{team.description}</p>}
+      </div>
+      <div style={{display:'flex',gap:6}}>
+        {isLead&&<button onClick={()=>onInvite(team)} className="b-gho b-sm" style={{display:'flex',alignItems:'center',gap:4}}>
+          <I n="userPlus" s={12}/>Invite
+        </button>}
+      </div>
+    </div>
+
+    {/* Tab Bar */}
+    <div className="db-tabs">
+      {[{id:'overview',label:'Overview',icon:'users'},
+        {id:'schema',label:'Schema',icon:'grid'},
+        {id:'activity',label:'Activity',icon:'layers'}
+      ].map(tab=><button key={tab.id} className={'db-tab'+(teamTab===tab.id?' active':'')} onClick={()=>setTeamTab(tab.id)}>
+        <I n={tab.icon} s={13}/>{tab.label}
+      </button>)}
+    </div>
+
+    {/* ═══ OVERVIEW TAB ═══ */}
+    {teamTab==='overview'&&<div>
+      <div className="card" style={{padding:'16px 20px',marginBottom:12}}>
+        <span className="section-label">MEMBERS ({team.members?.length||0})</span>
+        <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:8}}>
+          {(team.members||[]).map((m,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 10px',background:'var(--bg-2)',borderRadius:'var(--r)'}}>
+            <div style={{width:28,height:28,borderRadius:'50%',background:m.role==='lead'?'var(--gold-dim)':'var(--bg-3)',display:'flex',alignItems:'center',justifyContent:'center',color:m.role==='lead'?'var(--gold)':'var(--tx-2)',flexShrink:0}}>
+              <I n={m.role==='lead'?'briefcase':'user'} s={12}/></div>
+            <div style={{flex:1}}>
+              <span style={{fontSize:12.5,fontWeight:500}}>{m.display_name||m.userId}</span>
+              {m.userId!==m.display_name&&<span style={{fontSize:10,color:'var(--tx-3)',fontFamily:'var(--mono)',marginLeft:6}}>{m.userId}</span>}
+            </div>
+            <span className={`tag ${m.role==='lead'?'tag-gold':'tag-blue'}`} style={{fontSize:8}}>{m.role?.toUpperCase()}</span>
+          </div>)}
+        </div>
+      </div>
+      <div className="card" style={{padding:'16px 20px'}}>
+        <span className="section-label">DETAILS</span>
+        <div style={{display:'grid',gridTemplateColumns:'100px 1fr',gap:'6px 12px',marginTop:8,fontSize:12}}>
+          <span style={{color:'var(--tx-3)'}}>Created</span><span>{team.created ? new Date(team.created).toLocaleDateString() : '—'}</span>
+          <span style={{color:'var(--tx-3)'}}>Room ID</span><span style={{fontFamily:'var(--mono)',fontSize:10,wordBreak:'break-all'}}>{team.roomId}</span>
+          <span style={{color:'var(--tx-3)'}}>Schema</span><span>v{schema.version||1} — {schema.fields?.length||0} fields</span>
+          <span style={{color:'var(--tx-3)'}}>Consent</span><span style={{display:'flex',alignItems:'center',gap:4}}>
+            <I n={consentMode.icon} s={11} c={`var(--${consentMode.color})`}/>
+            {consentMode.label}
+          </span>
+        </div>
+      </div>
+    </div>}
+
+    {/* ═══ SCHEMA TAB ═══ */}
+    {teamTab==='schema'&&<div>
+      {/* Header with consent mode + add field */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:12,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'var(--tx-2)'}}>TEAM SCHEMA</span>
+          <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)'}}>v{schema.version||1} — {schema.fields?.length||0} fields</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {isLead && <div style={{display:'flex',alignItems:'center',gap:4}}>
+            <span style={{fontSize:10,color:'var(--tx-3)'}}>Consent:</span>
+            <select value={schemaRule.mode} onChange={e=>changeConsentMode(e.target.value)} className="ipt" style={{fontSize:10,padding:'3px 6px',minWidth:0}}>
+              {Object.values(TEAM_CONSENT_MODES).map(m=><option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </div>}
+          {canModifySchema() && <div style={{display:'flex',gap:4}}>
+            <button className="b-gho b-xs" onClick={()=>setAddExistingField(true)} style={{display:'flex',alignItems:'center',gap:3}}>
+              <I n="plus" s={10}/>Add Existing
+            </button>
+            <button className="b-pri b-xs" onClick={()=>{setAddFieldModal(true);setFieldDraft({key:'',label:'',definition:'',scope:'',category:'case',data_type:'text',sensitive:false,authority:null})}} style={{display:'flex',alignItems:'center',gap:3}}>
+              <I n="plus" s={10}/>New Field
+            </button>
+          </div>}
+        </div>
+      </div>
+
+      {/* Consent mode info banner */}
+      <div style={{padding:'8px 12px',background:`var(--${consentMode.color}-dim, var(--bg-2))`,border:`1px solid rgba(128,128,128,.1)`,borderRadius:'var(--r)',marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
+        <I n={consentMode.icon} s={13} c={`var(--${consentMode.color})`}/>
+        <span style={{fontSize:11,color:'var(--tx-1)'}}>{consentMode.desc}</span>
+      </div>
+
+      {/* Pending changes */}
+      {(schema.pending_changes||[]).length > 0 && <div style={{marginBottom:12}}>
+        {schema.pending_changes.map(pc=>{
+          const approvalCount = Object.keys(pc.approvals||{}).length;
+          const threshold = getThreshold();
+          const alreadyResponded = !!(pc.approvals?.[svc.userId] || pc.blocks?.[svc.userId]);
+          return <div key={pc.id} style={{padding:'10px 14px',background:'var(--gold-dim)',border:'1px solid var(--gold-mid)',borderRadius:'var(--r)',marginBottom:6}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <span style={{fontSize:12,fontWeight:600}}>Pending: {pc.summary || pc.action}</span>
+                <span style={{fontSize:10,color:'var(--tx-2)',marginLeft:8}}>by {(pc.proposed_by||'').split(':')[0]?.replace('@','')}</span>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-2)'}}>{approvalCount}/{threshold} approved</span>
+                {!alreadyResponded && <>
+                  <button className="b-gho b-xs" style={{color:'var(--green)'}} onClick={()=>respondToChange(pc.id,'approve')}>Approve</button>
+                  <button className="b-gho b-xs" style={{color:'var(--red)'}} onClick={()=>respondToChange(pc.id,'block')}>Block</button>
+                </>}
+                {alreadyResponded && <span className="tag tag-green" style={{fontSize:8}}>Responded</span>}
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div style={{marginTop:6,height:3,background:'var(--border-1)',borderRadius:2,overflow:'hidden'}}>
+              <div style={{height:'100%',background:'var(--green)',width:`${Math.min(100,approvalCount/threshold*100)}%`,borderRadius:2,transition:'width .3s'}}/>
+            </div>
+          </div>;
+        })}
+      </div>}
+
+      {/* Field table */}
+      {resolvedFields.length === 0
+        ? <div className="card" style={{textAlign:'center',padding:'40px 20px',borderStyle:'dashed'}}>
+            <I n="grid" s={32}/>
+            <p style={{color:'var(--tx-2)',marginTop:10,fontSize:13}}>No fields in schema</p>
+            <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:4}}>Add fields to define what data this team tracks about individuals.</p>
+          </div>
+        : <table className="dt" style={{width:'100%'}}>
+          <thead>
+            <tr>
+              <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--tx-3)',borderBottom:'2px solid var(--border-1)'}}>Field</th>
+              <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--tx-3)',borderBottom:'2px solid var(--border-1)'}}>Category</th>
+              <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--tx-3)',borderBottom:'2px solid var(--border-1)',maxWidth:300}}>Definition</th>
+              <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--tx-3)',borderBottom:'2px solid var(--border-1)'}}>Source</th>
+              <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--tx-3)',borderBottom:'2px solid var(--border-1)'}}>Also Known As</th>
+              <th style={{width:60,textAlign:'center',padding:'8px 12px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',color:'var(--tx-3)',borderBottom:'2px solid var(--border-1)'}}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {resolvedFields.map(sf=>{
+              const d = sf.def;
+              const src = getSource(d.uri);
+              const xws = getCrosswalksForUri(d.uri);
+              return <tr key={sf.uri} style={{borderBottom:'1px solid var(--border-0)'}}>
+                <td style={{padding:'10px 12px'}}>
+                  <span style={{fontWeight:600,fontSize:12.5}}>{d.label}</span>
+                  <div style={{fontSize:9,fontFamily:'var(--mono)',color:'var(--tx-3)',marginTop:1}}>{d.key}</div>
+                </td>
+                <td style={{padding:'10px 12px'}}>
+                  <span className={`tag tag-${CAT_COLORS[d.category]||'blue'}`} style={{fontSize:8}}>{CAT_LABELS[d.category]||d.category}</span>
+                </td>
+                <td style={{padding:'10px 12px',maxWidth:300}}>
+                  <span style={{fontSize:11.5,lineHeight:1.5,color:'var(--tx-1)'}}>
+                    {(d.definition||'').length > 100 ? (d.definition||'').slice(0,100)+'...' : (d.definition||'No definition')}
+                  </span>
+                </td>
+                <td style={{padding:'10px 12px'}}>
+                  <span className={`tag tag-${src.color}`} style={{fontSize:8}}>{src.label}</span>
+                </td>
+                <td style={{padding:'10px 12px'}}>
+                  {xws.length === 0 ? <span style={{color:'var(--tx-3)',fontSize:10}}>—</span>
+                  : <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                    {xws.slice(0,2).map(xw=>{
+                      const rel = CROSSWALK_TYPES[xw.relationship]||CROSSWALK_TYPES.related;
+                      const targetUri = xw.from_uri===d.uri?xw.to_uri:xw.from_uri;
+                      const targetDef = fieldDefs[targetUri];
+                      return <span key={xw.id} className={`tag tag-${rel.color}`} style={{fontSize:8}}>
+                        {rel.symbol} {targetDef?.label||targetUri.split('/').pop()}
+                      </span>;
+                    })}
+                  </div>}
+                </td>
+                <td style={{padding:'10px 12px',textAlign:'center'}}>
+                  {canModifySchema() && <button className="b-gho b-xs" style={{color:'var(--red)',fontSize:10}} onClick={()=>applySchemaChange({action:'remove_field',uri:sf.uri,summary:`Removed "${d.label}"`})} title="Remove field">
+                    <I n="close" s={10}/>
+                  </button>}
+                </td>
+              </tr>;
+            })}
+          </tbody>
+        </table>}
+
+      {/* Change log */}
+      {(schema.change_log||[]).length > 0 && <div style={{marginTop:16}}>
+        <span className="section-label">CHANGE LOG</span>
+        <div style={{display:'flex',flexDirection:'column',gap:3,marginTop:6}}>
+          {[...(schema.change_log||[])].reverse().map((cl,i)=>
+            <div key={i} style={{fontSize:11,color:'var(--tx-2)',display:'flex',gap:8,padding:'4px 0'}}>
+              <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--tx-3)',minWidth:24}}>v{cl.version}</span>
+              <span>{cl.summary}</span>
+              <span style={{marginLeft:'auto',fontSize:10,color:'var(--tx-3)'}}>
+                {(cl.by||'').split(':')[0]?.replace('@','')} — {cl.ts ? new Date(cl.ts).toLocaleDateString() : ''}
+              </span>
+            </div>)}
+        </div>
+      </div>}
+    </div>}
+
+    {/* ═══ ACTIVITY TAB ═══ */}
+    {teamTab==='activity'&&<div className="card" style={{padding:'20px',textAlign:'center'}}>
+      <I n="layers" s={28} c="var(--tx-3)"/>
+      <p style={{color:'var(--tx-2)',marginTop:10,fontSize:12}}>Activity stream for team operations will appear here.</p>
+      <p style={{color:'var(--tx-3)',fontSize:11,marginTop:4}}>Schema changes, member joins, and other team events are logged as epistemic operations.</p>
+    </div>}
+
+    {/* ═══ ADD EXISTING FIELD MODAL ═══ */}
+    {addExistingField && <div className="fb-adopt-modal" onClick={()=>setAddExistingField(false)}>
+      <div className="fb-adopt-panel" onClick={e=>e.stopPropagation()} style={{maxWidth:500}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}>
+          <div style={{fontSize:16,fontWeight:700}}>Add Existing Field</div>
+          <button onClick={()=>setAddExistingField(false)} style={{background:'none',border:'none',color:'var(--tx-2)',cursor:'pointer',fontSize:18}}>×</button>
+        </div>
+        <p style={{fontSize:12,color:'var(--tx-2)',marginBottom:12}}>Select a field from the global dictionary to add to this team's schema.</p>
+        <select value={selectedExistingUri} onChange={e=>setSelectedExistingUri(e.target.value)} className="ipt" style={{width:'100%',marginBottom:8}}>
+          <option value="">Choose a field...</option>
+          {Object.values(fieldDefs).filter(d=>!schema.fields?.some(f=>f.uri===d.uri)).map(d=>
+            <option key={d.uri} value={d.uri}>{d.label} — {(d.definition||'').slice(0,60)}{(d.definition||'').length>60?'...':''}</option>)}
+        </select>
+        {selectedExistingUri && fieldDefs[selectedExistingUri] && <div style={{padding:'10px 12px',background:'var(--bg-2)',borderRadius:'var(--r)',marginBottom:8}}>
+          <div style={{fontWeight:600,fontSize:12}}>{fieldDefs[selectedExistingUri].label}</div>
+          <div style={{fontSize:11,color:'var(--tx-2)',marginTop:4}}>{fieldDefs[selectedExistingUri].definition}</div>
+          {fieldDefs[selectedExistingUri].authority && <div style={{fontSize:10,color:'var(--teal)',marginTop:4}}>
+            {fieldDefs[selectedExistingUri].authority.org} — {fieldDefs[selectedExistingUri].authority.provision}
+          </div>}
+        </div>}
+        <div style={{textAlign:'right'}}>
+          <button className="b-gho b-sm" onClick={()=>setAddExistingField(false)} style={{marginRight:6}}>Cancel</button>
+          <button className="b-pri b-sm" disabled={!selectedExistingUri} onClick={handleAddExistingField}>Add to Schema</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* ═══ NEW FIELD DEFINITION MODAL ═══ */}
+    {addFieldModal && <div className="fb-adopt-modal" onClick={()=>setAddFieldModal(false)}>
+      <div className="fb-adopt-panel" onClick={e=>e.stopPropagation()} style={{maxWidth:600}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}>
+          <div style={{fontSize:16,fontWeight:700}}>Define New Field</div>
+          <button onClick={()=>setAddFieldModal(false)} style={{background:'none',border:'none',color:'var(--tx-2)',cursor:'pointer',fontSize:18}}>×</button>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <div>
+            <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Label *</label>
+            <input type="text" value={fieldDraft.label} onChange={e=>{
+              const label = e.target.value;
+              setFieldDraft(d=>({...d, label, key:label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')}));
+            }} className="ipt" placeholder="e.g. Housing Status" style={{width:'100%'}}/>
+          </div>
+          <div>
+            <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Key</label>
+            <input type="text" value={fieldDraft.key} onChange={e=>setFieldDraft(d=>({...d,key:e.target.value}))} className="ipt" placeholder="housing_status" style={{width:'100%',fontFamily:'var(--mono)',fontSize:11}}/>
+          </div>
+        </div>
+        <div style={{marginBottom:10}}>
+          <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Definition *</label>
+          <textarea value={fieldDraft.definition} onChange={e=>{
+            const val = e.target.value;
+            setFieldDraft(d=>({...d,definition:val}));
+            // Debounced similarity search
+            if (similarTimerRef.current) clearTimeout(similarTimerRef.current);
+            if (val.length > 20) {
+              similarTimerRef.current = setTimeout(async ()=>{
+                setSearchingSimilar(true);
+                const results = await findSimilarFields(`${fieldDraft.label}. ${val}`, fieldDefs, schema.fields?.map(f=>f.uri)||[]);
+                setSimilarFields(results.filter(r=>!dismissedSuggestions.includes(r.uri)));
+                setSearchingSimilar(false);
+              }, 500);
+            } else { setSimilarFields([]); }
+          }} className="ipt" rows={3} placeholder="What this field captures and what it means..." style={{width:'100%',resize:'vertical'}}/>
+        </div>
+        <div style={{marginBottom:10}}>
+          <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Scope (optional)</label>
+          <textarea value={fieldDraft.scope} onChange={e=>setFieldDraft(d=>({...d,scope:e.target.value}))} className="ipt" rows={2} placeholder="What this field includes and excludes..." style={{width:'100%',resize:'vertical'}}/>
+        </div>
+        {/* Embedding-based similarity suggestions */}
+        {searchingSimilar && <div style={{padding:'8px 12px',background:'var(--bg-2)',borderRadius:'var(--r)',marginBottom:10,fontSize:11,color:'var(--tx-3)'}}>
+          Analyzing definitions...
+        </div>}
+        {similarFields.length > 0 && <div style={{padding:'10px 14px',background:'var(--teal-dim)',border:'1px solid rgba(61,214,140,.15)',borderRadius:'var(--r)',marginBottom:10}}>
+          <div style={{fontSize:11,fontWeight:600,color:'var(--teal)',marginBottom:8}}>Similar fields found:</div>
+          {similarFields.map(sf=><div key={sf.uri} style={{padding:'8px 10px',background:'var(--bg-2)',borderRadius:'var(--r)',marginBottom:4,display:'flex',alignItems:'flex-start',gap:8}}>
+            <div style={{flex:1}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:12,fontWeight:600}}>{sf.def.label}</span>
+                <span style={{fontSize:9,fontFamily:'var(--mono)',color:'var(--teal)'}}>{Math.round(sf.similarity*100)}% match</span>
+              </div>
+              <div style={{fontSize:10.5,color:'var(--tx-2)',marginTop:2}}>{(sf.def.definition||'').slice(0,80)}{(sf.def.definition||'').length>80?'...':''}</div>
+            </div>
+            <div style={{display:'flex',gap:3,flexShrink:0}}>
+              <button className="b-gho b-xs" style={{color:'var(--green)',fontSize:9}} onClick={async ()=>{
+                if(onSaveCrosswalk){
+                  const key=fieldDraft.key||fieldDraft.label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+                  const newUri=`khora:team/${team.roomId}/${key}`;
+                  await onSaveCrosswalk({id:'xw_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),from_uri:newUri,to_uri:sf.uri,relationship:'equivalent',bidirectional:true,notes:'Auto-suggested by similarity analysis',created_at:Date.now()});
+                }
+                setSimilarFields(prev=>prev.filter(s=>s.uri!==sf.uri));
+              }}>Link as equivalent</button>
+              <button className="b-gho b-xs" style={{color:'var(--gold)',fontSize:9}} onClick={async ()=>{
+                if(onSaveCrosswalk){
+                  const key=fieldDraft.key||fieldDraft.label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+                  const newUri=`khora:team/${team.roomId}/${key}`;
+                  await onSaveCrosswalk({id:'xw_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),from_uri:newUri,to_uri:sf.uri,relationship:'related',bidirectional:true,notes:'Auto-suggested by similarity analysis',created_at:Date.now()});
+                }
+                setSimilarFields(prev=>prev.filter(s=>s.uri!==sf.uri));
+              }}>Link as related</button>
+              <button className="b-gho b-xs" style={{color:'var(--tx-3)',fontSize:9}} onClick={()=>{
+                const updated=[...dismissedSuggestions,sf.uri];
+                setDismissedSuggestions(updated);
+                try{localStorage.setItem('khora_dismissed_xw_suggestions',JSON.stringify(updated))}catch{}
+                setSimilarFields(prev=>prev.filter(s=>s.uri!==sf.uri));
+              }}>Ignore</button>
+            </div>
+          </div>)}
+        </div>}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 80px',gap:10,marginBottom:10}}>
+          <div>
+            <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Category</label>
+            <select value={fieldDraft.category} onChange={e=>setFieldDraft(d=>({...d,category:e.target.value}))} className="ipt" style={{width:'100%'}}>
+              {FIELD_CATEGORIES.map(c=><option key={c} value={c}>{CAT_LABELS[c]||c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:10,color:'var(--tx-2)',display:'block',marginBottom:3}}>Data Type</label>
+            <select value={fieldDraft.data_type} onChange={e=>setFieldDraft(d=>({...d,data_type:e.target.value}))} className="ipt" style={{width:'100%'}}>
+              {['text','text_long','date','number','email','phone','address','single_select','multi_select','document'].map(t=>
+                <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
+            </select>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-end'}}>
+            <label style={{fontSize:10,color:'var(--tx-2)',marginBottom:5}}>Sensitive</label>
+            <div onClick={()=>setFieldDraft(d=>({...d,sensitive:!d.sensitive}))} style={{
+              width:36,height:20,borderRadius:10,background:fieldDraft.sensitive?'var(--red)':'var(--border-2)',
+              cursor:'pointer',position:'relative',transition:'background .2s'}}>
+              <div style={{width:16,height:16,borderRadius:'50%',background:'white',position:'absolute',top:2,
+                left:fieldDraft.sensitive?18:2,transition:'left .2s'}}/>
+            </div>
+          </div>
+        </div>
+        <div style={{textAlign:'right',marginTop:14}}>
+          <button className="b-gho b-sm" onClick={()=>setAddFieldModal(false)} style={{marginRight:6}}>Cancel</button>
+          <button className="b-pri b-sm" disabled={!fieldDraft.label||!fieldDraft.definition} onClick={handleSaveNewField}>
+            {schemaRule.mode==='lead_decides'&&isLead?'Save & Add':'Propose Field'}
+          </button>
+        </div>
+      </div>
+    </div>}
   </div>;
 };
 
@@ -11090,6 +12010,10 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const [newTeamDesc, setNewTeamDesc] = useState('');
   const [teamInviteModal, setTeamInviteModal] = useState(null); // team object or null
   const [teamInviteUserId, setTeamInviteUserId] = useState('');
+  const [activeTeamDetail, setActiveTeamDetail] = useState(null); // expanded team detail view
+  // Field definitions & crosswalks
+  const [fieldDefs, setFieldDefs] = useState({});           // uri → definition object
+  const [fieldCrosswalks, setFieldCrosswalks] = useState([]); // crosswalk records
   // Client data import
   const [importModal, setImportModal] = useState(false);
   // ─── Database / Notes / Profile state ───
@@ -11249,13 +12173,15 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     setInitError(null);
     try {
       // Single-pass scan: fetch all Khora state across rooms in one request
-      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS]);
+      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK]);
       let roster=null, metricsR=null, schema=null, network=null;
       let detectedOrg=null, detectedOrgRole=null;
       const bridgeData = [];
       const detectedClientRecords = [];
       const detectedOrgChannels = [];
       const detectedTeams = [];
+      const detectedFieldDefs = {};
+      const detectedCrosswalks = [];
       for (const [rid, state] of Object.entries(scanned)) {
         const id = state[EVT.IDENTITY];
         if (id?.account_type==='provider'&&id.owner===svc.userId) roster=rid;
@@ -11281,11 +12207,21 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         if (chanMeta && chanMeta.type === 'org_msg_channel') {
           detectedOrgChannels.push({roomId: rid, ...chanMeta});
         }
-        // Detect team rooms
+        // Detect team rooms (with schema + consent rule)
         if (id?.account_type==='team') {
           const teamMeta = state[EVT.TEAM_META] || {};
           const teamMembers = state[EVT.TEAM_MEMBERS] || {members:[]};
-          detectedTeams.push({roomId:rid, ...teamMeta, members:teamMembers.members||[], owner:id.owner, created:id.created});
+          const teamSchema = state[EVT.TEAM_SCHEMA] || null;
+          const teamSchemaRule = state[EVT.TEAM_SCHEMA_RULE] || null;
+          detectedTeams.push({roomId:rid, ...teamMeta, members:teamMembers.members||[], owner:id.owner, created:id.created,
+            schema:teamSchema, schemaRule:teamSchemaRule});
+        }
+        // Collect field definitions and crosswalks from schema rooms
+        if (id?.account_type==='schema') {
+          const defs = state[EVT.FIELD_DEF];
+          if (defs?.definitions) Object.assign(detectedFieldDefs, defs.definitions);
+          const xws = state[EVT.FIELD_CROSSWALK];
+          if (xws?.crosswalks) detectedCrosswalks.push(...xws.crosswalks);
         }
         const meta = state[EVT.BRIDGE_META];
         if (meta && meta.status!=='tombstoned') {
@@ -11366,6 +12302,22 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       }
       // Load teams detected during scan
       if (detectedTeams.length > 0) setTeams(detectedTeams);
+      // Load field definitions and crosswalks
+      // Seed vault field defs if schema room exists and no defs stored yet
+      if (schema && Object.keys(detectedFieldDefs).length === 0) {
+        const seedDefs = {};
+        for (const f of DOMAIN_CONFIG.vaultFields) {
+          seedDefs[f.uri] = { uri:f.uri, key:f.key, label:f.label, version:1,
+            definition:f.definition||'', scope:f.scope||'', category:f.category,
+            sensitive:f.sensitive, data_type:f.data_type||'text',
+            authority:f.authority||null, created_by:svc.userId, created_at:Date.now(),
+            supersedes:null };
+        }
+        try { await svc.setState(schema, EVT.FIELD_DEF, {definitions:seedDefs}); } catch(e) { console.debug('Field def seed:', e.message); }
+        Object.assign(detectedFieldDefs, seedDefs);
+      }
+      setFieldDefs(detectedFieldDefs);
+      setFieldCrosswalks(detectedCrosswalks);
       // Load client records detected during scan
       if (detectedClientRecords.length > 0) {
         // Check room membership to determine status
@@ -11957,6 +12909,10 @@ const ProviderApp = ({session, onLogout, showToast}) => {
   const handleCreateTeam = async () => {
     if (!newTeamName.trim()) return;
     try {
+      // Default team schema: identity + contact fields from vault
+      const defaultSchemaFields = DOMAIN_CONFIG.vaultFields
+        .filter(f => f.category === 'identity' || f.category === 'contact')
+        .map(f => ({uri:f.uri, required:f.category==='identity', added_version:1}));
       const roomId = await svc.createRoom(`[Khora Team] ${newTeamName}`, newTeamDesc || `Team: ${newTeamName}`, [
         {type:EVT.IDENTITY,state_key:'',content:{account_type:'team',owner:svc.userId,created:Date.now()}},
         {type:EVT.TEAM_META,state_key:'',content:{
@@ -11966,6 +12922,14 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         {type:EVT.TEAM_MEMBERS,state_key:'',content:{members:[
           {userId:svc.userId,role:'lead',joined:Date.now(),display_name:providerProfile.display_name||''}
         ]}},
+        {type:EVT.TEAM_SCHEMA,state_key:'',content:{
+          version:1, fields:defaultSchemaFields, pending_changes:[],
+          change_log:[{version:1,summary:'Initial schema',by:svc.userId,ts:Date.now()}],
+          last_modified:Date.now(), modified_by:svc.userId,
+        }},
+        {type:EVT.TEAM_SCHEMA_RULE,state_key:'',content:{
+          mode:'lead_decides', modified_by:svc.userId, modified_at:Date.now(),
+        }},
       ]);
       await emitOp(roomId, 'DES', {entity:'team',field:newTeamName}, {created_by:svc.userId,org:orgMeta.name||null}, orgFrame());
       const newTeam = {
@@ -11973,6 +12937,8 @@ const ProviderApp = ({session, onLogout, showToast}) => {
         created_by:svc.userId, org_id:orgRoom||null, org_name:orgMeta.name||null,
         members:[{userId:svc.userId,role:'lead',joined:Date.now(),display_name:providerProfile.display_name||''}],
         owner:svc.userId,
+        schema:{version:1, fields:defaultSchemaFields, pending_changes:[], change_log:[]},
+        schemaRule:{mode:'lead_decides'},
       };
       setTeams(prev => [...prev, newTeam]);
       setCreateTeamModal(false);
@@ -12905,7 +13871,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           {id:'schema',icon:'grid',label:'Schema',badge:schemaNotifCount,badgeClass:'nav-badge-teal'},
           {id:'metrics',icon:'bar',label:'Metrics'},
           {id:'activity',icon:'layers',label:'Activity Stream',badge:activityNotifCount,badgeClass:'nav-badge-teal'}
-        ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null);setActiveIndividual(null);setActiveResourceProfile(null);if(item.id!=='inbox'){setInboxConvo(null);setInboxMessages([])}}}
+        ].map(item=><div key={item.id} onClick={()=>{setView(item.id);setActiveCase(null);setActiveIndividual(null);setActiveResourceProfile(null);setActiveTeamDetail(null);if(item.id!=='inbox'){setInboxConvo(null);setInboxMessages([])}}}
           style={{padding:'9px 10px',borderRadius:'var(--r)',cursor:'pointer',marginBottom:1,
             background:(view===item.id||((item.id==='database')&&(view==='individual-profile'||view==='resource-profile')))&&!activeCase?'var(--bg-4)':'transparent',
             borderLeft:(view===item.id||((item.id==='database')&&(view==='individual-profile'||view==='resource-profile')))&&!activeCase?'2px solid var(--gold)':'2px solid transparent',
@@ -13047,6 +14013,23 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           onCreateClient={()=>{setCreateClientModal(true);setNewClientName('');setNewClientMatrixId('');setNewClientNotes('')}}
           onCellEdit={handleDbCellEdit}
           onAddRow={()=>{setCreateClientModal(true);setNewClientName('');setNewClientMatrixId('');setNewClientNotes('')}}
+          fieldDefs={fieldDefs}
+          fieldCrosswalks={fieldCrosswalks}
+          teams={teams}
+          onSaveFieldDef={async (def)=>{
+            const schemaRoom = svc.client ? svc.client.getRooms().find(r=>{const id=r.currentState.getStateEvents(EVT.IDENTITY,'');return id?.getContent()?.account_type==='schema'&&id.getContent().owner===svc.userId;})?.roomId : null;
+            if (!schemaRoom) return;
+            const updated = {...fieldDefs, [def.uri]:def};
+            await svc.setState(schemaRoom, EVT.FIELD_DEF, {definitions:updated});
+            setFieldDefs(updated);
+          }}
+          onSaveCrosswalk={async (xw)=>{
+            const schemaRoom = svc.client ? svc.client.getRooms().find(r=>{const id=r.currentState.getStateEvents(EVT.IDENTITY,'');return id?.getContent()?.account_type==='schema'&&id.getContent().owner===svc.userId;})?.roomId : null;
+            if (!schemaRoom) return;
+            const updated = [...fieldCrosswalks, {...xw, created_by:svc.userId}];
+            await svc.setState(schemaRoom, EVT.FIELD_CROSSWALK, {crosswalks:updated});
+            setFieldCrosswalks(updated);
+          }}
         />
         <NoteCreateModal
           open={newNoteModal}
@@ -13352,7 +14335,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
       </div>}
 
       {/* TEAMS VIEW */}
-      {view==='teams'&&!activeCase&&<div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
+      {view==='teams'&&!activeCase&&!activeTeamDetail&&<div className="anim-up" style={{maxWidth:960,margin:'0 auto'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}>
           <div>
             <h2 style={{fontFamily:'var(--serif)',fontSize:22,fontWeight:700}}>Teams</h2>
@@ -13376,7 +14359,7 @@ const ProviderApp = ({session, onLogout, showToast}) => {
             <p style={{color:'var(--tx-3)',fontSize:11.5,marginTop:4}}>Create a team to collaborate with people across your organization or beyond.</p>
           </div>
         :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:10}}>
-          {teams.map(team=><div key={team.roomId} className="card" style={{padding:0,overflow:'hidden'}}>
+          {teams.map(team=><div key={team.roomId} className="card" style={{padding:0,overflow:'hidden',cursor:'pointer'}} onClick={()=>setActiveTeamDetail(team)}>
             <div style={{padding:'14px 18px',borderBottom:'1px solid var(--border-0)'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                 <span style={{fontSize:15,fontWeight:700}}>{team.name||'Unnamed Team'}</span>
@@ -13400,23 +14383,57 @@ const ProviderApp = ({session, onLogout, showToast}) => {
               </div>
             </div>
             <div style={{padding:'8px 18px 14px',display:'flex',gap:6}}>
-              {team.owner===svc.userId&&<button onClick={()=>{setTeamInviteModal(team);setTeamInviteUserId('')}}
+              {team.owner===svc.userId&&<button onClick={(e)=>{e.stopPropagation();setTeamInviteModal(team);setTeamInviteUserId('')}}
                 className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}}>
                 <I n="userPlus" s={11}/>Invite</button>}
-              <button className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}} onClick={()=>{
+              <button className="b-gho b-xs" style={{display:'flex',alignItems:'center',gap:3}} onClick={(e)=>{
+                e.stopPropagation();
                 if(navigator.clipboard) navigator.clipboard.writeText(team.roomId);
                 showToast('Team room ID copied','success');
               }}><I n="share" s={11}/>Share ID</button>
+              <span style={{fontSize:10,fontFamily:'var(--mono)',color:'var(--tx-3)',marginLeft:'auto',display:'flex',alignItems:'center',gap:3}}>
+                <I n="grid" s={9}/>{team.schema?.fields?.length||0} fields
+              </span>
             </div>
           </div>)}
         </div>}
         <div style={{background:'var(--purple-dim,var(--blue-dim))',border:'1px solid rgba(128,90,213,.15)',borderRadius:'var(--r)',padding:'14px 18px',marginTop:20,display:'flex',gap:10,alignItems:'flex-start'}}>
           <I n="users" s={16} c="var(--purple,var(--blue))"/>
           <span style={{fontSize:12,color:'var(--tx-1)',lineHeight:1.6}}>
-            <strong>Teams are flexible.</strong> They can include anyone — staff from your org, people from other orgs, or unaffiliated individuals. Teams are not governed by org policies; they're lightweight collaboration groups.
+            <strong>Teams are flexible.</strong> They can include anyone — staff from your org, people from other orgs, or unaffiliated individuals. Teams are now governed by their own schema — click a team to view and manage its data definitions.
           </span>
         </div>
       </div>}
+
+      {/* TEAM DETAIL VIEW */}
+      {view==='teams'&&!activeCase&&activeTeamDetail&&<TeamDetailView
+        team={activeTeamDetail}
+        teams={teams}
+        svc={svc}
+        fieldDefs={fieldDefs}
+        fieldCrosswalks={fieldCrosswalks}
+        showToast={showToast}
+        onBack={()=>setActiveTeamDetail(null)}
+        onInvite={(team)=>{setTeamInviteModal(team);setTeamInviteUserId('')}}
+        onUpdateTeam={(updated)=>{
+          setTeams(prev=>prev.map(t=>t.roomId===updated.roomId?updated:t));
+          setActiveTeamDetail(updated);
+        }}
+        onSaveFieldDef={async (def)=>{
+          const schemaRoom = svc.client ? svc.client.getRooms().find(r=>{const id=r.currentState.getStateEvents(EVT.IDENTITY,'');return id?.getContent()?.account_type==='schema'&&id.getContent().owner===svc.userId;})?.roomId : null;
+          if (!schemaRoom) return;
+          const updated = {...fieldDefs, [def.uri]:def};
+          await svc.setState(schemaRoom, EVT.FIELD_DEF, {definitions:updated});
+          setFieldDefs(updated);
+        }}
+        onSaveCrosswalk={async (xw)=>{
+          const schemaRoom = svc.client ? svc.client.getRooms().find(r=>{const id=r.currentState.getStateEvents(EVT.IDENTITY,'');return id?.getContent()?.account_type==='schema'&&id.getContent().owner===svc.userId;})?.roomId : null;
+          if (!schemaRoom) return;
+          const updated = [...fieldCrosswalks, {...xw, created_by:svc.userId}];
+          await svc.setState(schemaRoom, EVT.FIELD_CROSSWALK, {crosswalks:updated});
+          setFieldCrosswalks(updated);
+        }}
+      />}
 
       {/* CASE VIEW */}
       {view==='case'&&activeCaseData&&<div className="anim-up" style={{maxWidth:820,margin:'0 auto'}}>
