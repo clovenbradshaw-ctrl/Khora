@@ -13517,24 +13517,6 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     }, 300); // 300ms debounce
   };
 
-  // ─── Bulk action handler for database table ───
-  const handleBulkAction = async (actionId, selectedIds) => {
-    if (actionId === 'delete') {
-      if (!confirm(`Revoke ${selectedIds.length} individual(s)? This marks them as tombstoned.`)) return;
-      for (const id of selectedIds) {
-        try {
-          const c = cases.find(cs => cs.bridgeRoomId === id);
-          if (c) await svc.setState(id, EVT.BRIDGE_META, { ...c.meta, status: 'tombstoned' });
-        } catch(e) { console.warn('Bulk delete failed for', id, e.message); }
-      }
-      showToast(`Revoked ${selectedIds.length} individual(s)`, 'info');
-    } else if (actionId === 'assign') {
-      showToast(`Assign ${selectedIds.length} individual(s) — use individual profiles to assign`, 'info');
-    } else if (actionId === 'tag') {
-      showToast(`Tag ${selectedIds.length} individual(s) — use individual profiles to tag`, 'info');
-    }
-  };
-
   // ─── Note save handler ───
   const handleNoteSave = (noteData) => {
     setDbNotes(prev => [noteData, ...prev]);
