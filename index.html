@@ -7684,19 +7684,22 @@ const WelcomeScreen = ({onContinue}) => (
             <div>
               <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Create your account</div>
               <div style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6}}>
-                Click "Get Started" below, then use the "Create Account" tab. Pick a username and password — we'll generate random ones for you if you'd like.
+                Click "Get Started" below, then use the <strong style={{color:'var(--tx-0)'}}>"Create Account"</strong> tab. Pick a username and password, or use the <strong style={{color:'var(--tx-0)'}}>dice</strong> and <strong style={{color:'var(--tx-0)'}}>key</strong> buttons to generate random ones. Creating your account signs you in automatically.
               </div>
               <div style={{fontSize:11.5,color:'var(--tx-2)',lineHeight:1.5,marginTop:6}}>
-                If your organization gave you a specific server address, you can type it into the server field.
+                Your account lives on an open network — like email, you can connect with anyone regardless of which server they use. For extra privacy, use a random username since your server can see metadata.
               </div>
             </div>
           </div>
           <div style={{display:'flex',gap:14,marginBottom:16}}>
             <div style={{width:24,height:24,borderRadius:'50%',background:'var(--teal-dim)',color:'var(--teal)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,fontFamily:'var(--mono)',flexShrink:0,marginTop:1}}>2</div>
             <div>
-              <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Sign in</div>
+              <div style={{fontSize:13.5,fontWeight:600,color:'var(--tx-0)',marginBottom:4}}>Save your credentials</div>
               <div style={{fontSize:12.5,color:'var(--tx-1)',lineHeight:1.6}}>
-                Enter the username and password you just created. If you already have an account from another app on this network (like Element), that works too.
+                After filling in your username and password, use the <strong style={{color:'var(--tx-0)'}}>"Save credentials"</strong> button to download a file with your login details. Keep it somewhere safe — you'll need it to sign in on other devices.
+              </div>
+              <div style={{fontSize:11.5,color:'var(--tx-2)',lineHeight:1.5,marginTop:6}}>
+                Already have an account from another app on this network (like Element)? Use the "Sign In" tab instead — it works too.
               </div>
             </div>
           </div>
