@@ -1,0 +1,13 @@
+{
+  "name": "khora",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Khora — Sovereign Case Management",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/preset-react": "^7.26.0"
+  }
+}
