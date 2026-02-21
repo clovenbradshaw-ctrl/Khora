@@ -4,16 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Khora — Sovereign Case Management</title>
+<!-- Resource hints: early DNS + connection setup for CDN origins -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="preconnect" href="https://esm.sh" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+<link rel="dns-prefetch" href="https://unpkg.com">
+<link rel="dns-prefetch" href="https://esm.sh">
+<!-- Preload heaviest scripts so download starts immediately -->
+<link rel="preload" href="https://unpkg.com/@babel/standalone/babel.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js" as="script">
+<!-- Core scripts (synchronous — needed before Babel processes JSX) -->
 <script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- Non-critical: username generator loaded as module (non-blocking) -->
 <script type="module">
 import { uniqueNamesGenerator, adjectives, animals } from 'https://esm.sh/unique-names-generator@4.7.1';
 window.generateUsername = () => uniqueNamesGenerator({ dictionaries: [adjectives, animals], separator: '-', length: 2, style: 'lowerCase' });
 window._nameGenReady = true;
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=Source+Serif+4:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -434,7 +447,19 @@ table.dt tr.dt-grp td{padding:9px 12px;font-size:12px;font-weight:700;color:var(
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root">
+<!-- CSS-only splash: visible instantly, replaced when React mounts -->
+<div id="splash" style="height:100%;display:flex;align-items:center;justify-content:center;background:#08090b;flex-direction:column;gap:18px">
+<style>
+#splash .sp-ring{width:36px;height:36px;border:3px solid #1e2230;border-top-color:#c9a352;border-radius:50%;animation:spin .8s linear infinite}
+#splash .sp-title{font-family:'Manrope',system-ui,sans-serif;font-size:18px;font-weight:700;color:#e6e9f0;letter-spacing:.02em}
+#splash .sp-sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6b7385;letter-spacing:.04em}
+</style>
+<div class="sp-ring"></div>
+<div class="sp-title">Khora</div>
+<div class="sp-sub">Loading&hellip;</div>
+</div>
+</div>
 <script type="text/babel">
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 
@@ -13854,11 +13879,10 @@ const App = () => {
         setRestoreError({ type: 'network', message: restored.message }); setRestoring(false); return;
       }
       setSession(restored);
-      // Hydrate webhook data in background
-      try {
-        const tables = await hydrateFromWebhooks(svc._token);
-        setWebhookData(tables);
-      } catch (e) { console.warn('Webhook hydration failed:', e.message); }
+      // Hydrate webhook data in background (non-blocking — don't delay app render)
+      hydrateFromWebhooks(svc._token)
+        .then(tables => setWebhookData(tables))
+        .catch(e => console.warn('Webhook hydration failed:', e.message));
       await detectContexts();
     } catch { } finally { setRestoring(false); }
   }, [detectContexts]);
@@ -13869,13 +13893,10 @@ const App = () => {
     setSession(s);
     // Detect contexts + roles from room membership (MVP §Screen 1)
     await detectContexts();
-    // Hydrate Airtable data from n8n webhooks in background
-    try {
-      const tables = await hydrateFromWebhooks(svc._token);
-      setWebhookData(tables);
-    } catch (e) {
-      console.warn('Webhook hydration failed (CORS or network):', e.message);
-    }
+    // Hydrate Airtable data from n8n webhooks in background (non-blocking)
+    hydrateFromWebhooks(svc._token)
+      .then(tables => setWebhookData(tables))
+      .catch(e => console.warn('Webhook hydration failed (CORS or network):', e.message));
   };
 
   if (restoring || detectingRoles) return <div className="grid-bg" style={{height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
