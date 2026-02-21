@@ -10268,8 +10268,11 @@ const DatabaseView = ({cases, caseAssignments, openCase, T, svc, caseAllocations
 };
 
 /* ─── IndividualProfilePage — full profile view for an individual ─── */
-const IndividualProfilePage = ({individual, notes, allocations, onBack, onOpenCase, onAddNote, svc, T, showToast}) => {
+const IndividualProfilePage = ({individual, notes, allocations, onBack, onOpenCase, onAddNote, svc, T, showToast,
+  resourceTypes, resourceRelations, resourceInventory, orgRoom, orgRole, canAllocateResource, onAllocate}) => {
   const [tab, setTab] = useState('fields');
+  const [profileAllocModal, setProfileAllocModal] = useState(false);
+  const [profileAllocDraft, setProfileAllocDraft] = useState({resource_type_id:'',quantity:1,notes:''});
   if (!individual) return null;
 
   const indNotes = (notes||[]).filter(n => n.attached_to === individual.id || n.indId === individual.id);
@@ -10361,7 +10364,12 @@ const IndividualProfilePage = ({individual, notes, allocations, onBack, onOpenCa
 
     {/* Allocations */}
     {tab==='allocations' && <div className="profile-section">
-      <div className="profile-section-title">Resource Allocations</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div className="profile-section-title" style={{marginBottom:0}}>Resource Allocations</div>
+        {orgRoom && (resourceTypes||[]).length > 0 && onAllocate && individual.bridgeRoom && <button onClick={()=>{setProfileAllocDraft({resource_type_id:'',quantity:1,notes:''});setProfileAllocModal(true)}} className="b-pri b-sm" style={{display:'flex',alignItems:'center',gap:4}}>
+          <I n="plus" s={11}/>Allocate
+        </button>}
+      </div>
       {indAllocs.length === 0
         ? <div className="card" style={{textAlign:'center',padding:'30px 20px',color:'var(--tx-3)'}}>No resource allocations.</div>
         : indAllocs.map(a => <div key={a.id} className="dt-alloc">
@@ -10385,6 +10393,50 @@ const IndividualProfilePage = ({individual, notes, allocations, onBack, onOpenCa
         Activity stream for this individual. Events are tracked in the Activity Stream view.
       </div>
     </div>}
+
+    {/* Allocate Resource Modal */}
+    <Modal open={profileAllocModal} onClose={()=>setProfileAllocModal(false)} title="Allocate Resource" w={480}>
+      <p style={{fontSize:12,color:'var(--tx-1)',marginBottom:14,lineHeight:1.6}}>Allocate a resource to <strong>{individual.name||'this individual'}</strong>. The allocation is recorded in the bridge room and updates org inventory.</p>
+      <div style={{marginBottom:14}}>
+        <span className="section-label">RESOURCE TYPE</span>
+        <select value={profileAllocDraft.resource_type_id} onChange={e=>setProfileAllocDraft({...profileAllocDraft,resource_type_id:e.target.value})}>
+          <option value="">Select a resource...</option>
+          {(resourceTypes||[]).filter(rt => canAllocateResource && canAllocateResource(rt, svc.userId, orgRole)).map(rt=>{
+            const relation = (resourceRelations||[]).find(r=>r.resource_type_id===rt.id);
+            const inv = relation ? (resourceInventory||{})[relation.id] : null;
+            return <option key={rt.id} value={rt.id}>{rt.name} ({rt.unit}){inv ? ` — ${inv.available||0} available` : ''}</option>;
+          })}
+        </select>
+      </div>
+      {profileAllocDraft.resource_type_id && (()=>{
+        const rt = (resourceTypes||[]).find(t=>t.id===profileAllocDraft.resource_type_id);
+        if (!rt) return null;
+        return <div style={{background:'var(--bg-2)',border:'1px solid var(--border-0)',borderRadius:'var(--r)',padding:'10px 14px',marginBottom:14}}>
+          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+            <span className={`tag tag-${RESOURCE_CATEGORY_COLORS[rt.category]||'teal'}`} style={{fontSize:8.5}}>{RESOURCE_CATEGORY_LABELS[rt.category]||rt.category}</span>
+            {rt.fungible && <span style={{fontSize:9,color:'var(--tx-2)',fontFamily:'var(--mono)'}}>fungible</span>}
+            {rt.perishable && <span style={{fontSize:9,color:'var(--orange)',fontFamily:'var(--mono)'}}>expires {rt.ttl_days}d</span>}
+          </div>
+          {rt.tags?.length > 0 && <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>{rt.tags.map(tag=><span key={tag} style={{fontSize:8,padding:'1px 5px',borderRadius:99,background:'var(--bg-3)',color:'var(--tx-2)',fontFamily:'var(--mono)'}}>{tag}</span>)}</div>}
+        </div>;
+      })()}
+      <div style={{marginBottom:14}}>
+        <span className="section-label">QUANTITY</span>
+        <input type="number" min="1" value={profileAllocDraft.quantity} onChange={e=>setProfileAllocDraft({...profileAllocDraft,quantity:e.target.value})} placeholder="1"/>
+      </div>
+      <div style={{marginBottom:20}}>
+        <span className="section-label">NOTES (OPTIONAL)</span>
+        <input value={profileAllocDraft.notes} onChange={e=>setProfileAllocDraft({...profileAllocDraft,notes:e.target.value})} placeholder="e.g. For medical appointments this week"/>
+      </div>
+      <button onClick={async ()=>{
+        if (!profileAllocDraft.resource_type_id || !onAllocate) return;
+        const success = await onAllocate(individual.bridgeRoom, profileAllocDraft);
+        if (success) {
+          setProfileAllocModal(false);
+          setProfileAllocDraft({resource_type_id:'',quantity:1,notes:''});
+        }
+      }} className="b-pri" disabled={!profileAllocDraft.resource_type_id} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:4}}><I n="plus" s={13}/>Allocate Resource</button>
+    </Modal>
   </div>;
 };
 
@@ -12033,6 +12085,47 @@ const ProviderApp = ({session, onLogout, showToast}) => {
     } catch(e) { showToast('Error allocating resource: '+e.message,'error'); }
   };
 
+  // ─── Allocate resource from individual profile page ───
+  const handleProfileAllocate = async (bridgeRoomId, allocData) => {
+    if (!allocData.resource_type_id || !bridgeRoomId || !(orgRoom||rosterRoom)) return false;
+    const caseData = cases.find(c => c.bridgeRoomId === bridgeRoomId);
+    if (!caseData) { showToast('No case found for this individual','error'); return false; }
+    const bridgeMeta = caseData.meta;
+    const clientId = bridgeMeta?.client;
+    let vaultRoomId = null;
+    if (svc.client) {
+      for (const room of svc.client.getRooms()) {
+        const idEv = room.currentState.getStateEvents(EVT.IDENTITY, '');
+        if (idEv) {
+          const content = idEv.getContent();
+          if (content.account_type === 'client' && content.owner === clientId) {
+            vaultRoomId = room.roomId;
+            break;
+          }
+        }
+      }
+    }
+    const relation = resourceRelations.find(r => r.resource_type_id === allocData.resource_type_id);
+    const holderRoom = orgRoom || rosterRoom;
+    try {
+      const result = await ResourceService.allocateResource(bridgeRoomId, {
+        resource_type_id: allocData.resource_type_id,
+        relation_id: relation?.id || null,
+        quantity: parseInt(allocData.quantity) || 1,
+        allocated_to: clientId,
+        notes: allocData.notes || null,
+      }, holderRoom, vaultRoomId);
+      if (!result.valid) {
+        const msgs = result.violations.map(v => v.message).join('; ');
+        showToast(`Allocation blocked: ${msgs}`, 'error');
+        return false;
+      }
+      showToast('Resource allocated successfully','success');
+      setTimeout(() => { loadDataTableExtras(cases); loadResources(orgRoom, networkRoom, rosterRoom); }, 800);
+      return true;
+    } catch(e) { showToast('Error allocating resource: '+e.message,'error'); return false; }
+  };
+
   // ─── Record lifecycle event (consumed, revoked, returned) ───
   const handleResourceLifecycle = async (allocationId, eventType) => {
     if (!activeCase || !(orgRoom||rosterRoom)) return;
@@ -12806,6 +12899,13 @@ const ProviderApp = ({session, onLogout, showToast}) => {
           svc={svc}
           T={T}
           showToast={showToast}
+          resourceTypes={resourceTypes}
+          resourceRelations={resourceRelations}
+          resourceInventory={resourceInventory}
+          orgRoom={orgRoom}
+          orgRole={orgRole}
+          canAllocateResource={canAllocateResource}
+          onAllocate={handleProfileAllocate}
         />
         <NoteCreateModal
           open={newNoteModal}
