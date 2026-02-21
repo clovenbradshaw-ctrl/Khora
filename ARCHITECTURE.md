@@ -457,7 +457,13 @@ When frameworks **disagree** about the same observation, a **SUP (superposition)
 
 ## 11. Epistemic Operations (EO)
 
-EO is a formal state machine that traces the lifecycle of every entity (field, observation, classification) in the system. Every change is an operation with a typed operator.
+EO is a formal state machine that traces the lifecycle of every entity (field, observation, classification) in the system. Every change is an operation in the format:
+
+```
+OPERATOR(target, operand)
+```
+
+Where **target** is a dot-notation path to the entity (e.g., `vault.fields.full_name`, `org.staff.@user:server`) and **operand** is the data payload describing what is being done.
 
 ### Operators
 
@@ -472,6 +478,37 @@ EO is a formal state machine that traces the lifecycle of every entity (field, o
 | **ALT** | Alter | Field value changed |
 | **SUP** | Superposition | Multiple valid interpretations coexist |
 | **REC** | Recurse | Hierarchical descent into sub-entity |
+
+### Operation Format
+
+Each operation is stored as:
+
+```javascript
+{
+  op: 'ALT',                              // operator
+  target: 'vault.client_profile.email',   // dot-notation path to entity
+  operand: { from: 'old@x.com', to: 'new@x.com', source: 'client_input' },  // data payload
+  frame: { type: 'vault', room: '!abc:srv', epistemic: 'GIVEN' },
+  provenance: ['op_abc123'],              // chain to predecessor ops
+  created_by: '@user:server', origin_server: 'server', ts: 1234567890
+}
+```
+
+### Dot-Notation Target Paths
+
+| Domain | Pattern | Example |
+|--------|---------|---------|
+| Vault fields | `vault.fields.{key}` | `vault.fields.full_name` |
+| Vault profile | `vault.client_profile.{key}` | `vault.client_profile.email` |
+| Vault observations | `vault.observations.{key}` | `vault.observations.mood` |
+| Bridge fields | `bridge.fields.{key}` | `bridge.fields.phone` |
+| Bridge allocations | `bridge.allocations.{id}` | `bridge.allocations.alloc_123` |
+| Org individuals | `org.individuals.{key}` | `org.individuals.assigned_to` |
+| Org staff | `org.staff.{userId}` | `org.staff.@alice:srv` |
+| Org teams | `org.teams.{name}` | `org.teams.outreach` |
+| Resources | `resources.types.{id}` | `resources.types.food_box` |
+| Resources inventory | `resources.inventory.{id}` | `resources.inventory.rel_456` |
+| Network | `network.{name}` | `network.metro_coalition` |
 
 ### Adjacency Matrix
 
@@ -493,16 +530,16 @@ If a requested transition is not directly adjacent, the system uses BFS to find 
 
 ### State Projection
 
-Given a history of EO operations, the system can **project the current state** of any entity by replaying the operation chain. The `projectCurrentState()` function filters by epistemic frame (GIVEN or MEANT) and computes the latest value for each field, handling INS, ALT, NUL, SUP, and DES operations.
+Given a history of EO operations, the system can **project the current state** of any entity by replaying the operation chain. The `projectCurrentState()` function extracts the field name from the dot-notation target's last segment, filters by epistemic frame (GIVEN or MEANT), and computes the latest value for each field using the operand data — handling INS, ALT, NUL, SUP, and DES operations.
 
 ### Activity Stream
 
-The Activity Stream view renders all EO events across the user's rooms using Choreo's formal operation grammar (`op / target / context / frame`). Features:
+The Activity Stream view renders all EO events across the user's rooms using the `OPERATOR(target, operand)` format with frame metadata. Features:
 
 - Three visualization modes: Stream (sequential cards), Table (columnar), and Triads (grouped by Identity / Structure / Time)
 - Filters by triad, operator, room type, and epistemic frame
 - Operator triads overview with per-operator counts (Identity: NUL/DES/INS, Structure: SEG/CON/SYN, Time: ALT/SUP/REC)
-- Expanded view shows the full 4-tuple (operator, target, context, frame) with absence semantics
+- Expanded view shows the full operation: operator, dot-notation target, operand key-value pairs, and frame with absence semantics
 - Live auto-refresh and raw JSON inspection
 
 ---
