@@ -2015,7 +2015,9 @@ const EVT = {
   // per-relation visibility controls
   RESOURCE_VAULT: `${NS}.resource.vault_record`,
   // client vault shadow record
-  RESOURCE_PERM: `${NS}.resource.permissions` // per-type permission grants
+  RESOURCE_PERM: `${NS}.resource.permissions`, // per-type permission grants
+  // Matters (sub-records of individuals, stored in bridge rooms)
+  MATTER: `${NS}.matter` // sub-record of individual, state_key = matter ID
 };
 
 /* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */
@@ -4410,7 +4412,17 @@ const DOMAIN_CONFIG = {
     client_term: 'Individual',
     client_term_plural: 'Individuals',
     provider_term: 'Team Member',
-    provider_term_plural: 'Team Members'
+    provider_term_plural: 'Team Members',
+    case_term: 'Case',
+    case_term_plural: 'Cases',
+    matter_term: 'Matter',
+    matter_term_plural: 'Matters',
+    team_term: 'Team',
+    team_term_plural: 'Teams',
+    note_term: 'Note',
+    note_term_plural: 'Notes',
+    resource_term: 'Resource',
+    resource_term_plural: 'Resources'
   }
 };
 
@@ -4503,6 +4515,31 @@ const OPACITY_LABELS = DOMAIN_CONFIG.opacityLabels;
 const OPACITY_DESCRIPTIONS = DOMAIN_CONFIG.opacityDescriptions;
 const MSG_ACCESS_DEFAULTS = DOMAIN_CONFIG.msgAccessDefaults;
 const TERMINOLOGY_DEFAULTS = DOMAIN_CONFIG.terminologyDefaults;
+
+/* ═══════════════════ MATTER CONSTANTS (sub-records of individuals) ═══════════════════ */
+const MATTER_STATUSES = {
+  open: { label: 'Open', color: 'green' },
+  pending: { label: 'Pending', color: 'gold' },
+  closed: { label: 'Closed', color: 'red' }
+};
+const MATTER_PRIORITIES = {
+  none: { label: 'None', color: 'var(--tx-3)' },
+  low: { label: 'Low', color: 'var(--blue)' },
+  medium: { label: 'Medium', color: 'var(--gold)' },
+  high: { label: 'High', color: 'var(--orange, #f59e0b)' },
+  urgent: { label: 'Urgent', color: 'var(--red)' }
+};
+const MATTER_FIELDS = [
+  { key: 'title', label: 'Title', type: 'text', required: true },
+  { key: 'status', label: 'Status', type: 'select', options: Object.keys(MATTER_STATUSES), default: 'open' },
+  { key: 'type', label: 'Type', type: 'text', placeholder: 'e.g. Housing, Benefits, Legal' },
+  { key: 'date_opened', label: 'Date Opened', type: 'date', default: 'now' },
+  { key: 'date_closed', label: 'Date Closed', type: 'date' },
+  { key: 'assigned_to', label: 'Assigned To', type: 'staff_select' },
+  { key: 'priority', label: 'Priority', type: 'select', options: Object.keys(MATTER_PRIORITIES), default: 'none' },
+  { key: 'description', label: 'Description', type: 'textarea' }
+];
+
 const RELATIONSHIP_TYPES = DOMAIN_CONFIG.relationshipTypes;
 
 /* ═══════════════════ DEFAULT RESOURCE TYPES (§Resource Build §11) ═══════════════════
@@ -23620,7 +23657,7 @@ const NoteCreateModal = ({
   return /*#__PURE__*/React.createElement(Modal, {
     open: open,
     onClose: onClose,
-    title: "New Note",
+    title: `New ${T?.note_term || 'Note'}`,
     w: 560
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -23913,7 +23950,7 @@ const NotesTable = ({
       color: 'var(--tx-1)',
       fontSize: 12.5
     }
-  }, "All notes across cases and standalone. Click a note for details.")), /*#__PURE__*/React.createElement("button", {
+  }, `All ${(T?.note_term_plural || 'notes').toLowerCase()} across ${(T?.case_term_plural || 'cases').toLowerCase()} and standalone. Click a ${(T?.note_term || 'note').toLowerCase()} for details.`)), /*#__PURE__*/React.createElement("button", {
     onClick: onNewNote,
     className: "b-pri b-sm",
     style: {
@@ -23924,7 +23961,7 @@ const NotesTable = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "plus",
     s: 12
-  }), "New Note")), noteRows.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }), `New ${T?.note_term || 'Note'}`)), noteRows.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       textAlign: 'center',
@@ -23947,13 +23984,13 @@ const NotesTable = ({
       fontSize: 11.5,
       marginTop: 4
     }
-  }, "Click \"New Note\" to create one. Notes can be attached to individuals or standalone."), /*#__PURE__*/React.createElement("button", {
+  }, `Click "New ${T?.note_term || 'Note'}" to create one. ${T?.note_term_plural || 'Notes'} can be attached to ${(T?.client_term_plural || 'individuals').toLowerCase()} or standalone.`), /*#__PURE__*/React.createElement("button", {
     onClick: onNewNote,
     className: "b-pri b-sm",
     style: {
       marginTop: 12
     }
-  }, "Create First Note")) : /*#__PURE__*/React.createElement(DataTable, {
+  }, `Create First ${T?.note_term || 'Note'}`)) : /*#__PURE__*/React.createElement(DataTable, {
     data: noteRows,
     columns: NOTE_COLS,
     groupOptions: NOTE_GROUPS,
@@ -24021,6 +24058,7 @@ const DatabaseView = ({
   onBulkAction,
   onReorder,
   onAddRow,
+  matters,
   fieldDefs,
   fieldCrosswalks,
   teams,
@@ -24059,6 +24097,7 @@ const DatabaseView = ({
       bridgeRoom: c.bridgeRoomId,
       fields,
       transferable: c.transferable,
+      matterCount: (matters?.[c.bridgeRoomId] || []).length,
       _case: c
     };
   });
@@ -24083,7 +24122,7 @@ const DatabaseView = ({
   const allIndividuals = [...individuals, ...extraClients];
   const IND_COLS = [{
     key: 'name',
-    label: 'Individual',
+    label: T?.client_term || 'Individual',
     fixed: true,
     editable: true,
     placeholder: 'Enter name...'
@@ -24103,6 +24142,9 @@ const DatabaseView = ({
   }, {
     key: 'transferable',
     label: 'Transfer'
+  }, {
+    key: 'matterCount',
+    label: T?.matter_term_plural || 'Matters'
   }];
   // Add dynamic field columns
   const fieldKeys = new Set();
@@ -24130,10 +24172,11 @@ const DatabaseView = ({
     k: 'priority',
     l: 'Priority'
   }];
-  const defaultVisCols = ['name', 'status', 'priority', 'assignedTo', 'fields_count', 'transferable', ...Array.from(fieldKeys).slice(0, 3)];
+  const defaultVisCols = ['name', 'status', 'priority', 'assignedTo', 'fields_count', 'matterCount', 'transferable', ...Array.from(fieldKeys).slice(0, 3)];
   const getIndVal = (row, key) => {
     if (key === 'fields_count') return Object.keys(row.fields || {}).length;
     if (key === 'transferable') return row.transferable ? 'Yes' : 'Locked';
+    if (key === 'matterCount') return row.matterCount || 0;
     if (row.fields && row.fields[key]) return row.fields[key].value || '';
     return row[key] || '';
   };
@@ -24221,6 +24264,24 @@ const DatabaseView = ({
         }
       }, "Locked");
     }
+    if (k === 'matterCount') {
+      const mc = row.matterCount || 0;
+      return /*#__PURE__*/React.createElement("span", {
+        style: {
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minWidth: 22,
+          height: 22,
+          padding: '0 6px',
+          borderRadius: 5,
+          background: mc > 0 ? 'var(--purple-dim, var(--blue-dim))' : 'var(--bg-3)',
+          color: mc > 0 ? 'var(--purple, var(--blue))' : 'var(--tx-3)',
+          fontSize: 12,
+          fontWeight: 700
+        }
+      }, mc);
+    }
     if (col.isField && row.fields && row.fields[k]) {
       const f = row.fields[k];
       if (f.disclosed === false) return /*#__PURE__*/React.createElement("span", {
@@ -24279,28 +24340,28 @@ const DatabaseView = ({
       fontSize: 12.5,
       marginTop: 2
     }
-  }, "Manage individuals, notes, and resources in one place."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, `Manage ${(T?.client_term_plural || 'individuals').toLowerCase()}, ${(T?.note_term_plural || 'notes').toLowerCase()}, and ${(T?.resource_term_plural || 'resources').toLowerCase()} in one place.`), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     roomId: rosterRoom,
     encrypted: true,
     encLabel: "Megolm E2EE",
     label: "Database",
-    extra: [{ label: 'Storage model', value: 'Individuals are stored across bridge rooms (one per client-provider relationship). Notes are stored in bridge or roster rooms. Resources are stored in org room state events.' }, { label: 'Roster room', value: rosterRoom || 'Not initialized' }, orgRoom ? { label: 'Org room', value: orgRoom } : null, networkRoom ? { label: 'Network room', value: networkRoom } : null].filter(Boolean)
+    extra: [{ label: 'Storage model', value: `${T?.client_term_plural || 'Individuals'} are stored across bridge rooms (one per client-provider relationship). ${T?.note_term_plural || 'Notes'} are stored in bridge or roster rooms. ${T?.resource_term_plural || 'Resources'} are stored in org room state events.` }, { label: 'Roster room', value: rosterRoom || 'Not initialized' }, orgRoom ? { label: 'Org room', value: orgRoom } : null, networkRoom ? { label: 'Network room', value: networkRoom } : null].filter(Boolean)
   }))), /*#__PURE__*/React.createElement("div", {
     className: "db-tabs"
   }, [{
     id: 'individuals',
-    label: 'Individuals',
+    label: T?.client_term_plural || 'Individuals',
     count: allIndividuals.length,
     icon: 'users'
   }, {
     id: 'notes',
-    label: 'Notes',
+    label: T?.note_term_plural || 'Notes',
     count: (notes || []).length,
     icon: 'msg'
   }, {
     id: 'resources',
-    label: 'Resources',
+    label: T?.resource_term_plural || 'Resources',
     count: (resourceTypes || []).length,
     icon: 'layers'
   }, {
@@ -24379,7 +24440,7 @@ const DatabaseView = ({
       fontSize: 14,
       flexShrink: 0
     }
-  }, "\u25C7"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", null, "Sovereignty model: "), "Every row is a Matrix room. Edits emit EO events on blur \u2014 INS (\u25B3) instantiates, ALT (\u223F) transitions, NUL (\u2205) revokes. Data about an individual is stored in their bridge room, giving them control."))), dbTab === 'notes' && /*#__PURE__*/React.createElement(NotesTable, {
+  }, "\u25C7"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", null, "Sovereignty model: "), `Every row is a Matrix room. Edits emit EO events on blur \u2014 INS (\u25B3) instantiates, ALT (\u223F) transitions, NUL (\u2205) revokes. Data about ${(T?.client_term || 'an individual').toLowerCase().startsWith('a') || (T?.client_term || 'an individual').toLowerCase().startsWith('e') || (T?.client_term || 'an individual').toLowerCase().startsWith('i') || (T?.client_term || 'an individual').toLowerCase().startsWith('o') || (T?.client_term || 'an individual').toLowerCase().startsWith('u') ? 'an' : 'a'} ${(T?.client_term || 'individual').toLowerCase()} is stored in their bridge room, giving them control.`))), dbTab === 'notes' && /*#__PURE__*/React.createElement(NotesTable, {
     notes: notes,
     individuals: allIndividuals,
     onNoteClick: onNoteClick,
@@ -26600,9 +26661,12 @@ const IndividualProfilePage = ({
   individual,
   notes,
   allocations,
+  matters: indMatters,
   onBack,
   onOpenCase,
   onAddNote,
+  onAddMatter,
+  onEditMatter,
   svc,
   T,
   showToast,
@@ -26611,6 +26675,7 @@ const IndividualProfilePage = ({
   resourceInventory,
   orgRoom,
   orgRole,
+  staff,
   canAllocateResource,
   onAllocate
 }) => {
@@ -26690,7 +26755,7 @@ const IndividualProfilePage = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "briefcase",
     s: 12
-  }), "Open Case"), /*#__PURE__*/React.createElement("button", {
+  }), `Open ${T?.case_term || 'Case'}`), /*#__PURE__*/React.createElement("button", {
     onClick: () => onAddNote(individual.id),
     className: "b-gho b-sm",
     style: {
@@ -26701,17 +26766,37 @@ const IndividualProfilePage = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "msg",
     s: 12
-  }), "Add Note")))), /*#__PURE__*/React.createElement("div", {
+  }), `Add ${T?.note_term || 'Note'}`))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => onAddMatter && onAddMatter(individual.id),
+    className: "b-gho b-sm",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "briefcase",
+    s: 12
+  }), `New ${T?.matter_term || 'Matter'}`)))), /*#__PURE__*/React.createElement("div", {
     className: "profile-tabs"
   }, [{
     id: 'fields',
     label: 'Fields'
   }, {
+    id: 'matters',
+    label: `${T?.matter_term_plural || 'Matters'} (${(indMatters || []).length})`
+  }, {
     id: 'notes',
-    label: `Notes (${indNotes.length})`
+    label: `${T?.note_term_plural || 'Notes'} (${indNotes.length})`
   }, {
     id: 'allocations',
-    label: `Allocations (${indAllocs.length})`
+    label: `${T?.resource_term_plural || 'Resources'} (${indAllocs.length})`
   }, {
     id: 'activity',
     label: 'Activity'
@@ -26769,7 +26854,7 @@ const IndividualProfilePage = ({
     style: {
       marginBottom: 0
     }
-  }, "Notes"), /*#__PURE__*/React.createElement("button", {
+  }, T?.note_term_plural || "Notes"), /*#__PURE__*/React.createElement("button", {
     onClick: () => onAddNote(individual.id),
     className: "b-gho b-xs",
     style: {
@@ -26780,14 +26865,14 @@ const IndividualProfilePage = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "plus",
     s: 11
-  }), "Add Note")), indNotes.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }), `Add ${T?.note_term || 'Note'}`)), indNotes.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       textAlign: 'center',
       padding: '30px 20px',
       color: 'var(--tx-3)'
     }
-  }, "No notes yet. Click \"Add Note\" to create one.") : indNotes.map(n => /*#__PURE__*/React.createElement("div", {
+  }, `No ${(T?.note_term_plural || 'notes').toLowerCase()} yet. Click "Add ${T?.note_term || 'Note'}" to create one.`) : indNotes.map(n => /*#__PURE__*/React.createElement("div", {
     key: n.id,
     className: 'note-card' + (n.tombstoned ? ' tombstoned' : n.attached_to ? ' attached' : ' standalone')
   }, n.tombstoned ? /*#__PURE__*/React.createElement("div", {
@@ -26808,7 +26893,7 @@ const IndividualProfilePage = ({
   }, n.tags.map(t => /*#__PURE__*/React.createElement("span", {
     key: t.userId,
     className: "note-tag-chip"
-  }, t.displayName))))))), tab === 'allocations' && /*#__PURE__*/React.createElement("div", {
+  }, t.displayName))))))), tab === 'matters' && /*#__PURE__*/React.createElement("div", {
     className: "profile-section"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -26822,7 +26907,109 @@ const IndividualProfilePage = ({
     style: {
       marginBottom: 0
     }
-  }, "Resource Allocations"), orgRoom && (resourceTypes || []).length > 0 && onAllocate && individual.bridgeRoom && /*#__PURE__*/React.createElement("button", {
+  }, T?.matter_term_plural || 'Matters'), /*#__PURE__*/React.createElement("button", {
+    onClick: () => onAddMatter && onAddMatter(individual.id),
+    className: "b-gho b-xs",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 3
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "plus",
+    s: 11
+  }), `New ${T?.matter_term || 'Matter'}`)), (indMatters || []).length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      textAlign: 'center',
+      padding: '30px 20px',
+      color: 'var(--tx-3)'
+    }
+  }, `No ${(T?.matter_term_plural || 'matters').toLowerCase()} yet. Click "New ${T?.matter_term || 'Matter'}" to create one.`) : (indMatters || []).sort((a, b) => (b.date_opened || b.created || 0) - (a.date_opened || a.created || 0)).map(m => /*#__PURE__*/React.createElement("div", {
+    key: m.id,
+    className: "card matter-card",
+    onClick: () => onEditMatter && onEditMatter(individual.id, m),
+    style: {
+      padding: '12px 14px',
+      marginBottom: 8,
+      cursor: 'pointer',
+      transition: 'all .15s'
+    },
+    onMouseEnter: e => e.currentTarget.style.borderColor = 'var(--gold)',
+    onMouseLeave: e => e.currentTarget.style.borderColor = ''
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, m.title || '(untitled)'), /*#__PURE__*/React.createElement("span", {
+    className: `tag tag-${MATTER_STATUSES[m.status]?.color || 'blue'}`,
+    style: {
+      fontSize: 9
+    }
+  }, MATTER_STATUSES[m.status]?.label || m.status)), /*#__PURE__*/React.createElement("span", {
+    className: `tag tag-${MATTER_PRIORITIES[m.priority]?.color?.includes('--') ? m.priority : 'blue'}`,
+    style: {
+      fontSize: 9,
+      color: MATTER_PRIORITIES[m.priority]?.color || 'var(--tx-3)'
+    }
+  }, MATTER_PRIORITIES[m.priority]?.label || 'None')), m.type && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: 'var(--tx-2)',
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "tag tag-blue",
+    style: {
+      fontSize: 9
+    }
+  }, m.type)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 12,
+      fontSize: 11,
+      color: 'var(--tx-3)',
+      fontFamily: 'var(--mono)'
+    }
+  }, m.date_opened && /*#__PURE__*/React.createElement("span", null, "Opened: ", dtFmtDate(m.date_opened)), m.date_closed && /*#__PURE__*/React.createElement("span", null, "Closed: ", dtFmtDate(m.date_closed)), m.assigned_to && /*#__PURE__*/React.createElement("span", null, "Assigned: ", (m.assigned_to_name || m.assigned_to || '').split(':')[0]?.replace('@', ''))), m.description && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: 'var(--tx-1)',
+      marginTop: 6,
+      lineHeight: 1.5,
+      maxHeight: 60,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis'
+    }
+  }, m.description)))), tab === 'allocations' && /*#__PURE__*/React.createElement("div", {
+    className: "profile-section"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "profile-section-title",
+    style: {
+      marginBottom: 0
+    }
+  }, `${T?.resource_term || 'Resource'} Allocations`), orgRoom && (resourceTypes || []).length > 0 && onAllocate && individual.bridgeRoom && /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setProfileAllocDraft({
         resource_type_id: '',
@@ -26847,7 +27034,7 @@ const IndividualProfilePage = ({
       padding: '30px 20px',
       color: 'var(--tx-3)'
     }
-  }, "No resource allocations.") : indAllocs.map(a => /*#__PURE__*/React.createElement("div", {
+  }, `No ${(T?.resource_term || 'resource').toLowerCase()} allocations.`) : indAllocs.map(a => /*#__PURE__*/React.createElement("div", {
     key: a.id,
     className: "dt-alloc"
   }, /*#__PURE__*/React.createElement("div", {
@@ -27338,12 +27525,12 @@ const DashboardOverview = ({
     c: 'blue',
     i: 'briefcase'
   }, {
-    l: 'Resources',
+    l: T?.resource_term_plural || 'Resources',
     v: (resourceTypes || []).length,
     c: 'green',
     i: 'layers'
   }, {
-    l: 'Notes',
+    l: T?.note_term_plural || 'Notes',
     v: (notes || []).length,
     c: 'purple',
     i: 'msg'
@@ -27572,10 +27759,11 @@ const IndividualsView = ({
     k: 'priority',
     l: 'Priority'
   }];
-  const defaultVisCols = ['name', 'status', 'priority', 'assignedTo', 'fields_count', 'transferable', ...Array.from(fieldKeys).slice(0, 3)];
+  const defaultVisCols = ['name', 'status', 'priority', 'assignedTo', 'fields_count', 'matterCount', 'transferable', ...Array.from(fieldKeys).slice(0, 3)];
   const getIndVal = (row, key) => {
     if (key === 'fields_count') return Object.keys(row.fields || {}).length;
     if (key === 'transferable') return row.transferable ? 'Yes' : 'Locked';
+    if (key === 'matterCount') return row.matterCount || 0;
     if (row.fields && row.fields[key]) return row.fields[key].value || '';
     return row[key] || '';
   };
@@ -27753,7 +27941,7 @@ const IndividualsView = ({
       marginBottom: 20
     }
   }, [{
-    l: 'Active Cases',
+    l: `Active ${T?.case_term_plural || 'Cases'}`,
     v: cases.length,
     c: 'gold'
   }, {
@@ -27814,6 +28002,141 @@ const IndividualsView = ({
     provenanceField: provenanceField,
     setProvenanceField: setProvenanceField
   }));
+};
+
+/* ─── MatterCreateModal — create/edit a matter sub-record for an individual ─── */
+const MatterCreateModal = ({
+  open,
+  onClose,
+  matter,
+  staff,
+  svc,
+  onSave,
+  showToast,
+  T,
+  bridgeRoomId
+}) => {
+  const isEdit = !!matter?.id;
+  const [draft, setDraft] = useState({
+    title: '',
+    status: 'open',
+    type: '',
+    date_opened: new Date().toISOString().slice(0, 10),
+    date_closed: '',
+    assigned_to: '',
+    priority: 'none',
+    description: ''
+  });
+  useEffect(() => {
+    if (open && matter?.id) {
+      setDraft({
+        title: matter.title || '',
+        status: matter.status || 'open',
+        type: matter.type || '',
+        date_opened: matter.date_opened ? new Date(matter.date_opened).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+        date_closed: matter.date_closed ? new Date(matter.date_closed).toISOString().slice(0, 10) : '',
+        assigned_to: matter.assigned_to || '',
+        priority: matter.priority || 'none',
+        description: matter.description || ''
+      });
+    } else if (open) {
+      setDraft({
+        title: '',
+        status: 'open',
+        type: '',
+        date_opened: new Date().toISOString().slice(0, 10),
+        date_closed: '',
+        assigned_to: '',
+        priority: 'none',
+        description: ''
+      });
+    }
+  }, [open, matter]);
+  const handleSave = () => {
+    if (!draft.title.trim()) {
+      showToast('Title is required', 'error');
+      return;
+    }
+    onSave(bridgeRoomId, {
+      ...(matter || {}),
+      ...draft,
+      date_opened: draft.date_opened ? new Date(draft.date_opened).getTime() : Date.now(),
+      date_closed: draft.date_closed ? new Date(draft.date_closed).getTime() : null
+    });
+    onClose();
+  };
+  if (!open) return null;
+  const matterTerm = T?.matter_term || 'Matter';
+  return /*#__PURE__*/React.createElement(Modal, {
+    open: open,
+    onClose: onClose,
+    title: isEdit ? `Edit ${matterTerm}` : `New ${matterTerm}`,
+    w: 560
+  }, /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 12, color: 'var(--tx-1)', marginBottom: 14, lineHeight: 1.6 }
+  }, isEdit ? `Edit this ${matterTerm.toLowerCase()} record.` : `Create a new ${matterTerm.toLowerCase()} for this ${(T?.client_term || 'individual').toLowerCase()}. ${(T?.matter_term_plural || 'Matters')} track specific engagements, issues, or cases.`), /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "TITLE *"), /*#__PURE__*/React.createElement("input", {
+    value: draft.title,
+    onChange: e => setDraft({ ...draft, title: e.target.value }),
+    placeholder: `${matterTerm} title...`,
+    autoFocus: true
+  })), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "STATUS"), /*#__PURE__*/React.createElement("select", {
+    value: draft.status,
+    onChange: e => setDraft({ ...draft, status: e.target.value }),
+    style: { width: '100%' }
+  }, Object.entries(MATTER_STATUSES).map(([k, v]) => /*#__PURE__*/React.createElement("option", { key: k, value: k }, v.label)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "PRIORITY"), /*#__PURE__*/React.createElement("select", {
+    value: draft.priority,
+    onChange: e => setDraft({ ...draft, priority: e.target.value }),
+    style: { width: '100%' }
+  }, Object.entries(MATTER_PRIORITIES).map(([k, v]) => /*#__PURE__*/React.createElement("option", { key: k, value: k }, v.label))))), /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "TYPE"), /*#__PURE__*/React.createElement("input", {
+    value: draft.type,
+    onChange: e => setDraft({ ...draft, type: e.target.value }),
+    placeholder: "e.g. Housing, Benefits, Legal, Medical"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "DATE OPENED"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: draft.date_opened,
+    onChange: e => setDraft({ ...draft, date_opened: e.target.value })
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "DATE CLOSED"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: draft.date_closed,
+    onChange: e => setDraft({ ...draft, date_closed: e.target.value }),
+    disabled: draft.status !== 'closed'
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "ASSIGNED TO"), /*#__PURE__*/React.createElement("select", {
+    value: draft.assigned_to,
+    onChange: e => setDraft({ ...draft, assigned_to: e.target.value }),
+    style: { width: '100%' }
+  }, /*#__PURE__*/React.createElement("option", { value: "" }, "Unassigned"), (staff || []).map(s => /*#__PURE__*/React.createElement("option", {
+    key: s.userId,
+    value: s.userId
+  }, s.display_name || s.userId?.split(':')[0]?.replace('@', '') || s.userId)))), /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 16 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "DESCRIPTION"), /*#__PURE__*/React.createElement("textarea", {
+    value: draft.description,
+    onChange: e => setDraft({ ...draft, description: e.target.value }),
+    placeholder: `Describe this ${matterTerm.toLowerCase()}...`,
+    rows: 4,
+    style: { width: '100%', resize: 'vertical' }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 8 }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: onClose,
+    className: "b-gho",
+    style: { flex: 1, padding: 10 }
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: handleSave,
+    className: "b-pri",
+    disabled: !draft.title.trim(),
+    style: { flex: 1, padding: 10, fontSize: 14 }
+  }, /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 14 }), isEdit ? ` Save ${matterTerm}` : ` Create ${matterTerm}`)));
 };
 
 /* ─── ResourcesTableView — replaces old card-based resource view ─── */
@@ -28035,19 +28358,19 @@ const ResourcesTableView = ({
       fontSize: 22,
       fontWeight: 700
     }
-  }, "Resources"), /*#__PURE__*/React.createElement("p", {
+  }, T?.resource_term_plural || "Resources"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 12.5,
       marginTop: 2
     }
-  }, "Resource types, inventory tracking, and allocation history. Click a row for details."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, `${T?.resource_term || 'Resource'} types, inventory tracking, and allocation history. Click a row for details.`), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     roomId: orgRoom || rosterRoom,
     encrypted: true,
     encLabel: "Megolm E2EE",
-    label: "Resources",
-    extra: [{ label: 'Storage', value: 'Resource type definitions are stored as state events in the org/roster/network room. Inventory and allocations are tracked in org room state. Per-client allocations are mirrored in bridge rooms.' }, orgRoom ? { label: 'Org room', value: orgRoom } : null, networkRoom ? { label: 'Network room', value: networkRoom } : null].filter(Boolean)
+    label: T?.resource_term_plural || "Resources",
+    extra: [{ label: 'Storage', value: `${T?.resource_term || 'Resource'} type definitions are stored as state events in the org/roster/network room. Inventory and allocations are tracked in org room state. Per-${(T?.client_term || 'client').toLowerCase()} allocations are mirrored in bridge rooms.` }, orgRoom ? { label: 'Org room', value: orgRoom } : null, networkRoom ? { label: 'Network room', value: networkRoom } : null].filter(Boolean)
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
@@ -28338,6 +28661,9 @@ const ProviderApp = ({
   const [bridgeNotes, setBridgeNotes] = useState({}); // {bridgeRoomId: notes[]}
   const [rosterNotes, setRosterNotes] = useState([]); // internal notes from roster
   const [allAllocations, setAllAllocations] = useState([]); // all allocations across cases
+  // ─── Matters state (sub-records of individuals) ───
+  const [matters, setMatters] = useState({}); // { bridgeRoomId: [matter, ...] }
+  const [matterModal, setMatterModal] = useState(null); // { mode: 'create'|'edit', indId, bridgeRoomId, matter? }
 
   // Notification helpers
   const addNotification = notif => {
@@ -28463,7 +28789,7 @@ const ProviderApp = ({
     setInitError(null);
     try {
       // Single-pass scan: fetch all Khora state across rooms in one request
-      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK]);
+      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK, EVT.MATTER]);
       let roster = null,
         metricsR = null,
         schema = null,
@@ -28952,6 +29278,25 @@ const ProviderApp = ({
       return true;
     }).sort((a, b) => (b.created || 0) - (a.created || 0));
     setDbNotes(dedupedNotes);
+
+    // ─── Load matters (io.khora.matter) from bridge rooms ───
+    const mattersMap = {};
+    for (const c of currentCases) {
+      const room = svc.client.getRoom(c.bridgeRoomId);
+      if (!room) continue;
+      const matterEvts = room.currentState.getStateEvents(EVT.MATTER) || [];
+      const roomMatters = [];
+      for (const ev of matterEvts) {
+        const content = ev.getContent();
+        if (content && content.id) {
+          roomMatters.push(content);
+        }
+      }
+      if (roomMatters.length > 0) {
+        mattersMap[c.bridgeRoomId] = roomMatters.sort((a, b) => (b.date_opened || b.created || 0) - (a.date_opened || a.created || 0));
+      }
+    }
+    setMatters(mattersMap);
   };
 
   // ─── Cell edit handler with debounced EO event tracking ───
@@ -30686,6 +31031,11 @@ const ProviderApp = ({
       await emitOp(orgRoom, 'ALT', dot('org', 'terminology', 'terms'), {
         client_term: terminologyDraft.client_term,
         provider_term: terminologyDraft.provider_term,
+        case_term: terminologyDraft.case_term,
+        matter_term: terminologyDraft.matter_term,
+        team_term: terminologyDraft.team_term,
+        note_term: terminologyDraft.note_term,
+        resource_term: terminologyDraft.resource_term,
         changed_by: svc.userId
       }, orgFrame());
       showToast('Terminology updated', 'success');
@@ -30699,6 +31049,38 @@ const ProviderApp = ({
     setTerminologyDraft({
       ...TERMINOLOGY_DEFAULTS
     });
+  };
+
+  // Save/update a matter sub-record for an individual
+  const handleSaveMatter = async (bridgeRoomId, matterData) => {
+    if (!bridgeRoomId) return;
+    try {
+      const matterId = matterData.id || `matter_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const payload = {
+        ...matterData,
+        id: matterId,
+        created: matterData.created || Date.now(),
+        updated: Date.now(),
+        created_by: matterData.created_by || svc.userId,
+        updated_by: svc.userId
+      };
+      await svc.setState(bridgeRoomId, EVT.MATTER, payload, matterId);
+      const bridgeFrameObj = { type: 'bridge', room: bridgeRoomId, role: orgRole || 'provider', epistemic: 'MEANT' };
+      await emitOp(bridgeRoomId, matterData.id ? 'ALT' : 'DES', dot('matter', matterId, 'record'), {
+        title: payload.title,
+        status: payload.status,
+        type: payload.type,
+        priority: payload.priority,
+        changed_by: svc.userId
+      }, bridgeFrameObj);
+      setMatters(prev => ({
+        ...prev,
+        [bridgeRoomId]: [...(prev[bridgeRoomId] || []).filter(m => m.id !== matterId), payload]
+      }));
+      showToast(`${T.matter_term || 'Matter'} ${matterData.id ? 'updated' : 'created'}`, 'success');
+    } catch (e) {
+      showToast(`Failed to save ${(T.matter_term || 'matter').toLowerCase()}: ${e.message}`, 'error');
+    }
   };
 
   // Create org-to-org messaging channel
@@ -31242,7 +31624,7 @@ const ProviderApp = ({
     }, {
       id: 'teams',
       icon: 'users',
-      label: `Teams${teams.length ? ` (${teams.length})` : ''}`
+      label: `${T?.team_term_plural || 'Teams'}${teams.length ? ` (${teams.length})` : ''}`
     }, {
       id: 'schema',
       icon: 'grid',
@@ -31676,6 +32058,7 @@ const ProviderApp = ({
       setNewClientMatrixId('');
       setNewClientNotes('');
     },
+    matters: matters,
     fieldDefs: fieldDefs,
     fieldCrosswalks: fieldCrosswalks,
     teams: teams,
@@ -31783,6 +32166,7 @@ const ProviderApp = ({
     individual: activeIndividual,
     notes: dbNotes,
     allocations: allAllocations,
+    matters: matters[activeIndividual?.bridgeRoom] || [],
     onBack: () => {
       setView('database');
       setActiveIndividual(null);
@@ -31792,9 +32176,18 @@ const ProviderApp = ({
       setNewNoteAttachTo(indId);
       setNewNoteModal(true);
     },
+    onAddMatter: indId => {
+      const ind = [...cases.map(c => ({ id: c.bridgeRoomId, bridgeRoom: c.bridgeRoomId })), ...(clientRecords || []).map(r => ({ id: r.roomId, bridgeRoom: r.roomId }))].find(i => i.id === indId || i.bridgeRoom === indId);
+      setMatterModal({ mode: 'create', indId, bridgeRoomId: ind?.bridgeRoom || indId });
+    },
+    onEditMatter: (indId, matter) => {
+      const ind = [...cases.map(c => ({ id: c.bridgeRoomId, bridgeRoom: c.bridgeRoomId })), ...(clientRecords || []).map(r => ({ id: r.roomId, bridgeRoom: r.roomId }))].find(i => i.id === indId || i.bridgeRoom === indId);
+      setMatterModal({ mode: 'edit', indId, bridgeRoomId: ind?.bridgeRoom || indId, matter });
+    },
     svc: svc,
     T: T,
     showToast: showToast,
+    staff: staff,
     resourceTypes: resourceTypes,
     resourceRelations: resourceRelations,
     resourceInventory: resourceInventory,
@@ -31816,6 +32209,16 @@ const ProviderApp = ({
     showToast: showToast,
     T: T,
     initialAttachTo: newNoteAttachTo
+  }), /*#__PURE__*/React.createElement(MatterCreateModal, {
+    open: !!matterModal,
+    onClose: () => setMatterModal(null),
+    matter: matterModal?.matter || null,
+    staff: staff,
+    svc: svc,
+    onSave: handleSaveMatter,
+    showToast: showToast,
+    T: T,
+    bridgeRoomId: matterModal?.bridgeRoomId || null
   })), view === 'resource-profile' && activeResourceProfile && /*#__PURE__*/React.createElement(ResourceProfilePage, {
     resource: activeResourceProfile,
     allocations: allAllocations,
@@ -32688,18 +33091,18 @@ const ProviderApp = ({
       fontSize: 22,
       fontWeight: 700
     }
-  }, "Teams"), /*#__PURE__*/React.createElement("p", {
+  }, T?.team_term_plural || "Teams"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Flexible groups of people for collaboration. Teams can span across organizations \u2014 anyone with a Matrix ID can be invited."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, `Flexible groups of people for collaboration. ${T?.team_term_plural || 'Teams'} can span across organizations \u2014 anyone with a Matrix ID can be invited.`), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     encrypted: true,
     encLabel: "Megolm E2EE",
-    label: "Teams",
-    extra: [{ label: 'Storage', value: 'Each team is a separate Matrix room. Team metadata, members, schema, and consent rules are stored as state events in that room. All team members can read the room; only the team owner/admin can modify it.' }, { label: 'Team rooms', value: teams.length + ' team room(s): ' + teams.map(t => t.name || 'Unnamed').join(', ') }]
+    label: T?.team_term_plural || "Teams",
+    extra: [{ label: 'Storage', value: `Each ${(T?.team_term || 'team').toLowerCase()} is a separate Matrix room. ${T?.team_term || 'Team'} metadata, members, schema, and consent rules are stored as state events in that room. All ${(T?.team_term || 'team').toLowerCase()} members can read the room; only the ${(T?.team_term || 'team').toLowerCase()} owner/admin can modify it.` }, { label: `${T?.team_term || 'Team'} rooms`, value: teams.length + ` ${(T?.team_term || 'team').toLowerCase()} room(s): ` + teams.map(t => t.name || 'Unnamed').join(', ') }]
   })), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setCreateTeamModal(true);
@@ -32715,7 +33118,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "plus",
     s: 14
-  }), "New Team")), /*#__PURE__*/React.createElement("div", {
+  }), `New ${T?.team_term || 'Team'}`)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))',
@@ -33694,7 +34097,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       marginBottom: 10
     }
-  }, "Resources allocated to this ", T.client_term.toLowerCase(), " through this bridge. Each allocation is an EO event with full provenance."), caseAllocations.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, `${T.resource_term_plural || 'Resources'} allocated to this `, T.client_term.toLowerCase(), " through this bridge. Each allocation is an EO event with full provenance."), caseAllocations.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: 'center',
       padding: '16px 0',
@@ -34318,7 +34721,7 @@ const ProviderApp = ({
     style: {
       marginBottom: 0
     }
-  }, "TERMINOLOGY"), (T.client_term !== 'Client' || T.provider_term !== 'Provider') && /*#__PURE__*/React.createElement("span", {
+  }, "TERMINOLOGY"), (T.client_term !== TERMINOLOGY_DEFAULTS.client_term || T.provider_term !== TERMINOLOGY_DEFAULTS.provider_term || T.case_term !== TERMINOLOGY_DEFAULTS.case_term || T.matter_term !== TERMINOLOGY_DEFAULTS.matter_term || T.team_term !== TERMINOLOGY_DEFAULTS.team_term || T.note_term !== TERMINOLOGY_DEFAULTS.note_term || T.resource_term !== TERMINOLOGY_DEFAULTS.resource_term) && /*#__PURE__*/React.createElement("span", {
     className: "tag tag-gold",
     style: {
       fontSize: 8
@@ -34346,63 +34749,47 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Customize what your organization calls its service recipients and service providers. These terms appear throughout the interface for all staff in your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Customize what your organization calls its entities. These terms appear throughout the interface for all staff in your organization."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: 10
+      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+      gap: 8
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, [
+    { label: 'SERVICE RECIPIENT', term: T.client_term, plural: T.client_term_plural },
+    { label: 'SERVICE PROVIDER', term: T.provider_term, plural: T.provider_term_plural },
+    { label: 'CASE', term: T.case_term, plural: T.case_term_plural },
+    { label: 'MATTER', term: T.matter_term, plural: T.matter_term_plural },
+    { label: 'TEAM', term: T.team_term, plural: T.team_term_plural },
+    { label: 'NOTE', term: T.note_term, plural: T.note_term_plural },
+    { label: 'RESOURCE', term: T.resource_term, plural: T.resource_term_plural }
+  ].map(item => /*#__PURE__*/React.createElement("div", {
+    key: item.label,
     style: {
-      padding: '12px 14px',
+      padding: '10px 12px',
       background: 'var(--bg-3)',
       borderRadius: 'var(--r)'
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 10,
+      fontSize: 9,
       fontFamily: 'var(--mono)',
       color: 'var(--tx-3)',
       display: 'block',
-      marginBottom: 6
+      marginBottom: 4
     }
-  }, "SERVICE RECIPIENT"), /*#__PURE__*/React.createElement("span", {
+  }, item.label), /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: 700,
       display: 'block'
     }
-  }, T.client_term), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: 'var(--tx-2)'
-    }
-  }, "Plural: ", T.client_term_plural)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: '12px 14px',
-      background: 'var(--bg-3)',
-      borderRadius: 'var(--r)'
-    }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, item.term), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
-      fontFamily: 'var(--mono)',
-      color: 'var(--tx-3)',
-      display: 'block',
-      marginBottom: 6
-    }
-  }, "SERVICE PROVIDER"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 15,
-      fontWeight: 700,
-      display: 'block'
-    }
-  }, T.provider_term), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
       color: 'var(--tx-2)'
     }
-  }, "Plural: ", T.provider_term_plural))), (T.client_term !== 'Client' || T.provider_term !== 'Provider') && /*#__PURE__*/React.createElement("div", {
+  }, "Plural: ", item.plural)))), (T.client_term !== TERMINOLOGY_DEFAULTS.client_term || T.provider_term !== TERMINOLOGY_DEFAULTS.provider_term || T.case_term !== TERMINOLOGY_DEFAULTS.case_term || T.matter_term !== TERMINOLOGY_DEFAULTS.matter_term || T.team_term !== TERMINOLOGY_DEFAULTS.team_term || T.note_term !== TERMINOLOGY_DEFAULTS.note_term || T.resource_term !== TERMINOLOGY_DEFAULTS.resource_term) && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10,
       padding: '8px 12px',
@@ -34418,7 +34805,7 @@ const ProviderApp = ({
     n: "alert",
     s: 12,
     c: "var(--gold)"
-  }), "Custom terminology active \u2014 staff will see \"", T.client_term, "\" and \"", T.provider_term, "\" instead of the defaults.")), /*#__PURE__*/React.createElement("div", {
+  }), `Custom terminology active \u2014 staff will see customized names like "${T.client_term}", "${T.provider_term}", "${T.case_term}", "${T.team_term}" etc. instead of the defaults.`)), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
@@ -37778,7 +38165,7 @@ const ProviderApp = ({
   }), " Save Verification Settings")), /*#__PURE__*/React.createElement(Modal, {
     open: createTeamModal,
     onClose: () => setCreateTeamModal(false),
-    title: "New Team",
+    title: `New ${T?.team_term || 'Team'}`,
     w: 520
   }, /*#__PURE__*/React.createElement("p", {
     style: {
@@ -37787,7 +38174,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Create a team for collaboration. Teams are flexible \u2014 they can include people from your organization, other organizations, or individuals with no org affiliation. Anyone with a Matrix ID can be invited."), /*#__PURE__*/React.createElement("div", {
+  }, `Create a ${(T?.team_term || 'team').toLowerCase()} for collaboration. ${T?.team_term_plural || 'Teams'} are flexible \u2014 they can include people from your organization, other organizations, or individuals with no org affiliation. Anyone with a Matrix ID can be invited.`), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -38204,7 +38591,89 @@ const ProviderApp = ({
       cursor: 'pointer',
       transition: 'all .15s'
     }
-  }, t)))), /*#__PURE__*/React.createElement("div", {
+  }, t)))),
+
+  /* ── Case Term ── */
+  /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 } },
+  /*#__PURE__*/React.createElement(I, { n: "briefcase", s: 14, c: "var(--green)" }),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Case Term"),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)' } }, "(default: Case)")),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "SINGULAR"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.case_term, onChange: e => setTerminologyDraft({ ...terminologyDraft, case_term: e.target.value }), placeholder: "e.g. Engagement, Episode" })),
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "PLURAL"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.case_term_plural, onChange: e => setTerminologyDraft({ ...terminologyDraft, case_term_plural: e.target.value }), placeholder: "e.g. Engagements, Episodes" }))),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 } },
+  ['Case', 'Engagement', 'Episode', 'Service', 'Enrollment'].map(t => /*#__PURE__*/React.createElement("span", { key: t, onClick: () => setTerminologyDraft({ ...terminologyDraft, case_term: t, case_term_plural: t + 's' }), className: `tag ${terminologyDraft.case_term === t ? 'tag-green' : 'tag-blue'}`, style: { fontSize: 9, cursor: 'pointer', transition: 'all .15s' } }, t)))),
+
+  /* ── Matter Term ── */
+  /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 } },
+  /*#__PURE__*/React.createElement(I, { n: "clipboard", s: 14, c: "var(--purple)" }),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Matter/Sub-Record Term"),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)' } }, "(default: Matter)")),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "SINGULAR"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.matter_term, onChange: e => setTerminologyDraft({ ...terminologyDraft, matter_term: e.target.value }), placeholder: "e.g. Issue, Concern, Request" })),
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "PLURAL"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.matter_term_plural, onChange: e => setTerminologyDraft({ ...terminologyDraft, matter_term_plural: e.target.value }), placeholder: "e.g. Issues, Concerns, Requests" }))),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 } },
+  ['Matter', 'Issue', 'Concern', 'Request', 'Inquiry'].map(t => /*#__PURE__*/React.createElement("span", { key: t, onClick: () => setTerminologyDraft({ ...terminologyDraft, matter_term: t, matter_term_plural: t + 's' }), className: `tag ${terminologyDraft.matter_term === t ? 'tag-purple' : 'tag-blue'}`, style: { fontSize: 9, cursor: 'pointer', transition: 'all .15s' } }, t)))),
+
+  /* ── Team Term ── */
+  /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 } },
+  /*#__PURE__*/React.createElement(I, { n: "users", s: 14, c: "var(--blue)" }),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Team Term"),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)' } }, "(default: Team)")),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "SINGULAR"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.team_term, onChange: e => setTerminologyDraft({ ...terminologyDraft, team_term: e.target.value }), placeholder: "e.g. Unit, Group, Department" })),
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "PLURAL"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.team_term_plural, onChange: e => setTerminologyDraft({ ...terminologyDraft, team_term_plural: e.target.value }), placeholder: "e.g. Units, Groups, Departments" }))),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 } },
+  ['Team', 'Unit', 'Group', 'Department', 'Program'].map(t => /*#__PURE__*/React.createElement("span", { key: t, onClick: () => setTerminologyDraft({ ...terminologyDraft, team_term: t, team_term_plural: t + 's' }), className: `tag ${terminologyDraft.team_term === t ? 'tag-blue' : 'tag-blue'}`, style: { fontSize: 9, cursor: 'pointer', transition: 'all .15s' } }, t)))),
+
+  /* ── Note Term ── */
+  /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 } },
+  /*#__PURE__*/React.createElement(I, { n: "msg", s: 14, c: "var(--teal)" }),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Note Term"),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)' } }, "(default: Note)")),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "SINGULAR"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.note_term, onChange: e => setTerminologyDraft({ ...terminologyDraft, note_term: e.target.value }), placeholder: "e.g. Entry, Log, Record" })),
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "PLURAL"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.note_term_plural, onChange: e => setTerminologyDraft({ ...terminologyDraft, note_term_plural: e.target.value }), placeholder: "e.g. Entries, Logs, Records" }))),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 } },
+  ['Note', 'Entry', 'Log', 'Record', 'Comment'].map(t => /*#__PURE__*/React.createElement("span", { key: t, onClick: () => setTerminologyDraft({ ...terminologyDraft, note_term: t, note_term_plural: t + 's' }), className: `tag ${terminologyDraft.note_term === t ? 'tag-teal' : 'tag-blue'}`, style: { fontSize: 9, cursor: 'pointer', transition: 'all .15s' } }, t)))),
+
+  /* ── Resource Term ── */
+  /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 } },
+  /*#__PURE__*/React.createElement(I, { n: "layers", s: 14, c: "var(--orange, #f59e0b)" }),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700 } }, "Resource Term"),
+  /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)' } }, "(default: Resource)")),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } },
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "SINGULAR"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.resource_term, onChange: e => setTerminologyDraft({ ...terminologyDraft, resource_term: e.target.value }), placeholder: "e.g. Supply, Item, Asset" })),
+  /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("span", { className: "section-label" }, "PLURAL"),
+    /*#__PURE__*/React.createElement("input", { value: terminologyDraft.resource_term_plural, onChange: e => setTerminologyDraft({ ...terminologyDraft, resource_term_plural: e.target.value }), placeholder: "e.g. Supplies, Items, Assets" }))),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 } },
+  ['Resource', 'Supply', 'Item', 'Asset', 'Material'].map(t => /*#__PURE__*/React.createElement("span", { key: t, onClick: () => setTerminologyDraft({ ...terminologyDraft, resource_term: t, resource_term_plural: t + 's' }), className: `tag ${terminologyDraft.resource_term === t ? 'tag-gold' : 'tag-blue'}`, style: { fontSize: 9, cursor: 'pointer', transition: 'all .15s' } }, t)))),
+
+  /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--bg-3)',
       borderRadius: 'var(--r)',
@@ -38225,7 +38694,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.8
     }
-  }, /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.provider_term || 'Provider', " Dashboard\" \xB7 \"My ", terminologyDraft.client_term_plural || 'Clients', "\" \xB7 \"New ", terminologyDraft.client_term || 'Client', " Record\""), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", null, "\"Anonymous ", terminologyDraft.client_term || 'Client', "\" \xB7 \"", terminologyDraft.provider_term || 'Provider', " Observation\" \xB7 \"", terminologyDraft.provider_term || 'Provider', " Profile\""))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.provider_term || 'Provider', " Dashboard\" \xB7 \"My ", terminologyDraft.client_term_plural || 'Clients', "\" \xB7 \"New ", terminologyDraft.client_term || 'Client', " Record\""), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.team_term_plural || 'Teams', "\" \xB7 \"New ", terminologyDraft.note_term || 'Note', "\" \xB7 \"", terminologyDraft.resource_term_plural || 'Resources', "\" \xB7 \"", terminologyDraft.matter_term_plural || 'Matters', "\""), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", null, "\"Active ", terminologyDraft.case_term_plural || 'Cases', "\" \xB7 \"", terminologyDraft.provider_term || 'Provider', " Observation\" \xB7 \"", terminologyDraft.provider_term || 'Provider', " Profile\""))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8
