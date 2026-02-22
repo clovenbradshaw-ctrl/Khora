@@ -19916,7 +19916,7 @@ const ClientApp = ({
     encLabel: "Megolm E2EE",
     label: "People & Teams",
     extra: [{ label: 'Providers', value: providers.length + ' provider(s), each with a separate encrypted bridge room' }, { label: 'Teams', value: myTeams.length + ' team(s), each a separate encrypted Matrix room' }, { label: 'Privacy', value: 'Provider relationships are stored as bridge rooms. Team memberships are stored in team rooms. No central directory has access to all your connections.' }]
-  }))), /*#__PURE__*/React.createElement("button", {
+  })), /*#__PURE__*/React.createElement("button", {
     onClick: () => setAddProviderModal(true),
     className: "b-pri",
     style: {
@@ -20956,7 +20956,7 @@ const ClientApp = ({
     label: "Messages",
     members: inboxConvo ? providers.filter(p => p.bridgeRoomId === inboxConvo).map(p => ({ userId: p.providerUserId, role: 'provider' })).concat([{ userId: svc.userId, role: 'client (you)' }]) : undefined,
     extra: [{ label: 'Privacy', value: 'Each conversation is a separate encrypted Matrix room. Only you and your provider can read messages.' }]
-  }))), /*#__PURE__*/React.createElement("button", {
+  })), /*#__PURE__*/React.createElement("button", {
     onClick: () => setAddProviderModal(true),
     className: "b-pri",
     style: {
@@ -26778,7 +26778,7 @@ const DashboardOverview = ({
     encLabel: "Megolm E2EE",
     label: "Dashboard",
     compact: true
-  }))), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6
@@ -27538,7 +27538,7 @@ const ResourcesTableView = ({
     encLabel: "Megolm E2EE",
     label: "Resources",
     extra: [{ label: 'Storage', value: 'Resource type definitions are stored as state events in the org/roster/network room. Inventory and allocations are tracked in org room state. Per-client allocations are mirrored in bridge rooms.' }, orgRoom ? { label: 'Org room', value: orgRoom } : null, networkRoom ? { label: 'Network room', value: networkRoom } : null].filter(Boolean)
-  }))), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6
@@ -31337,7 +31337,7 @@ const ProviderApp = ({
     encLabel: "Megolm E2EE",
     label: "Messages",
     extra: [{ label: 'Privacy model', value: 'Each conversation is a separate encrypted Matrix room (bridge). Direct messages are between you and one client. Org channels use opacity envelopes.' }, orgRoom ? { label: 'Org channel opacity', value: orgOpacity + ' \u2014 controls what receiving orgs see about message sender identity' } : null].filter(Boolean)
-  }))), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
@@ -32190,7 +32190,7 @@ const ProviderApp = ({
     encLabel: "Megolm E2EE",
     label: "Teams",
     extra: [{ label: 'Storage', value: 'Each team is a separate Matrix room. Team metadata, members, schema, and consent rules are stored as state events in that room. All team members can read the room; only the team owner/admin can modify it.' }, { label: 'Team rooms', value: teams.length + ' team room(s): ' + teams.map(t => t.name || 'Unnamed').join(', ') }]
-  }))), /*#__PURE__*/React.createElement("button", {
+  })), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setCreateTeamModal(true);
       setNewTeamName('');
@@ -34443,7 +34443,7 @@ const ProviderApp = ({
     label: "Staff Roster",
     members: staff.map(s => ({ userId: s.userId, role: s.role })),
     extra: [{ label: 'Storage', value: 'Staff roster is stored as a state event in the shared organization room. All org members can read the roster; only admins can modify it.' }]
-  }))), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
+  })), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setInviteModal(true),
     className: "b-pri",
     style: {
