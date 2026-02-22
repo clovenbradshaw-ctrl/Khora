@@ -21284,7 +21284,7 @@ const ClientApp = ({
     className: "card"
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "BRIDGE MESSAGES"), /*#__PURE__*/React.createElement("div", {
+  }, "MESSAGES"), /*#__PURE__*/React.createElement("div", {
     style: {
       maxHeight: 280,
       overflow: 'auto',
@@ -27530,7 +27530,7 @@ const ProviderApp = ({
   const [inboxConvo, setInboxConvo] = useState(null); // room ID of active inbox conversation
   const [inboxMessages, setInboxMessages] = useState([]);
   const [inboxMsgText, setInboxMsgText] = useState('');
-  const [inboxTab, setInboxTab] = useState('cases'); // 'cases' | 'channels'
+  const [inboxTab, setInboxTab] = useState('direct'); // 'direct' | 'channels'
   // ─── Notifications state ───
   const [notifications, setNotifications] = useState([]);
   // ─── Resource tracking state ───
@@ -31099,13 +31099,13 @@ const ProviderApp = ({
       marginBottom: 16
     }
   }, /*#__PURE__*/React.createElement("div", {
-    className: `tab${inboxTab === 'cases' ? ' active' : ''}`,
+    className: `tab${inboxTab === 'direct' ? ' active' : ''}`,
     onClick: () => {
-      setInboxTab('cases');
+      setInboxTab('direct');
       setInboxConvo(null);
       setInboxMessages([]);
     }
-  }, "Cases (", cases.length, ")"), /*#__PURE__*/React.createElement("div", {
+  }, "Direct (", cases.length, ")"), /*#__PURE__*/React.createElement("div", {
     className: `tab${inboxTab === 'channels' ? ' active' : ''}`,
     onClick: () => {
       setInboxTab('channels');
@@ -31126,12 +31126,12 @@ const ProviderApp = ({
     style: {
       marginBottom: 0
     }
-  }, inboxTab === 'cases' ? `CASES (${cases.length})` : `CHANNELS (${orgChannels.length})`)), /*#__PURE__*/React.createElement("div", {
+  }, inboxTab === 'direct' ? `DIRECT (${cases.length})` : `CHANNELS (${orgChannels.length})`)), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       overflow: 'auto'
     }
-  }, inboxTab === 'cases' ? /*#__PURE__*/React.createElement(React.Fragment, null, cases.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, inboxTab === 'direct' ? /*#__PURE__*/React.createElement(React.Fragment, null, cases.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '40px 16px',
       textAlign: 'center'
@@ -31146,7 +31146,7 @@ const ProviderApp = ({
       fontSize: 11.5,
       marginTop: 10
     }
-  }, "No cases yet"), /*#__PURE__*/React.createElement("p", {
+  }, "No conversations yet"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-3)',
       fontSize: 10.5,
@@ -31391,9 +31391,9 @@ const ProviderApp = ({
         gap: 4
       }
     }, /*#__PURE__*/React.createElement(I, {
-      n: "briefcase",
+      n: "user",
       s: 11
-    }), "Full Case"), convoType === 'channel' && /*#__PURE__*/React.createElement("button", {
+    }), "View Profile"), convoType === 'channel' && /*#__PURE__*/React.createElement("button", {
       onClick: () => openChannel(inboxConvo),
       className: "b-gho b-xs",
       style: {
@@ -33107,7 +33107,7 @@ const ProviderApp = ({
     className: "card"
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "BRIDGE MESSAGES"), /*#__PURE__*/React.createElement("div", {
+  }, "MESSAGES"), /*#__PURE__*/React.createElement("div", {
     style: {
       maxHeight: 260,
       overflow: 'auto',
