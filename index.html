@@ -4147,13 +4147,7 @@ const DOMAIN_CONFIG = {
     uri: 'khora:vault/full_name',
     data_type: 'text',
     definition: 'The full legal name of the individual as it appears on government-issued identification, or as preferred by the individual if no ID is available.',
-    scope: 'Legal or preferred name for identification within service contexts. Not aliases or nicknames unless no legal name is known.',
-    authority: {
-      uri: 'https://hudexchange.info/resource/3824/',
-      name: 'HMIS Data Standards',
-      provision: 'Element 3.01',
-      org: 'HUD'
-    }
+    scope: 'Legal or preferred name for identification within service contexts. Not aliases or nicknames unless no legal name is known.'
   }, {
     key: 'dob',
     label: 'Date of Birth',
@@ -4162,13 +4156,7 @@ const DOMAIN_CONFIG = {
     uri: 'khora:vault/dob',
     data_type: 'date',
     definition: 'The date on which the individual was born, used for age calculation and eligibility determination.',
-    scope: 'Calendar date of birth. If exact date is unknown, use best estimate with a note.',
-    authority: {
-      uri: 'https://hudexchange.info/resource/3824/',
-      name: 'HMIS Data Standards',
-      provision: 'Element 3.03',
-      org: 'HUD'
-    }
+    scope: 'Calendar date of birth. If exact date is unknown, use best estimate with a note.'
   }, {
     key: 'id_number',
     label: 'ID Number',
@@ -4177,13 +4165,7 @@ const DOMAIN_CONFIG = {
     uri: 'khora:vault/id_number',
     data_type: 'text',
     definition: 'A government-issued identification number such as SSN (last 4), state ID, or other official identifier.',
-    scope: 'Any official ID number used for verification. Partial numbers (e.g., last 4 of SSN) preferred for security. Not internal case numbers.',
-    authority: {
-      uri: 'https://hudexchange.info/resource/3824/',
-      name: 'HMIS Data Standards',
-      provision: 'Element 3.02',
-      org: 'HUD'
-    }
+    scope: 'Any official ID number used for verification. Partial numbers (e.g., last 4 of SSN) preferred for security. Not internal case numbers.'
   }, {
     key: 'email',
     label: 'Email',
@@ -23997,7 +23979,11 @@ const DatabaseView = ({
     fieldCrosswalks: fieldCrosswalks || [],
     teams: teams || [],
     onSaveFieldDef: onSaveFieldDef,
-    onSaveCrosswalk: onSaveCrosswalk
+    onSaveCrosswalk: onSaveCrosswalk,
+    svc: svc,
+    orgRoom: orgRoom,
+    networkRoom: networkRoom,
+    showToast: showToast
   }));
 };
 
@@ -24057,15 +24043,66 @@ async function fetchWikidataDefinition(fieldKey, label) {
 const SIMPLE_FIELD_KEYS = new Set(['full_name', 'email', 'phone', 'address', 'affiliation', 'case_notes', 'documents']);
 
 /* ─── DefinitionPopup — slide-from-right panel for field definitions ─── */
-const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSaveCrosswalk }) => {
+const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSaveCrosswalk, onSaveFieldDef, teams, svc, orgRoom, networkRoom, showToast }) => {
   const [wikiData, setWikiData] = useState(null);
   const [wikiLoading, setWikiLoading] = useState(false);
   const [addCrosswalkFor, setAddCrosswalkFor] = useState(false);
   const [xwTargetUri, setXwTargetUri] = useState('');
   const [xwRelationship, setXwRelationship] = useState('equivalent');
   const [xwNotes, setXwNotes] = useState('');
+  const [editingAuthority, setEditingAuthority] = useState(false);
+  const [authDraft, setAuthDraft] = useState({ org: '', name: '', provision: '', uri: '' });
   const d = fieldDef;
   if (!d) return null;
+
+  // Reset authority draft when field changes
+  React.useEffect(() => {
+    setAuthDraft({
+      org: d.authority?.org || '',
+      name: d.authority?.name || '',
+      provision: d.authority?.provision || '',
+      uri: d.authority?.uri || ''
+    });
+    setEditingAuthority(false);
+  }, [d.uri]);
+
+  const saveAuthority = async () => {
+    const hasValues = authDraft.org || authDraft.name;
+    const newAuthority = hasValues ? { ...authDraft } : null;
+    const updated = { ...d, authority: newAuthority };
+
+    // Check if field is in use by any team schema
+    const teamsUsing = (teams || []).filter(t => t.schema?.fields?.some(f => f.uri === d.uri));
+
+    if (teamsUsing.length > 0 && (orgRoom || networkRoom)) {
+      // Field is in use — create governance proposal
+      const targetRoom = networkRoom || orgRoom;
+      const proposal = {
+        id: 'prop_auth_' + d.key + '_' + Date.now(),
+        type: 'field_authority_change',
+        summary: `Change authority on "${d.label}" field`,
+        detail: newAuthority
+          ? `Set authority to: ${newAuthority.org} — ${newAuthority.name}${newAuthority.provision ? ' (' + newAuthority.provision + ')' : ''}`
+          : `Remove authority from "${d.label}"`,
+        field_uri: d.uri,
+        proposed_authority: newAuthority,
+        previous_authority: d.authority || null,
+        affected_teams: teamsUsing.map(t => ({ id: t.id, name: t.name })),
+        proposed_by: svc?.userId,
+        proposed_at: Date.now(),
+        status: 'submitted',
+        positions: {}
+      };
+      if (svc) await svc.setState(targetRoom, EVT.GOV_PROPOSAL, proposal, proposal.id);
+      if (showToast) showToast(`Governance proposal created — ${teamsUsing.length} team(s) use this field`);
+      setEditingAuthority(false);
+    } else {
+      // Field not in use — apply directly
+      if (onSaveFieldDef) await onSaveFieldDef(updated);
+      if (showToast) showToast('Authority updated');
+      setEditingAuthority(false);
+    }
+  };
 
   const isSimple = SIMPLE_FIELD_KEYS.has(d.key);
   const getSource = uri => {
@@ -24141,13 +24178,46 @@ const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSave
           React.createElement('span', { className: 'def-popup-section-label' }, 'Scope'),
           React.createElement('p', { style: { fontSize: 12, lineHeight: 1.5, color: 'var(--tx-2)' } }, d.scope)
         ),
-        /* Authority — only show for non-simple fields */
-        d.authority && !isSimple && React.createElement('div', { className: 'def-popup-section' },
-          React.createElement('span', { className: 'def-popup-section-label' }, 'Authority'),
-          React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 } },
+        /* Authority — editable */
+        React.createElement('div', { className: 'def-popup-section' },
+          React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+            React.createElement('span', { className: 'def-popup-section-label' }, 'Authority'),
+            !editingAuthority && React.createElement('button', {
+              className: 'b-gho b-xs',
+              onClick: () => setEditingAuthority(true),
+              style: { display: 'flex', alignItems: 'center', gap: 3 }
+            }, React.createElement(I, { n: 'pencil', s: 10 }), d.authority ? 'Edit' : 'Add')
+          ),
+          !editingAuthority && d.authority && React.createElement('div',
+            { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 } },
             React.createElement('span', { className: 'tag tag-teal', style: { fontSize: 9 } }, d.authority.org || 'External'),
             React.createElement('span', { style: { fontSize: 11.5, color: 'var(--tx-1)' } }, d.authority.name),
             d.authority.provision && React.createElement('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--tx-2)' } }, d.authority.provision)
+          ),
+          !editingAuthority && !d.authority && React.createElement('div',
+            { style: { fontSize: 11, color: 'var(--tx-3)', marginTop: 4 } }, 'No authority set'),
+          editingAuthority && React.createElement('div', { style: { marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 } },
+            React.createElement('input', { placeholder: 'Organization (e.g. HUD)', value: authDraft.org,
+              onChange: e => setAuthDraft({...authDraft, org: e.target.value}),
+              style: { fontSize: 12, padding: '4px 8px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-2)', color: 'var(--tx-0)' } }),
+            React.createElement('input', { placeholder: 'Standard name (e.g. HMIS Data Standards)', value: authDraft.name,
+              onChange: e => setAuthDraft({...authDraft, name: e.target.value}),
+              style: { fontSize: 12, padding: '4px 8px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-2)', color: 'var(--tx-0)' } }),
+            React.createElement('input', { placeholder: 'Provision (e.g. Element 3.01)', value: authDraft.provision,
+              onChange: e => setAuthDraft({...authDraft, provision: e.target.value}),
+              style: { fontSize: 12, padding: '4px 8px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-2)', color: 'var(--tx-0)' } }),
+            React.createElement('input', { placeholder: 'Reference URI', value: authDraft.uri,
+              onChange: e => setAuthDraft({...authDraft, uri: e.target.value}),
+              style: { fontSize: 12, padding: '4px 8px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-2)', color: 'var(--tx-0)' } }),
+            ((teams || []).filter(t => t.schema?.fields?.some(f => f.uri === d.uri)).length > 0) &&
+              React.createElement('div', { style: { fontSize: 10, color: 'var(--orange)', padding: '6px 8px', background: 'var(--bg-1)', borderRadius: 'var(--r)', border: '1px solid var(--orange)', opacity: 0.9 } },
+                '\u26A0 This field is used by ', (teams || []).filter(t => t.schema?.fields?.some(f => f.uri === d.uri)).length, ' team(s). Saving will create a governance proposal instead of applying directly.'
+              ),
+            React.createElement('div', { style: { display: 'flex', gap: 6, marginTop: 4 } },
+              React.createElement('button', { className: 'b-pri b-xs', onClick: saveAuthority }, 'Save'),
+              d.authority && React.createElement('button', { className: 'b-gho b-xs', onClick: () => { setAuthDraft({ org: '', name: '', provision: '', uri: '' }); } }, 'Clear'),
+              React.createElement('button', { className: 'b-gho b-xs', onClick: () => setEditingAuthority(false) }, 'Cancel')
+            )
           )
         ),
         /* Crosswalks */
@@ -24214,7 +24284,11 @@ const FieldDictionaryView = ({
   fieldCrosswalks,
   teams,
   onSaveFieldDef,
-  onSaveCrosswalk
+  onSaveCrosswalk,
+  svc,
+  orgRoom,
+  networkRoom,
+  showToast
 }) => {
   const [expandedUri, setExpandedUri] = useState(null);
   const [crosswalkPopover, setCrosswalkPopover] = useState(null);
@@ -24503,7 +24577,13 @@ const FieldDictionaryView = ({
     fieldDefs: fieldDefs,
     fieldCrosswalks: fieldCrosswalks,
     onClose: () => setExpandedUri(null),
-    onSaveCrosswalk: onSaveCrosswalk
+    onSaveCrosswalk: onSaveCrosswalk,
+    onSaveFieldDef: onSaveFieldDef,
+    teams: teams,
+    svc: svc,
+    orgRoom: orgRoom,
+    networkRoom: networkRoom,
+    showToast: showToast
   }));
 };
 
