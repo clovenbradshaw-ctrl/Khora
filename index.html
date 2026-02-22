@@ -313,6 +313,31 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
   margin-bottom:6px;cursor:pointer;transition:all .12s;display:flex;align-items:center;gap:10px}
 .fb-preview-option:hover{border-color:var(--teal);background:var(--teal-dim)}
 
+/* ═══ Storage Transparency Badge ═══ */
+.stb-wrap{margin-bottom:14px}
+.stb-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:14px;
+  font-size:11px;font-family:var(--mono);font-weight:500;color:var(--tx-2);background:var(--bg-2);
+  border:1px solid var(--border-0);cursor:pointer;transition:all .18s;letter-spacing:.02em;user-select:none}
+.stb-toggle:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-dim)}
+.stb-toggle.open{border-color:var(--teal);color:var(--teal);background:var(--teal-dim)}
+.stb-panel{margin-top:8px;padding:14px 16px;background:var(--bg-2);border:1px solid var(--border-0);
+  border-radius:var(--r-lg);animation:fadeUp .2s ease both;font-size:12.5px;line-height:1.65}
+.stb-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
+.stb-row:last-child{margin-bottom:0}
+.stb-icon{flex-shrink:0;width:18px;height:18px;display:flex;align-items:center;justify-content:center;
+  border-radius:4px;margin-top:1px}
+.stb-label{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.05em;color:var(--tx-2);
+  text-transform:uppercase;margin-bottom:2px}
+.stb-value{color:var(--tx-0);font-size:12.5px;word-break:break-all}
+.stb-value-mono{color:var(--tx-1);font-family:var(--mono);font-size:11px;word-break:break-all}
+.stb-enc{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:10px;font-size:10px;
+  font-weight:600;font-family:var(--mono)}
+.stb-enc-on{background:var(--green-dim);color:var(--green)}
+.stb-enc-off{background:var(--red-dim);color:var(--red)}
+.stb-member{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;
+  background:var(--bg-3);font-family:var(--mono);font-size:10.5px;color:var(--tx-1);margin:2px 2px 2px 0}
+.stb-divider{height:1px;background:var(--border-0);margin:8px 0}
+
 /* ═══ Schema Builder Layout ═══ */
 @keyframes siPulse{0%,100%{opacity:1}50%{opacity:.5}}
 @keyframes notifSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
@@ -8311,6 +8336,131 @@ const Toast = ({
     }
   }, msg);
 };
+/* ═══════════════════ STORAGE TRANSPARENCY BADGE ═══════════════════
+ * Shows users exactly where their data is stored, encryption status,
+ * which Matrix server hosts it, and who has access.
+ *
+ * Props:
+ *   storageType  — 'matrix' | 'local' | 'indexeddb' | 'webhook'
+ *   roomId       — Matrix room ID (for matrix type)
+ *   server       — homeserver domain (auto-extracted from roomId if omitted)
+ *   encrypted    — boolean, whether data is encrypted
+ *   encLabel     — custom encryption label (e.g. 'AES-256-GCM' or 'Megolm E2EE')
+ *   members      — array of {userId, name?, role?} with access
+ *   label        — short description (e.g. 'Vault Data', 'Case Messages')
+ *   extra        — array of {label, value} for additional info rows
+ *   compact      — show inline compact badge (no expandable panel)
+ * ═══════════════════════════════════════════════════════════════════ */
+const StorageTransparencyBadge = ({
+  storageType = 'matrix',
+  roomId,
+  server,
+  encrypted,
+  encLabel,
+  members,
+  label,
+  extra,
+  compact
+}) => {
+  const [open, setOpen] = useState(false);
+  const resolvedServer = server || (roomId ? extractHomeserver(roomId) : null) || (svc._baseUrl ? new URL(svc._baseUrl).hostname : null) || 'unknown';
+  const storageLabels = {
+    matrix: 'Matrix Room',
+    local: 'Browser localStorage',
+    indexeddb: 'Browser IndexedDB',
+    webhook: 'External Webhook'
+  };
+  const storageIcons = {
+    matrix: 'server',
+    local: 'lock',
+    indexeddb: 'lock',
+    webhook: 'globe'
+  };
+  if (compact) {
+    return React.createElement("div", {
+      style: { display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 10,
+        background: 'var(--bg-2)', border: '1px solid var(--border-0)', fontSize: 10, fontFamily: 'var(--mono)',
+        color: 'var(--tx-2)', cursor: 'help' },
+      title: `Stored in: ${storageLabels[storageType] || storageType}${roomId ? '\nRoom: ' + roomId : ''}\nServer: ${resolvedServer}${encrypted ? '\nEncrypted: ' + (encLabel || 'Yes') : ''}`
+    }, React.createElement(I, { n: storageIcons[storageType] || 'server', s: 10, c: 'var(--teal)' }),
+      resolvedServer,
+      encrypted && React.createElement("span", { style: { color: 'var(--green)', marginLeft: 2 } }, '\u2022 encrypted'));
+  }
+  return React.createElement("div", { className: "stb-wrap" },
+    React.createElement("div", {
+      className: `stb-toggle${open ? ' open' : ''}`,
+      onClick: () => setOpen(o => !o)
+    },
+      React.createElement(I, { n: 'database', s: 11, c: open ? 'var(--teal)' : 'var(--tx-2)' }),
+      label ? `${label} — storage info` : 'Where is this stored?',
+      React.createElement(I, { n: open ? 'chevron-up' : 'chevron-down', s: 10 })
+    ),
+    open && React.createElement("div", { className: "stb-panel" },
+      // Storage type
+      React.createElement("div", { className: "stb-row" },
+        React.createElement("div", { className: "stb-icon", style: { background: 'var(--teal-dim)', color: 'var(--teal)' } },
+          React.createElement(I, { n: storageIcons[storageType] || 'server', s: 12 })),
+        React.createElement("div", null,
+          React.createElement("div", { className: "stb-label" }, "Storage type"),
+          React.createElement("div", { className: "stb-value" }, storageLabels[storageType] || storageType))
+      ),
+      // Server
+      resolvedServer && React.createElement("div", { className: "stb-row" },
+        React.createElement("div", { className: "stb-icon", style: { background: 'var(--blue-dim)', color: 'var(--blue)' } },
+          React.createElement(I, { n: 'globe', s: 12 })),
+        React.createElement("div", null,
+          React.createElement("div", { className: "stb-label" }, "Server"),
+          React.createElement("div", { className: "stb-value-mono" }, resolvedServer))
+      ),
+      // Room ID
+      roomId && React.createElement("div", { className: "stb-row" },
+        React.createElement("div", { className: "stb-icon", style: { background: 'var(--purple-dim)', color: 'var(--purple)' } },
+          React.createElement(I, { n: 'hash', s: 12 })),
+        React.createElement("div", null,
+          React.createElement("div", { className: "stb-label" }, "Room ID"),
+          React.createElement("div", { className: "stb-value-mono" }, roomId))
+      ),
+      // Encryption
+      React.createElement("div", { className: "stb-row" },
+        React.createElement("div", { className: "stb-icon", style: { background: encrypted ? 'var(--green-dim)' : 'var(--red-dim)', color: encrypted ? 'var(--green)' : 'var(--red)' } },
+          React.createElement(I, { n: encrypted ? 'lock' : 'unlock', s: 12 })),
+        React.createElement("div", null,
+          React.createElement("div", { className: "stb-label" }, "Encryption"),
+          React.createElement("span", { className: `stb-enc ${encrypted ? 'stb-enc-on' : 'stb-enc-off'}` },
+            encrypted ? (encLabel || 'Encrypted') : 'Not encrypted'))
+      ),
+      // Access / Members
+      members && members.length > 0 && React.createElement(React.Fragment, null,
+        React.createElement("div", { className: "stb-divider" }),
+        React.createElement("div", { className: "stb-row" },
+          React.createElement("div", { className: "stb-icon", style: { background: 'var(--gold-dim)', color: 'var(--gold)' } },
+            React.createElement(I, { n: 'users', s: 12 })),
+          React.createElement("div", null,
+            React.createElement("div", { className: "stb-label" }, "Who has access (" + members.length + ")"),
+            React.createElement("div", { style: { display: 'flex', flexWrap: 'wrap', gap: 2, marginTop: 4 } },
+              members.map((m, i) => React.createElement("span", { key: i, className: "stb-member" },
+                m.name || m.userId,
+                m.role && React.createElement("span", { style: { color: 'var(--tx-3)', marginLeft: 2 } }, '\u00b7 ' + m.role)
+              ))
+            )
+          )
+        )
+      ),
+      // Extra info
+      extra && extra.length > 0 && React.createElement(React.Fragment, null,
+        React.createElement("div", { className: "stb-divider" }),
+        extra.map((row, i) => React.createElement("div", { key: i, className: "stb-row" },
+          React.createElement("div", { className: "stb-icon", style: { background: 'var(--bg-3)', color: 'var(--tx-2)' } },
+            React.createElement(I, { n: 'info', s: 12 })),
+          React.createElement("div", null,
+            React.createElement("div", { className: "stb-label" }, row.label),
+            React.createElement("div", { className: "stb-value" }, row.value))
+        ))
+      )
+    )
+  );
+};
+
 const OP_COLORS = {
   INS: 'green',
   ALT: 'blue',
@@ -13656,7 +13806,13 @@ const SchemaView = ({
     onToggleSidebar: () => setSidebarOpen(prev => !prev)
   }), /*#__PURE__*/React.createElement("div", {
     className: "si-canvas"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Schema",
+    extra: [{ label: 'Storage', value: 'Schema definitions (forms, assessments, field definitions, crosswalks) are stored as state events in your personal Schema room. Network-level schemas are shared via the network room.' }]
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -18929,7 +19085,14 @@ const ClientApp = ({
       flexDirection: 'column',
       gap: 6
     }
-  }, /*#__PURE__*/React.createElement(ThemeToggle, {
+  }, /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    server: svc._baseUrl ? (() => { try { return new URL(svc._baseUrl).hostname; } catch(e) { return 'unknown'; } })() : 'unknown',
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Session",
+    compact: true
+  }), /*#__PURE__*/React.createElement(ThemeToggle, {
     style: {
       width: '100%',
       justifyContent: 'center'
@@ -18991,7 +19154,15 @@ const ClientApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "All data encrypted in your private Matrix room. Only you can read this.")), /*#__PURE__*/React.createElement("div", {
+  }, "All data encrypted in your private Matrix room. Only you can read this."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: vaultRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE + AES-256-GCM at rest",
+    label: "Vault Data",
+    members: [{ userId: svc.userId, role: 'owner (sole access)' }],
+    extra: [{ label: 'Sovereignty', value: 'You are the only person who can read or decrypt this data. Providers can only see fields you explicitly share.' }]
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8
@@ -19250,7 +19421,15 @@ const ClientApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Structured observations \u2014 the thermometer readings. What happened, not what it means."))), /*#__PURE__*/React.createElement("div", {
+  }, "Structured observations \u2014 the thermometer readings. What happened, not what it means."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: vaultRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Observations",
+    members: [{ userId: svc.userId, role: 'owner' }],
+    extra: [{ label: 'Data type', value: 'Immutable GIVEN events stored as timeline events in your personal vault room' }]
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 20
@@ -19509,7 +19688,15 @@ const ClientApp = ({
       marginTop: 4,
       marginBottom: 20
     }
-  }, "Resources allocated to you by providers across all your bridges. This is your record \u2014 encrypted in your vault."), myResources.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, "Resources allocated to you by providers across all your bridges. This is your record \u2014 encrypted in your vault."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: vaultRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "My Resources",
+    members: [{ userId: svc.userId, role: 'owner' }],
+    extra: [{ label: 'Storage', value: 'Resource vault records are stored in your personal vault and mirrored in each bridge room. Only you and the allocating provider can see allocations.' }]
+  }), myResources.length === 0 ? /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       textAlign: 'center',
@@ -19723,7 +19910,13 @@ const ClientApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Your ", ROLES.provider.label.toLowerCase(), "s, teams you belong to, and contacts \u2014 all in one place.")), /*#__PURE__*/React.createElement("button", {
+  }, "Your ", ROLES.provider.label.toLowerCase(), "s, teams you belong to, and contacts \u2014 all in one place."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "People & Teams",
+    extra: [{ label: 'Providers', value: providers.length + ' provider(s), each with a separate encrypted bridge room' }, { label: 'Teams', value: myTeams.length + ' team(s), each a separate encrypted Matrix room' }, { label: 'Privacy', value: 'Provider relationships are stored as bridge rooms. Team memberships are stored in team rooms. No central directory has access to all your connections.' }]
+  }))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setAddProviderModal(true),
     className: "b-pri",
     style: {
@@ -20341,7 +20534,13 @@ const ClientApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Rooms created by providers on your behalf. Claim them to take full ownership and control."))), /*#__PURE__*/React.createElement("div", {
+  }, "Rooms created by providers on your behalf. Claim them to take full ownership and control."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "My Records",
+    extra: [{ label: 'Ownership', value: 'Each record is a separate Matrix room. Pending records were created by a provider. Once claimed, ownership (power level 100) transfers to you and only you can control access.' }, { label: 'Rooms', value: (pendingClaims.length + claimedRooms.length) + ' record rooms (' + pendingClaims.length + ' pending, ' + claimedRooms.length + ' claimed)' }]
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))',
@@ -20633,7 +20832,15 @@ const ClientApp = ({
       fontSize: 12.5,
       marginBottom: 20
     }
-  }, "Control whether anonymized observations flow to provider metrics rooms. Your name, DOB, SSN, and address are never transmitted."), /*#__PURE__*/React.createElement("div", {
+  }, "Control whether anonymized observations flow to provider metrics rooms. Your name, DOB, SSN, and address are never transmitted."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: providers[0]?.metricsRoom || vaultRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Metrics",
+    members: [{ userId: svc.userId, role: 'data source (anonymized)' }],
+    extra: [{ label: 'Anonymization', value: 'Metrics are k-anonymized (k=5). PII fields are never transmitted. Only demographic ranges and hashed identifiers flow to the metrics room.' }, { label: 'Consent', value: 'You control which categories are shared. You can revoke consent at any time.' }]
+  }), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
@@ -20741,7 +20948,15 @@ const ClientApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Encrypted conversations with your providers. Messages are end-to-end encrypted.")), /*#__PURE__*/React.createElement("button", {
+  }, "Encrypted conversations with your providers. Messages are end-to-end encrypted."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: inboxConvo || (providers[0] || {}).bridgeRoomId,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Messages",
+    members: inboxConvo ? providers.filter(p => p.bridgeRoomId === inboxConvo).map(p => ({ userId: p.providerUserId, role: 'provider' })).concat([{ userId: svc.userId, role: 'client (you)' }]) : undefined,
+    extra: [{ label: 'Privacy', value: 'Each conversation is a separate encrypted Matrix room. Only you and your provider can read messages.' }]
+  }))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setAddProviderModal(true),
     className: "b-pri",
     style: {
@@ -21193,7 +21408,15 @@ const ClientApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "zap",
     s: 12
-  }), "Hard Revoke")), activeProvider.providerProfile?.org_membership?.verified && /*#__PURE__*/React.createElement("div", {
+  }), "Hard Revoke")), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: activeBridge,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Bridge Room",
+    members: [{ userId: svc.userId, role: 'client' }, { userId: activeProvider.providerUserId, role: 'provider' }],
+    extra: [{ label: 'Bridge type', value: 'Shared room between you and this provider. Data you share here is visible to both parties.' }, { label: 'Your power level', value: activeProvider._bridgeMeta?.client === svc.userId ? '100 (admin)' : '50' }]
+  }), activeProvider.providerProfile?.org_membership?.verified && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--blue-dim)',
       border: '1px solid rgba(91,156,245,.15)',
@@ -23644,7 +23867,14 @@ const DatabaseView = ({
       fontSize: 12.5,
       marginTop: 2
     }
-  }, "Manage individuals, notes, and resources in one place."))), /*#__PURE__*/React.createElement("div", {
+  }, "Manage individuals, notes, and resources in one place."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: rosterRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Database",
+    extra: [{ label: 'Storage model', value: 'Individuals are stored across bridge rooms (one per client-provider relationship). Notes are stored in bridge or roster rooms. Resources are stored in org room state events.' }, { label: 'Roster room', value: rosterRoom || 'Not initialized' }, orgRoom ? { label: 'Org room', value: orgRoom } : null, networkRoom ? { label: 'Network room', value: networkRoom } : null].filter(Boolean)
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "db-tabs"
   }, [{
     id: 'individuals',
@@ -26542,7 +26772,13 @@ const DashboardOverview = ({
       fontSize: 12.5,
       marginTop: 2
     }
-  }, "Quick overview of your workspace.")), /*#__PURE__*/React.createElement("div", {
+  }, "Quick overview of your workspace."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Dashboard",
+    compact: true
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6
@@ -27295,7 +27531,14 @@ const ResourcesTableView = ({
       fontSize: 12.5,
       marginTop: 2
     }
-  }, "Resource types, inventory tracking, and allocation history. Click a row for details.")), /*#__PURE__*/React.createElement("div", {
+  }, "Resource types, inventory tracking, and allocation history. Click a row for details."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: orgRoom || rosterRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Resources",
+    extra: [{ label: 'Storage', value: 'Resource type definitions are stored as state events in the org/roster/network room. Inventory and allocations are tracked in org room state. Per-client allocations are mirrored in bridge rooms.' }, orgRoom ? { label: 'Org room', value: orgRoom } : null, networkRoom ? { label: 'Network room', value: networkRoom } : null].filter(Boolean)
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6
@@ -30790,7 +31033,14 @@ const ProviderApp = ({
       flexDirection: 'column',
       gap: 6
     }
-  }, /*#__PURE__*/React.createElement(ThemeToggle, {
+  }, /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    server: svc._baseUrl ? (() => { try { return new URL(svc._baseUrl).hostname; } catch(e) { return 'unknown'; } })() : 'unknown',
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Session",
+    compact: true
+  }), /*#__PURE__*/React.createElement(ThemeToggle, {
     style: {
       width: '100%',
       justifyContent: 'center'
@@ -31080,7 +31330,14 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Encrypted conversations with ", T.client_term_plural.toLowerCase(), orgRoom ? ' and organizations' : '', " in one place.")), /*#__PURE__*/React.createElement("div", {
+  }, "Encrypted conversations with ", T.client_term_plural.toLowerCase(), orgRoom ? ' and organizations' : '', " in one place."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: inboxConvo,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Messages",
+    extra: [{ label: 'Privacy model', value: 'Each conversation is a separate encrypted Matrix room (bridge). Direct messages are between you and one client. Org channels use opacity envelopes.' }, orgRoom ? { label: 'Org channel opacity', value: orgOpacity + ' \u2014 controls what receiving orgs see about message sender identity' } : null].filter(Boolean)
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
@@ -31927,7 +32184,13 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Flexible groups of people for collaboration. Teams can span across organizations \u2014 anyone with a Matrix ID can be invited.")), /*#__PURE__*/React.createElement("button", {
+  }, "Flexible groups of people for collaboration. Teams can span across organizations \u2014 anyone with a Matrix ID can be invited."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Teams",
+    extra: [{ label: 'Storage', value: 'Each team is a separate Matrix room. Team metadata, members, schema, and consent rules are stored as state events in that room. All team members can read the room; only the team owner/admin can modify it.' }, { label: 'Team rooms', value: teams.length + ' team room(s): ' + teams.map(t => t.name || 'Unnamed').join(', ') }]
+  }))), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setCreateTeamModal(true);
       setNewTeamName('');
@@ -32375,7 +32638,15 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "lock",
     s: 9
-  }), "Transfer Locked"))), orgRoom && (orgRole === 'admin' || orgRole === 'case_manager') && staff.length > 1 && /*#__PURE__*/React.createElement("button", {
+  }), "Transfer Locked")), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: activeCase,
+    encrypted: true,
+    encLabel: "Megolm E2EE + AES-256-GCM at rest",
+    label: "Case / Bridge Room",
+    members: [{ userId: activeCaseData.clientUserId, role: 'client (room owner)' }, { userId: activeCaseData.meta?.provider || svc.userId, role: 'provider' }, ...(activeCaseData.meta?.assigned_staff || []).filter(s => s !== activeCaseData.meta?.provider).map(s => ({ userId: s, role: 'assigned staff' }))],
+    extra: [{ label: 'Ownership', value: 'The client owns this bridge room (power level 100). Shared data is encrypted and only visible to room members.' }, { label: 'Transfer status', value: activeCaseData.transferable ? 'Transferable \u2014 case can be reassigned to another staff member' : 'Transfer locked \u2014 only the current provider can access' }]
+  })), orgRoom && (orgRole === 'admin' || orgRole === 'case_manager') && staff.length > 1 && /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setTransferModal(activeCaseData);
       setTransferTarget('');
@@ -33204,7 +33475,15 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginBottom: 20
     }
-  }, "Anonymized, aggregate data from consenting clients. No PII \u2014 names, DOBs, SSNs, and addresses are never present."), /*#__PURE__*/React.createElement("div", {
+  }, "Anonymized, aggregate data from consenting clients. No PII \u2014 names, DOBs, SSNs, and addresses are never present."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: metricsRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Metrics",
+    members: [{ userId: svc.userId, role: 'metrics owner' }],
+    extra: [{ label: 'Anonymization', value: 'K-anonymity (k=5). PII fields are blocked. Demographics are generalized to ranges. Cohort hashing prevents re-identification.' }, { label: 'Data flow', value: 'Clients consent per-category. Observations are anonymized in the bridge room before flowing to this metrics room.' }]
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))',
@@ -33452,7 +33731,15 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginBottom: 24
     }
-  }, "Manage your organization metadata, privacy, and inter-org messaging configuration."), /*#__PURE__*/React.createElement("div", {
+  }, "Manage your organization metadata, privacy, and inter-org messaging configuration."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: orgRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Org Settings",
+    members: staff.map(s => ({ userId: s.userId, role: s.role })),
+    extra: [{ label: 'Org room', value: 'Organization metadata, roster, opacity settings, terminology, and email verification config are stored as state events in this shared org room.' }, { label: 'Access', value: 'All org staff members can read. Only admins can modify settings.' }]
+  }), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
@@ -34148,7 +34435,15 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Manage staff membership and roles. Each role determines case access level.")), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
+  }, "Manage staff membership and roles. Each role determines case access level."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: orgRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Staff Roster",
+    members: staff.map(s => ({ userId: s.userId, role: s.role })),
+    extra: [{ label: 'Storage', value: 'Staff roster is stored as a state event in the shared organization room. All org members can read the roster; only admins can modify it.' }]
+  }))), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setInviteModal(true),
     className: "b-pri",
     style: {
@@ -34364,7 +34659,15 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginBottom: 20
     }
-  }, "Networks are org-to-org relationships. Organizations join voluntarily; the network defines shared vocabulary that propagates."), !orgRoom ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "Networks are org-to-org relationships. Organizations join voluntarily; the network defines shared vocabulary that propagates."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: networkRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Network",
+    members: networkMembers.map(m => ({ userId: m.id || m.userId, role: m.role || 'member' })),
+    extra: [{ label: 'Storage', value: 'Network metadata and shared schemas are stored as state events in the network room. All network members can read; only admins can modify network-level settings.' }]
+  }), !orgRoom ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       textAlign: 'center',
