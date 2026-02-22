@@ -37603,7 +37603,7 @@ const TransparencyPage = ({ onBack }) => {
       React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 } },
         React.createElement('span', { className: 'section-label', style: { marginBottom: 0 } }, 'EO OPERATION VOCABULARY'),
         React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)' } }, '9 canonical operators × 3 triads')),
-      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 } },
+      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 } },
         eoExplainer.map(op => React.createElement('div', {
           key: op.op,
           style: { padding: '10px 12px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-1)' }
