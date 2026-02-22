@@ -487,6 +487,23 @@ table.dt tr.dt-grp td{padding:9px 12px;font-size:12px;font-weight:700;color:var(
 .dt-alloc-title{font-size:14px;font-weight:600}
 .dt-alloc-detail{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;color:var(--tx-1)}
 .dt-alloc-events{margin-top:10px;padding-top:10px;border-top:1px solid var(--border-0)}
+/* ═══ Definition Popup Panel (slide from right) ═══ */
+.def-popup-overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:290;animation:fadeIn .15s ease both}
+.def-popup{position:fixed;top:0;right:0;bottom:0;width:440px;max-width:92vw;background:var(--bg-1);border-left:1px solid var(--border-0);box-shadow:-8px 0 32px rgba(0,0,0,.2);z-index:300;display:flex;flex-direction:column;overflow:hidden;animation:slideInRight .2s ease both}
+.def-popup-head{padding:18px 22px 14px;border-bottom:1px solid var(--border-0);background:var(--bg-2);display:flex;justify-content:space-between;align-items:flex-start}
+.def-popup-head h3{font-size:17px;font-weight:700;margin:0;font-family:var(--serif)}
+.def-popup-close{background:none;border:none;cursor:pointer;color:var(--tx-2);font-size:18px;padding:2px 6px;border-radius:4px;transition:all .15s}
+.def-popup-close:hover{background:var(--bg-3);color:var(--tx-0)}
+.def-popup-body{flex:1;overflow-y:auto;padding:18px 22px}
+.def-popup-section{margin-bottom:16px}
+.def-popup-section-label{font-size:10px;font-family:var(--mono);color:var(--tx-1);letter-spacing:.07em;font-weight:600;margin-bottom:6px;display:block;text-transform:uppercase}
+.def-popup-wiki{padding:12px 14px;border-radius:var(--r);background:var(--bg-2);border:1px solid var(--border-0);font-size:12.5px;line-height:1.6;color:var(--tx-1)}
+.def-popup-wiki-label{font-size:10px;font-family:var(--mono);font-weight:600;color:var(--purple);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.def-popup-wiki-desc{margin-bottom:8px}
+.def-popup-wiki-link{font-size:11px;color:var(--blue);text-decoration:none}
+.def-popup-wiki-link:hover{text-decoration:underline}
+.def-popup-loading{display:flex;align-items:center;gap:8px;color:var(--tx-2);font-size:12px;padding:10px 0}
+.def-popup-loading::before{content:'';width:14px;height:14px;border:2px solid var(--border-1);border-top-color:var(--purple);border-radius:50%;animation:spin .6s linear infinite}
 .dt-alloc-event{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tx-1);padding:3px 0}
 .dt-alloc-event .dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
 .dt-prov{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-0);font-size:12px}
@@ -23743,6 +23760,213 @@ const DatabaseView = ({
   }));
 };
 
+/* ─── Wikidata definition fetcher ─── */
+const _wikidataCache = {};
+const WIKIDATA_SEARCH_LABELS = {
+  'full_name': 'personal name',
+  'dob': 'date of birth',
+  'id_number': 'identity document',
+  'email': 'email address',
+  'phone': 'telephone number',
+  'address': 'street address',
+  'affiliation': 'organizational affiliation',
+  'case_notes': 'case note',
+  'documents': 'document',
+  'history': 'case history',
+  'restricted_notes': 'classified information'
+};
+async function fetchWikidataDefinition(fieldKey, label) {
+  const searchTerm = WIKIDATA_SEARCH_LABELS[fieldKey] || label;
+  if (_wikidataCache[searchTerm]) return _wikidataCache[searchTerm];
+  try {
+    const url = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(searchTerm)}&language=en&limit=1&format=json&origin=*`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('Wikidata search failed');
+    const data = await resp.json();
+    if (!data.search || data.search.length === 0) {
+      _wikidataCache[searchTerm] = null;
+      return null;
+    }
+    const entity = data.search[0];
+    const entityId = entity.id;
+    const detailUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${entityId}&languages=en&props=descriptions|sitelinks&format=json&origin=*`;
+    const detailResp = await fetch(detailUrl);
+    if (!detailResp.ok) throw new Error('Wikidata entity fetch failed');
+    const detailData = await detailResp.json();
+    const ent = detailData.entities?.[entityId];
+    const description = ent?.descriptions?.en?.value || entity.description || '';
+    const wpTitle = ent?.sitelinks?.enwiki?.title || null;
+    const result = {
+      id: entityId,
+      label: entity.label,
+      description: description,
+      wikidataUrl: `https://www.wikidata.org/wiki/${entityId}`,
+      wikipediaUrl: wpTitle ? `https://en.wikipedia.org/wiki/${encodeURIComponent(wpTitle)}` : null
+    };
+    _wikidataCache[searchTerm] = result;
+    return result;
+  } catch (e) {
+    console.debug('Wikidata fetch error:', e.message);
+    _wikidataCache[searchTerm] = null;
+    return null;
+  }
+}
+
+/* ─── Fields that are self-explanatory — don't cite HUD authority ─── */
+const SIMPLE_FIELD_KEYS = new Set(['full_name', 'email', 'phone', 'address', 'affiliation', 'case_notes', 'documents']);
+
+/* ─── DefinitionPopup — slide-from-right panel for field definitions ─── */
+const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSaveCrosswalk }) => {
+  const [wikiData, setWikiData] = useState(null);
+  const [wikiLoading, setWikiLoading] = useState(false);
+  const [addCrosswalkFor, setAddCrosswalkFor] = useState(false);
+  const [xwTargetUri, setXwTargetUri] = useState('');
+  const [xwRelationship, setXwRelationship] = useState('equivalent');
+  const [xwNotes, setXwNotes] = useState('');
+  const d = fieldDef;
+  if (!d) return null;
+
+  const isSimple = SIMPLE_FIELD_KEYS.has(d.key);
+  const getSource = uri => {
+    if (uri?.startsWith('khora:vault/')) return { label: 'Vault', color: 'gold' };
+    if (uri?.startsWith('khora:team/')) return { label: 'Team', color: 'purple' };
+    if (uri?.startsWith('khora:org/')) return { label: 'Org', color: 'blue' };
+    return { label: 'External', color: 'teal' };
+  };
+  const src = getSource(d.uri);
+  const getCrosswalksForUri = uri => (fieldCrosswalks || []).filter(xw => xw.from_uri === uri || (xw.bidirectional && xw.to_uri === uri));
+  const xws = getCrosswalksForUri(d.uri);
+
+  // Fetch Wikidata definition on mount
+  React.useEffect(() => {
+    let cancelled = false;
+    setWikiLoading(true);
+    setWikiData(null);
+    fetchWikidataDefinition(d.key, d.label).then(result => {
+      if (!cancelled) {
+        setWikiData(result);
+        setWikiLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [d.uri, d.key]);
+
+  return React.createElement(React.Fragment, null,
+    React.createElement('div', { className: 'def-popup-overlay', onClick: onClose }),
+    React.createElement('div', { className: 'def-popup' },
+      /* Header */
+      React.createElement('div', { className: 'def-popup-head' },
+        React.createElement('div', null,
+          React.createElement('h3', null, d.label),
+          React.createElement('div', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 3 } }, d.uri),
+          React.createElement('div', { style: { display: 'flex', gap: 4, marginTop: 8 } },
+            React.createElement('span', { className: `tag tag-${src.color}`, style: { fontSize: 9 } }, src.label),
+            React.createElement('span', { className: 'tag tag-blue', style: { fontSize: 9 } }, (d.data_type || 'text').toUpperCase()),
+            d.sensitive && React.createElement('span', { className: 'tag tag-red', style: { fontSize: 9 } },
+              React.createElement(I, { n: 'lock', s: 8 }), 'Sensitive')
+          )
+        ),
+        React.createElement('button', { className: 'def-popup-close', onClick: onClose }, '\u2715')
+      ),
+      /* Body */
+      React.createElement('div', { className: 'def-popup-body' },
+        /* Wikidata section */
+        React.createElement('div', { className: 'def-popup-section' },
+          React.createElement('span', { className: 'def-popup-section-label' }, 'Wikidata'),
+          wikiLoading
+            ? React.createElement('div', { className: 'def-popup-loading' }, 'Looking up on Wikidata\u2026')
+            : wikiData
+              ? React.createElement('div', { className: 'def-popup-wiki' },
+                  React.createElement('div', { className: 'def-popup-wiki-label' },
+                    React.createElement('span', { style: { fontSize: 13 } }, '\u{1F310}'),
+                    wikiData.label, ' (', wikiData.id, ')'
+                  ),
+                  React.createElement('div', { className: 'def-popup-wiki-desc' }, wikiData.description),
+                  React.createElement('div', { style: { display: 'flex', gap: 10 } },
+                    React.createElement('a', { className: 'def-popup-wiki-link', href: wikiData.wikidataUrl, target: '_blank', rel: 'noopener' }, 'Wikidata \u2197'),
+                    wikiData.wikipediaUrl && React.createElement('a', { className: 'def-popup-wiki-link', href: wikiData.wikipediaUrl, target: '_blank', rel: 'noopener' }, 'Wikipedia \u2197')
+                  )
+                )
+              : React.createElement('div', { style: { fontSize: 11.5, color: 'var(--tx-3)', padding: '8px 0' } }, 'No Wikidata entry found.')
+        ),
+        /* Definition */
+        React.createElement('div', { className: 'def-popup-section' },
+          React.createElement('span', { className: 'def-popup-section-label' }, 'Definition'),
+          React.createElement('p', { style: { fontSize: 12.5, lineHeight: 1.6, color: 'var(--tx-1)' } },
+            d.definition || 'No definition provided.')
+        ),
+        /* Scope */
+        d.scope && React.createElement('div', { className: 'def-popup-section' },
+          React.createElement('span', { className: 'def-popup-section-label' }, 'Scope'),
+          React.createElement('p', { style: { fontSize: 12, lineHeight: 1.5, color: 'var(--tx-2)' } }, d.scope)
+        ),
+        /* Authority — only show for non-simple fields */
+        d.authority && !isSimple && React.createElement('div', { className: 'def-popup-section' },
+          React.createElement('span', { className: 'def-popup-section-label' }, 'Authority'),
+          React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 } },
+            React.createElement('span', { className: 'tag tag-teal', style: { fontSize: 9 } }, d.authority.org || 'External'),
+            React.createElement('span', { style: { fontSize: 11.5, color: 'var(--tx-1)' } }, d.authority.name),
+            d.authority.provision && React.createElement('span', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--tx-2)' } }, d.authority.provision)
+          )
+        ),
+        /* Crosswalks */
+        React.createElement('div', { className: 'def-popup-section' },
+          React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+            React.createElement('span', { className: 'def-popup-section-label' }, 'Also Known As'),
+            React.createElement('button', { className: 'b-gho b-xs', onClick: () => setAddCrosswalkFor(!addCrosswalkFor),
+              style: { display: 'flex', alignItems: 'center', gap: 3 } },
+              React.createElement(I, { n: 'plus', s: 10 }), 'Link')
+          ),
+          xws.length === 0 && !addCrosswalkFor
+            ? React.createElement('p', { style: { fontSize: 11, color: 'var(--tx-3)', marginTop: 4 } },
+                'No crosswalks. Link this field to equivalent definitions in other contexts.')
+            : React.createElement('div', { style: { marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 } },
+                xws.map(xw => {
+                  const rel = CROSSWALK_TYPES[xw.relationship] || CROSSWALK_TYPES.related;
+                  const targetUri = xw.from_uri === d.uri ? xw.to_uri : xw.from_uri;
+                  const targetDef = fieldDefs[targetUri];
+                  return React.createElement('div', { key: xw.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg-2)', borderRadius: 'var(--r)', border: '1px solid var(--border-0)' } },
+                    React.createElement('span', { style: { fontWeight: 700, color: `var(--${rel.color})`, fontSize: 14 }, title: rel.desc }, rel.symbol),
+                    React.createElement('div', { style: { flex: 1 } },
+                      React.createElement('span', { style: { fontSize: 12, fontWeight: 600 } }, targetDef?.label || targetUri),
+                      targetDef?.definition && React.createElement('div', { style: { fontSize: 10.5, color: 'var(--tx-2)', marginTop: 1 } },
+                        targetDef.definition.slice(0, 80), targetDef.definition.length > 80 ? '...' : '')
+                    ),
+                    React.createElement('span', { className: `tag tag-${rel.color}`, style: { fontSize: 8 } }, rel.label)
+                  );
+                })
+              ),
+          /* Add crosswalk form */
+          addCrosswalkFor && React.createElement('div', { style: { marginTop: 8, padding: '10px 12px', background: 'var(--bg-2)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)' } },
+            React.createElement('div', { style: { fontSize: 11, fontWeight: 600, marginBottom: 6 } }, 'Link to field:'),
+            React.createElement('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-end' } },
+              React.createElement('select', { value: xwTargetUri, onChange: e => setXwTargetUri(e.target.value), style: { flex: 1, minWidth: 140, fontSize: 11, padding: '5px 8px' } },
+                React.createElement('option', { value: '' }, '-- select --'),
+                Object.values(fieldDefs).filter(fd => fd.uri !== d.uri).map(fd =>
+                  React.createElement('option', { key: fd.uri, value: fd.uri }, fd.label, ' (', fd.uri, ')')
+                )
+              ),
+              React.createElement('select', { value: xwRelationship, onChange: e => setXwRelationship(e.target.value), style: { fontSize: 11, padding: '5px 8px', minWidth: 100 } },
+                Object.values(CROSSWALK_TYPES).map(ct =>
+                  React.createElement('option', { key: ct.id, value: ct.id }, ct.symbol, ' ', ct.label)
+                )
+              ),
+              React.createElement('input', { type: 'text', value: xwNotes, onChange: e => setXwNotes(e.target.value), placeholder: 'Notes...', style: { fontSize: 11, padding: '5px 8px', minWidth: 100, flex: 1 } }),
+              React.createElement('button', { className: 'b-pri b-xs', disabled: !xwTargetUri, onClick: () => {
+                if (onSaveCrosswalk && xwTargetUri) {
+                  onSaveCrosswalk({ id: 'xw_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), from_uri: d.uri, to_uri: xwTargetUri, relationship: xwRelationship, bidirectional: xwRelationship === 'equivalent' || xwRelationship === 'related', notes: xwNotes || '', created_at: Date.now() });
+                  setXwTargetUri(''); setXwNotes(''); setAddCrosswalkFor(false);
+                }
+              }}, 'Save'),
+              React.createElement('button', { className: 'b-gho b-xs', onClick: () => { setAddCrosswalkFor(false); setXwTargetUri(''); setXwNotes(''); }}, 'Cancel')
+            )
+          )
+        )
+      )
+    )
+  );
+};
+
 /* ─── FieldDictionaryView — global data dictionary for all field definitions ─── */
 const FieldDictionaryView = ({
   fieldDefs,
@@ -23753,7 +23977,6 @@ const FieldDictionaryView = ({
 }) => {
   const [expandedUri, setExpandedUri] = useState(null);
   const [crosswalkPopover, setCrosswalkPopover] = useState(null);
-  const [addCrosswalkFor, setAddCrosswalkFor] = useState(null);
   const [potentialCrosswalks, setPotentialCrosswalks] = useState([]);
   const [scanningCrosswalks, setScanningCrosswalks] = useState(false);
   const scanDone = React.useRef(false);
@@ -23797,9 +24020,6 @@ const FieldDictionaryView = ({
       }
     })();
   }, [fieldDefs, fieldCrosswalks]);
-  const [xwTargetUri, setXwTargetUri] = useState('');
-  const [xwRelationship, setXwRelationship] = useState('equivalent');
-  const [xwNotes, setXwNotes] = useState('');
   const getCrosswalksForUri = uri => (fieldCrosswalks || []).filter(xw => xw.from_uri === uri || xw.bidirectional && xw.to_uri === uri);
   const getTeamsUsing = uri => (teams || []).filter(t => t.schema?.fields?.some(f => f.uri === uri));
   const getSource = uri => {
@@ -23915,7 +24135,7 @@ const FieldDictionaryView = ({
         }
       }, src.label);
     }
-    if (col.key === 'authority_name') return row.authority ? /*#__PURE__*/React.createElement("span", {
+    if (col.key === 'authority_name') return row.authority && !SIMPLE_FIELD_KEYS.has(row.key) ? /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 10.5,
         color: 'var(--teal)'
@@ -23926,7 +24146,7 @@ const FieldDictionaryView = ({
         color: 'var(--tx-3)',
         fontSize: 10
       }
-    }, "\u2014");
+    }, SIMPLE_FIELD_KEYS.has(row.key) ? 'Wikidata' : '\u2014');
     if (col.key === 'crosswalks') {
       const xws = getCrosswalksForUri(row.uri);
       if (xws.length === 0) return /*#__PURE__*/React.createElement("span", {
@@ -24037,339 +24257,13 @@ const FieldDictionaryView = ({
     label: "field definitions",
     onRowClick: row => setExpandedUri(expandedUri === row.uri ? null : row.uri),
     selectedId: expandedUri
-  }), expandedUri && fieldDefs[expandedUri] && (() => {
-    const d = fieldDefs[expandedUri];
-    const src = getSource(d.uri);
-    const xws = getCrosswalksForUri(d.uri);
-    const usedBy = getTeamsUsing(d.uri);
-    return /*#__PURE__*/React.createElement("div", {
-      className: "card",
-      style: {
-        marginTop: 10,
-        padding: '16px 20px',
-        borderLeft: `3px solid var(--${src.color})`
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start'
-      }
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 16,
-        fontWeight: 700
-      }
-    }, d.label), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        fontFamily: 'var(--mono)',
-        color: 'var(--tx-3)',
-        marginTop: 2
-      }
-    }, d.uri)), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: 4
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: `tag tag-${src.color}`,
-      style: {
-        fontSize: 9
-      }
-    }, src.label), /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-blue",
-      style: {
-        fontSize: 9
-      }
-    }, (d.data_type || 'text').toUpperCase()), d.sensitive && /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-red",
-      style: {
-        fontSize: 9
-      }
-    }, /*#__PURE__*/React.createElement(I, {
-      n: "lock",
-      s: 8
-    }), "Sensitive"))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 12
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "section-label"
-    }, "DEFINITION"), /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: 12.5,
-        lineHeight: 1.6,
-        color: 'var(--tx-1)',
-        marginTop: 4
-      }
-    }, d.definition || 'No definition provided.')), d.scope && /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 10
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "section-label"
-    }, "SCOPE"), /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: 12,
-        lineHeight: 1.5,
-        color: 'var(--tx-2)',
-        marginTop: 4
-      }
-    }, d.scope)), d.authority && /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 10
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "section-label"
-    }, "AUTHORITY"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        marginTop: 4
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-teal",
-      style: {
-        fontSize: 9
-      }
-    }, d.authority.org || 'External'), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11.5,
-        color: 'var(--tx-1)'
-      }
-    }, d.authority.name), d.authority.provision && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontFamily: 'var(--mono)',
-        fontSize: 10,
-        color: 'var(--tx-2)'
-      }
-    }, d.authority.provision))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 12
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "section-label"
-    }, "ALSO KNOWN AS"), /*#__PURE__*/React.createElement("button", {
-      className: "b-gho b-xs",
-      onClick: () => setAddCrosswalkFor(addCrosswalkFor === d.uri ? null : d.uri),
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 3
-      }
-    }, /*#__PURE__*/React.createElement(I, {
-      n: "plus",
-      s: 10
-    }), "Link")), xws.length === 0 && addCrosswalkFor !== d.uri ? /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: 11,
-        color: 'var(--tx-3)',
-        marginTop: 4
-      }
-    }, "No crosswalks. Link this field to equivalent definitions in other contexts.") : /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 6,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4
-      }
-    }, xws.map(xw => {
-      const rel = CROSSWALK_TYPES[xw.relationship] || CROSSWALK_TYPES.related;
-      const targetUri = xw.from_uri === d.uri ? xw.to_uri : xw.from_uri;
-      const targetDef = fieldDefs[targetUri];
-      return /*#__PURE__*/React.createElement("div", {
-        key: xw.id,
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '6px 10px',
-          background: 'var(--bg-2)',
-          borderRadius: 'var(--r)',
-          border: '1px solid var(--border-0)'
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontWeight: 700,
-          color: `var(--${rel.color})`,
-          fontSize: 14
-        },
-        title: rel.desc
-      }, rel.symbol), /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 12,
-          fontWeight: 600
-        }
-      }, targetDef?.label || targetUri), targetDef?.definition && /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10.5,
-          color: 'var(--tx-2)',
-          marginTop: 1
-        }
-      }, targetDef.definition.slice(0, 80), targetDef.definition.length > 80 ? '...' : '')), /*#__PURE__*/React.createElement("span", {
-        className: `tag tag-${rel.color}`,
-        style: {
-          fontSize: 8
-        }
-      }, rel.label), xw.notes && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          color: 'var(--tx-3)'
-        },
-        title: xw.notes
-      }, /*#__PURE__*/React.createElement(I, {
-        n: "msg",
-        s: 10
-      })));
-    })), addCrosswalkFor === d.uri && /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 8,
-        padding: '10px 12px',
-        background: 'var(--bg-2)',
-        border: '1px solid var(--border-1)',
-        borderRadius: 'var(--r)'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        fontWeight: 600,
-        marginBottom: 6
-      }
-    }, "Link to another definition"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: 6,
-        flexWrap: 'wrap',
-        alignItems: 'flex-end'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        minWidth: 180
-      }
-    }, /*#__PURE__*/React.createElement("label", {
-      style: {
-        fontSize: 10,
-        color: 'var(--tx-2)',
-        display: 'block',
-        marginBottom: 3
-      }
-    }, "Target field or URI"), /*#__PURE__*/React.createElement("select", {
-      value: xwTargetUri,
-      onChange: e => setXwTargetUri(e.target.value),
-      className: "ipt",
-      style: {
-        fontSize: 11,
-        padding: '5px 8px'
-      }
-    }, /*#__PURE__*/React.createElement("option", {
-      value: ""
-    }, "Select a field..."), Object.values(fieldDefs).filter(fd => fd.uri !== d.uri).map(fd => /*#__PURE__*/React.createElement("option", {
-      key: fd.uri,
-      value: fd.uri
-    }, fd.label, " (", fd.uri, ")")))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        minWidth: 120
-      }
-    }, /*#__PURE__*/React.createElement("label", {
-      style: {
-        fontSize: 10,
-        color: 'var(--tx-2)',
-        display: 'block',
-        marginBottom: 3
-      }
-    }, "Relationship"), /*#__PURE__*/React.createElement("select", {
-      value: xwRelationship,
-      onChange: e => setXwRelationship(e.target.value),
-      className: "ipt",
-      style: {
-        fontSize: 11,
-        padding: '5px 8px'
-      }
-    }, Object.values(CROSSWALK_TYPES).map(ct => /*#__PURE__*/React.createElement("option", {
-      key: ct.id,
-      value: ct.id
-    }, ct.symbol, " ", ct.label)))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        minWidth: 120
-      }
-    }, /*#__PURE__*/React.createElement("label", {
-      style: {
-        fontSize: 10,
-        color: 'var(--tx-2)',
-        display: 'block',
-        marginBottom: 3
-      }
-    }, "Notes (optional)"), /*#__PURE__*/React.createElement("input", {
-      type: "text",
-      value: xwNotes,
-      onChange: e => setXwNotes(e.target.value),
-      className: "ipt",
-      placeholder: "Why these are linked...",
-      style: {
-        fontSize: 11,
-        padding: '5px 8px'
-      }
-    })), /*#__PURE__*/React.createElement("button", {
-      className: "b-pri b-xs",
-      disabled: !xwTargetUri,
-      onClick: () => {
-        if (onSaveCrosswalk && xwTargetUri) {
-          const xw = {
-            id: 'xw_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-            from_uri: d.uri,
-            to_uri: xwTargetUri,
-            relationship: xwRelationship,
-            bidirectional: xwRelationship === 'equivalent' || xwRelationship === 'related',
-            notes: xwNotes || '',
-            created_at: Date.now()
-          };
-          onSaveCrosswalk(xw);
-          setXwTargetUri('');
-          setXwNotes('');
-          setAddCrosswalkFor(null);
-        }
-      }
-    }, "Save"), /*#__PURE__*/React.createElement("button", {
-      className: "b-gho b-xs",
-      onClick: () => {
-        setAddCrosswalkFor(null);
-        setXwTargetUri('');
-        setXwNotes('');
-      }
-    }, "Cancel")))), usedBy.length > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginTop: 12
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "section-label"
-    }, "USED BY TEAMS"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: 4,
-        flexWrap: 'wrap',
-        marginTop: 4
-      }
-    }, usedBy.map(t => /*#__PURE__*/React.createElement("span", {
-      key: t.roomId,
-      className: "tag tag-purple",
-      style: {
-        fontSize: 9
-      }
-    }, t.name || 'Unnamed')))));
-  })());
+  }), expandedUri && fieldDefs[expandedUri] && React.createElement(DefinitionPopup, {
+    fieldDef: fieldDefs[expandedUri],
+    fieldDefs: fieldDefs,
+    fieldCrosswalks: fieldCrosswalks,
+    onClose: () => setExpandedUri(null),
+    onSaveCrosswalk: onSaveCrosswalk
+  }));
 };
 
 /* ─── TeamDetailView — expanded team view with Overview / Schema / Activity tabs ─── */
