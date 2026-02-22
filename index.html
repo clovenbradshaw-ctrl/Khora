@@ -2588,6 +2588,7 @@ class KhoraService {
         userId: res.user_id
       };
     } else {
+      const baseUrlFallback = homeserver.startsWith('http') ? homeserver : `https://${homeserver}`;
       const resp = await this._api('POST', '/login', {
         type: 'm.login.password',
         user,
@@ -2595,6 +2596,15 @@ class KhoraService {
       }, true);
       this._token = resp.access_token;
       this._userId = resp.user_id;
+      // Persist session to localStorage so it survives page refresh (non-SDK path)
+      try {
+        localStorage.setItem('khora_session', JSON.stringify({
+          homeserver: baseUrlFallback,
+          accessToken: resp.access_token,
+          userId: resp.user_id,
+          deviceId: resp.device_id || 'fallback'
+        }));
+      } catch {}
       return {
         userId: resp.user_id
       };
@@ -15049,6 +15059,7 @@ const ActivityStream = ({
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(new Set());
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [expandedOps, setExpandedOps] = useState(new Set());
   const [filter, setFilter] = useState({
     triad: 'all',
     operator: 'all',
@@ -15230,6 +15241,35 @@ const ActivityStream = ({
     });
     return stats;
   }, [events]);
+
+  // Group filtered events by operator for the Operators view
+  const eventsByOp = useMemo(() => {
+    const groups = {};
+    OPERATORS.forEach(op => { groups[op] = []; });
+    filtered.forEach(ev => {
+      if (groups[ev.op]) groups[ev.op].push(ev);
+    });
+    return groups;
+  }, [filtered]);
+
+  // Compute reverse adjacency (what operators can transition TO this one)
+  const reverseAdj = useMemo(() => {
+    const rev = {};
+    OPERATORS.forEach(op => { rev[op] = []; });
+    Object.entries(OP_ADJ).forEach(([from, tos]) => {
+      tos.forEach(to => {
+        if (!rev[to].includes(from)) rev[to].push(from);
+      });
+    });
+    return rev;
+  }, []);
+
+  const toggleOp = op => setExpandedOps(p => {
+    const n = new Set(p);
+    n.has(op) ? n.delete(op) : n.add(op);
+    return n;
+  });
+
   const toggle = id => setExpanded(p => {
     const n = new Set(p);
     n.has(id) ? n.delete(id) : n.add(id);
@@ -15390,6 +15430,9 @@ const ActivityStream = ({
   }, {
     id: 'triads',
     label: 'Triads'
+  }, {
+    id: 'operators',
+    label: 'Operators'
   }].map(m => /*#__PURE__*/React.createElement("div", {
     key: m.id,
     className: `tab${viewMode === m.id ? ' active' : ''}`,
@@ -16154,6 +16197,348 @@ const ActivityStream = ({
         }
       }, "+", opEvents.length - 15, " more")));
     })));
+  })), viewMode === 'operators' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 16
+    }
+  },
+  /* ── Operator Flow Strip ── */
+  /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: '16px 20px',
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontFamily: 'var(--mono)',
+      fontWeight: 600,
+      color: 'var(--tx-3)',
+      letterSpacing: '.06em',
+      marginBottom: 12
+    }
+  }, "OPERATOR ADJACENCY FLOW"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 0,
+      overflowX: 'auto',
+      paddingBottom: 4
+    }
+  }, OPERATORS.map((op, idx) => {
+    const opC = OP_COLORS[op] || 'blue';
+    const count = (eventsByOp[op] || []).length;
+    const triadKey = Object.entries(OPERATOR_TRIADS).find(([, t]) => t.ops.includes(op))?.[0];
+    const triadColor = triadKey ? OPERATOR_TRIADS[triadKey].color : 'purple';
+    return /*#__PURE__*/React.createElement(React.Fragment, {
+      key: op
+    }, idx > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '0 2px',
+        minWidth: 20
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: OP_ADJ[OPERATORS[idx - 1]]?.includes(op) ? `var(--${triadColor})` : 'var(--border-0)',
+        fontWeight: OP_ADJ[OPERATORS[idx - 1]]?.includes(op) ? 700 : 400
+      }
+    }, "\u2192")), /*#__PURE__*/React.createElement("div", {
+      onClick: () => toggleOp(op),
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '8px 10px',
+        borderRadius: 'var(--r)',
+        background: expandedOps.has(op) ? `var(--${opC}-dim)` : 'var(--bg-3)',
+        border: expandedOps.has(op) ? `1px solid var(--${opC})40` : '1px solid var(--border-0)',
+        cursor: 'pointer',
+        transition: 'all .15s',
+        minWidth: 62
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: 'var(--mono)',
+        fontSize: 11,
+        fontWeight: 700,
+        color: `var(--${opC})`
+      }
+    }, op), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 8.5,
+        color: 'var(--tx-2)',
+        marginTop: 2
+      }
+    }, OP_DESCRIPTIONS[op]?.verb), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: 'var(--mono)',
+        fontSize: 12,
+        fontWeight: 700,
+        color: count > 0 ? 'var(--tx-0)' : 'var(--tx-3)',
+        marginTop: 4
+      }
+    }, count), /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 20,
+        height: 3,
+        borderRadius: 2,
+        background: `var(--${triadColor})`,
+        marginTop: 4,
+        opacity: 0.5
+      }
+    })));
+  }))),
+  /* ── Per-Operator Cards ── */
+  OPERATORS.map(op => {
+    const opC = OP_COLORS[op] || 'blue';
+    const opEvts = eventsByOp[op] || [];
+    const triadKey = Object.entries(OPERATOR_TRIADS).find(([, t]) => t.ops.includes(op))?.[0];
+    const triadColor = triadKey ? OPERATOR_TRIADS[triadKey].color : 'purple';
+    const triadLabel = triadKey ? OPERATOR_TRIADS[triadKey].label : '';
+    const isExp = expandedOps.has(op);
+    const canFollow = reverseAdj[op] || [];
+    const canLeadTo = OP_ADJ[op] || [];
+    return /*#__PURE__*/React.createElement("div", {
+      key: op,
+      className: "card",
+      style: {
+        padding: 0,
+        overflow: 'hidden',
+        borderColor: isExp ? `var(--${opC})40` : 'var(--border-0)'
+      }
+    },
+    /* Card Header */
+    /*#__PURE__*/React.createElement("div", {
+      onClick: () => toggleOp(op),
+      style: {
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        cursor: 'pointer',
+        transition: 'background .1s'
+      },
+      onMouseEnter: e => e.currentTarget.style.background = 'var(--bg-3)',
+      onMouseLeave: e => e.currentTarget.style.background = 'transparent'
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 10,
+        height: 10,
+        borderRadius: '50%',
+        background: `var(--${opC})`,
+        flexShrink: 0
+      }
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontFamily: 'var(--mono)',
+        fontSize: 15,
+        fontWeight: 700,
+        color: `var(--${opC})`
+      }
+    }, op), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: 'var(--tx-1)',
+        fontWeight: 500
+      }
+    }, OP_DESCRIPTIONS[op]?.verb), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10.5,
+        color: 'var(--tx-2)'
+      }
+    }, "\u2014 ", OP_DESCRIPTIONS[op]?.desc), /*#__PURE__*/React.createElement("span", {
+      className: `tag tag-${triadColor}`,
+      style: {
+        fontSize: 8,
+        marginLeft: 4
+      }
+    }, triadLabel), /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 'auto',
+        fontFamily: 'var(--mono)',
+        fontSize: 14,
+        fontWeight: 700,
+        color: opEvts.length > 0 ? `var(--${opC})` : 'var(--tx-3)'
+      }
+    }, opEvts.length), /*#__PURE__*/React.createElement(I, {
+      n: isExp ? 'chevD' : 'chevR',
+      s: 12,
+      c: 'var(--tx-3)'
+    })),
+    /* Expanded Content */
+    isExp && /*#__PURE__*/React.createElement("div", {
+      className: "anim-in",
+      style: {
+        borderTop: '1px solid var(--border-0)'
+      }
+    },
+    /* Adjacency + Absence info row */
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr 1fr',
+        gap: 0,
+        borderBottom: '1px solid var(--border-0)'
+      }
+    },
+    /* Can follow from */
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '10px 14px',
+        borderRight: '1px solid var(--border-0)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        fontFamily: 'var(--mono)',
+        fontWeight: 600,
+        color: 'var(--tx-3)',
+        letterSpacing: '.05em',
+        marginBottom: 6
+      }
+    }, "CAN FOLLOW FROM"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 4,
+        flexWrap: 'wrap'
+      }
+    }, canFollow.map(f => /*#__PURE__*/React.createElement("span", {
+      key: f,
+      className: `tag tag-${OP_COLORS[f] || 'blue'}`,
+      style: {
+        fontSize: 9,
+        fontFamily: 'var(--mono)'
+      }
+    }, f)))),
+    /* Can lead to */
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '10px 14px',
+        borderRight: '1px solid var(--border-0)'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        fontFamily: 'var(--mono)',
+        fontWeight: 600,
+        color: 'var(--tx-3)',
+        letterSpacing: '.05em',
+        marginBottom: 6
+      }
+    }, "CAN LEAD TO"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 4,
+        flexWrap: 'wrap'
+      }
+    }, canLeadTo.map(t => /*#__PURE__*/React.createElement("span", {
+      key: t,
+      className: `tag tag-${OP_COLORS[t] || 'blue'}`,
+      style: {
+        fontSize: 9,
+        fontFamily: 'var(--mono)'
+      }
+    }, t)))),
+    /* Absence semantics */
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '10px 14px'
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        fontFamily: 'var(--mono)',
+        fontWeight: 600,
+        color: 'var(--tx-3)',
+        letterSpacing: '.05em',
+        marginBottom: 6
+      }
+    }, "WHEN ABSENT"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: 600,
+        color: 'var(--tx-1)'
+      }
+    }, ABSENCE_MAP[op]?.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: 'var(--tx-2)',
+        marginTop: 2
+      }
+    }, ABSENCE_MAP[op]?.desc))),
+    /* Events list */
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '10px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        maxHeight: 320,
+        overflow: 'auto'
+      }
+    }, opEvts.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: 'var(--tx-3)',
+        fontStyle: 'italic',
+        padding: '8px 0'
+      }
+    }, "No ", op, " operations in current view"), opEvts.slice(0, 25).map((ev, i) => {
+      const rmC = ROOM_COLORS[ev.roomInfo.type] || 'orange';
+      return /*#__PURE__*/React.createElement("div", {
+        key: ev.id || i,
+        style: {
+          padding: '5px 8px',
+          borderRadius: 3,
+          background: 'var(--bg-3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: 10.5
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: `tag tag-${rmC}`,
+        style: {
+          fontSize: 8,
+          padding: '0px 5px'
+        }
+      }, ev.roomInfo.type), /*#__PURE__*/React.createElement("span", {
+        className: `tag ${ev.epistemic === 'GIVEN' ? 'tag-teal' : 'tag-gold'}`,
+        style: {
+          fontSize: 7.5,
+          padding: '0px 4px'
+        }
+      }, ev.epistemic), /*#__PURE__*/React.createElement("span", {
+        style: {
+          flex: 1,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          color: 'var(--tx-1)'
+        }
+      }, ev.label || ev.desc), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 8.5,
+          color: 'var(--tx-3)',
+          fontFamily: 'var(--mono)',
+          flexShrink: 0
+        }
+      }, ev.ts ? new Date(ev.ts).toLocaleTimeString() : ''));
+    }), opEvts.length > 25 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: 'var(--tx-3)',
+        fontFamily: 'var(--mono)',
+        padding: '4px 0'
+      }
+    }, "+", opEvts.length - 25, " more operations"))));
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 20,
@@ -38871,10 +39256,13 @@ const App = () => {
         return;
       }
       setSession(restored);
+      // Ensure restored session bypasses welcome screen (even if khora_welcomed was cleared)
+      setWelcomed(true);
+      try { localStorage.setItem('khora_welcomed', '1'); } catch {}
       // Hydrate webhook data in background (non-blocking — don't delay app render)
       hydrateFromWebhooks(svc._token).then(tables => setWebhookData(tables)).catch(e => console.warn('Webhook hydration failed:', e.message));
       await detectContexts();
-    } catch {} finally {
+    } catch (e) { console.warn('Session restore error:', e?.message); } finally {
       setRestoring(false);
     }
   }, [detectContexts]);
