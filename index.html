@@ -631,16 +631,61 @@ table.dt td.dt-drag-handle:active{cursor:grabbing}
 </head>
 <body>
 <div id="root">
-<!-- CSS-only splash: visible instantly, replaced when React mounts -->
+<!-- Canvas splash: rotating dodecahedron, replaced when React mounts -->
 <div id="splash" style="height:100%;display:flex;align-items:center;justify-content:center;background:#08090b;flex-direction:column;gap:18px">
 <style>
-#splash .sp-ring{width:36px;height:36px;border:3px solid #1e2230;border-top-color:#c9a352;border-radius:50%;animation:spin .8s linear infinite}
 #splash .sp-title{font-family:'Manrope',system-ui,sans-serif;font-size:18px;font-weight:700;color:#e6e9f0;letter-spacing:.02em}
 #splash .sp-sub{font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6b7385;letter-spacing:.04em}
 </style>
-<div class="sp-ring"></div>
+<canvas id="sp-dodeca" width="120" height="120"></canvas>
 <div class="sp-title">Khora</div>
 <div class="sp-sub">Loading&hellip;</div>
+<script>
+(function(){
+  var c=document.getElementById('sp-dodeca');
+  if(!c)return;
+  var ctx=c.getContext('2d'),W=120,H=120,phi=(1+Math.sqrt(5))/2,ip=1/phi;
+  var V=[
+    [-1,-1,-1],[-1,-1,1],[-1,1,-1],[-1,1,1],[1,-1,-1],[1,-1,1],[1,1,-1],[1,1,1],
+    [0,-ip,-phi],[0,-ip,phi],[0,ip,-phi],[0,ip,phi],
+    [-ip,-phi,0],[-ip,phi,0],[ip,-phi,0],[ip,phi,0],
+    [-phi,0,-ip],[-phi,0,ip],[phi,0,-ip],[phi,0,ip]
+  ];
+  var edges=[];
+  var thr=2/phi+0.01;
+  for(var i=0;i<20;i++)for(var j=i+1;j<20;j++){
+    var dx=V[i][0]-V[j][0],dy=V[i][1]-V[j][1],dz=V[i][2]-V[j][2];
+    if(Math.sqrt(dx*dx+dy*dy+dz*dz)<thr)edges.push([i,j]);
+  }
+  var ax=0.3,ay=0.5;
+  function draw(){
+    if(!document.getElementById('sp-dodeca'))return;
+    ctx.clearRect(0,0,W,H);
+    ax+=0.003;ay+=0.005;
+    var sa=Math.sin(ax),ca=Math.cos(ax),sb=Math.sin(ay),cb=Math.cos(ay);
+    var P=V.map(function(v){
+      var y1=v[1]*ca-v[2]*sa,z1=v[1]*sa+v[2]*ca;
+      var x2=v[0]*cb-z1*sb,z2=v[0]*sb+z1*cb;
+      var s=38;
+      return[W/2+x2*s,H/2+y1*s,z2];
+    });
+    edges.forEach(function(e){
+      var a=P[e[0]],b=P[e[1]];
+      var dz=(a[2]+b[2])/2;
+      var op=0.25+0.55*((dz+2)/4);
+      ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);
+      ctx.strokeStyle='rgba(176,144,212,'+op+')';ctx.lineWidth=1;ctx.stroke();
+    });
+    P.forEach(function(p){
+      var op=0.3+0.5*((p[2]+2)/4);
+      ctx.beginPath();ctx.arc(p[0],p[1],1.5,0,6.283);
+      ctx.fillStyle='rgba(212,184,240,'+op+')';ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
 </div>
 </div>
 <script>

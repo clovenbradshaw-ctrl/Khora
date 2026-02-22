@@ -1,11 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#0e1015"/>
-  <!-- Entablature and stylobate — Greek temple architecture -->
-  <rect x="7" y="4" width="18" height="1" rx="0.5" fill="#c9a352" opacity="0.3"/>
-  <rect x="7" y="27" width="18" height="1" rx="0.5" fill="#c9a352" opacity="0.3"/>
-  <!-- Chi (Χ) — first letter of Χώρα (Khora), bold geometric strokes -->
-  <polygon points="9,7 12.5,7 23,25 19.5,25" fill="#c9a352"/>
-  <polygon points="19.5,7 23,7 12.5,25 9,25" fill="#c9a352"/>
-  <!-- Central void — diamond echoing the ◇ sovereignty motif -->
-  <polygon points="16,14 17.5,16 16,18 14.5,16" fill="#0e1015"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <rect width="400" height="400" rx="60" fill="#0a0612"/>
+  <polygon points="218.0,143.6 92.7,190.6 103.5,318.8 235.6,351.2 306.3,242.8" fill="rgb(39,21,64)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.75"/>
+  <polygon points="38.5,116.4 92.7,190.6 218.0,143.6 241.3,40.4 130.3,23.7" fill="rgb(44,24,71)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.78"/>
+  <polygon points="218.0,143.6 306.3,242.8 384.2,201.1 344.0,76.0 241.3,40.4" fill="rgb(45,24,72)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.78"/>
+  <polygon points="38.5,116.4 92.7,190.6 103.5,318.8 56.0,324.0 15.8,198.9" fill="rgb(50,28,80)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.81"/>
+  <polygon points="235.6,351.2 306.3,242.8 384.2,201.1 361.5,283.6 269.7,376.3" fill="rgb(51,28,81)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.82"/>
+  <polygon points="56.0,324.0 103.5,318.8 235.6,351.2 269.7,376.3 158.7,359.6" fill="rgb(55,30,86)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.84"/>
+  <polygon points="164.4,48.8 296.5,81.2 344.0,76.0 241.3,40.4 130.3,23.7" fill="rgb(59,34,93)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.86"/>
+  <polygon points="38.5,116.4 15.8,198.9 93.7,157.2 164.4,48.8 130.3,23.7" fill="rgb(63,36,98)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.88"/>
+  <polygon points="344.0,76.0 384.2,201.1 361.5,283.6 307.3,209.4 296.5,81.2" fill="rgb(64,36,99)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.89"/>
+  <polygon points="56.0,324.0 15.8,198.9 93.7,157.2 182.0,256.4 158.7,359.6" fill="rgb(69,40,107)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.92"/>
+  <polygon points="182.0,256.4 307.3,209.4 361.5,283.6 269.7,376.3 158.7,359.6" fill="rgb(70,40,108)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.92"/>
+  <polygon points="164.4,48.8 296.5,81.2 307.3,209.4 182.0,256.4 93.7,157.2" fill="rgb(75,43,115)" stroke="#b090d4" stroke-width="1.2" stroke-linejoin="round" opacity="0.95"/>
+  <circle cx="164.4" cy="48.8" r="2" fill="#d4b8f0" opacity="0.55"/>
+  <circle cx="56.0" cy="324.0" r="2" fill="#d4b8f0" opacity="0.33"/>
+  <circle cx="182.0" cy="256.4" r="2" fill="#d4b8f0" opacity="0.71"/>
+  <circle cx="361.5" cy="283.6" r="2" fill="#d4b8f0" opacity="0.43"/>
+  <circle cx="296.5" cy="81.2" r="2" fill="#d4b8f0" opacity="0.56"/>
+  <circle cx="307.3" cy="209.4" r="2" fill="#d4b8f0" opacity="0.66"/>
+  <circle cx="158.7" cy="359.6" r="2" fill="#d4b8f0" opacity="0.52"/>
+  <circle cx="269.7" cy="376.3" r="2" fill="#d4b8f0" opacity="0.34"/>
+  <circle cx="15.8" cy="198.9" r="2" fill="#d4b8f0" opacity="0.41"/>
+  <circle cx="93.7" cy="157.2" r="2" fill="#d4b8f0" opacity="0.65"/>
 </svg>
