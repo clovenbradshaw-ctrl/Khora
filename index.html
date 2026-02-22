@@ -1619,8 +1619,6 @@ const KhoraEncryptedCache = {
 /* ═══════════════════ EO OPERATION LAYER ═══════════════════
  * Operator Manifest (meta — this IS the EO engine):
  *   DES(eo.operator_vocabulary, {nine_canonical_ops}) — ontological_foundation
- *   CON(eo.transition.from_op, {to: to_op, via: adjacency_matrix}) — transition_graph
- *   INS(eo.intermediate_ops, {adjacency_violation, auto_repair}) — auto_repair
  *   CON(eo.provenance.current_op, {predecessor, key: entity_key}) — provenance_chain
  *   DES(eo.dom_event, {type: khora:eo, dispatch: custom_event}) — ui_notification
  *   ALT(eo.userId, {transform: sha256_hash, salt}) — anonymization
@@ -1628,8 +1626,8 @@ const KhoraEncryptedCache = {
  * projectCurrentState replays: INS, ALT, NUL, SUP, DES
  *
  * Triad Summary:
- *   Existence:       INS (auto-intermediate emission), DES (operator vocabulary)
- *   Structure:       CON (adjacency graph, provenance chains)
+ *   Existence:       INS (instantiation), DES (operator vocabulary)
+ *   Structure:       CON (provenance chains)
  *   Interpretation:  ALT (cohort hashing), SUP (superposition replay)
  *   All three triads active. This is the EO engine itself —
  *   meta-operators operating on operators.
@@ -1637,38 +1635,6 @@ const KhoraEncryptedCache = {
 // DES(eo.operator_vocabulary, {nine_canonical_ops}) — ontological_foundation
 const OPERATORS = ['NUL', 'DES', 'INS', 'SEG', 'CON', 'SYN', 'ALT', 'SUP', 'REC'];
 
-// Operator adjacency matrix (§5.2) — row can transition to column
-const OP_ADJ = {
-  NUL: ['NUL', 'DES'],
-  DES: ['NUL', 'DES', 'INS'],
-  INS: ['DES', 'INS', 'SEG'],
-  SEG: ['INS', 'SEG', 'CON'],
-  CON: ['SEG', 'CON', 'SYN'],
-  SYN: ['CON', 'SYN', 'ALT'],
-  ALT: ['SYN', 'ALT', 'SUP'],
-  SUP: ['ALT', 'SUP', 'REC'],
-  REC: ['NUL', 'SUP', 'REC']
-};
-
-// CON(eo.transition.from_op, {to: to_op, via: adjacency_matrix}) — transition_path
-// BFS pathfinding for auto-intermediate emission
-function findOpPath(from, to) {
-  if (from === to || OP_ADJ[from]?.includes(to)) return [to];
-  const queue = [[from]];
-  const visited = new Set([from]);
-  while (queue.length > 0) {
-    const path = queue.shift();
-    const curr = path[path.length - 1];
-    for (const next of OP_ADJ[curr] || []) {
-      if (next === to) return path.slice(1).concat(to);
-      if (!visited.has(next)) {
-        visited.add(next);
-        queue.push([...path, next]);
-      }
-    }
-  }
-  return [to]; // fallback
-}
 
 // dot(segments...) — builds dot-notation target paths, filtering out falsy segments
 function dot(...segments) {
@@ -1698,13 +1664,12 @@ function extractHomeserver(matrixId) {
   return idx >= 0 ? matrixId.slice(idx + 1) : 'unknown';
 }
 
-// Emit an EO operation — validates transitions, auto-emits intermediates
+// Emit an EO operation
 // Enriches every event with provenance metadata (created_by, origin_server)
 // and builds provenance chains linking each op to its predecessor on the same entity.
 // Resilient: catches sendEvent failures and retries once, logs all failures visibly.
 //
 // Format: OPERATOR(target [dot notation], operand)
-//   INS(eo.intermediate_ops, {adjacency_violation, auto_repair}) — when transition is invalid
 //   CON(eo.provenance.chain, {current → predecessor}) — links to prior op
 //   DES(eo.dom_event, {khora:eo, ui_notification}) — dispatches to DOM listeners
 async function emitOp(roomId, op, target, operand, frame, provenance = []) {
@@ -1714,36 +1679,6 @@ async function emitOp(roomId, op, target, operand, frame, provenance = []) {
   }
   try {
     const ek = eKey(roomId, target);
-    const lastEntry = entityOpHist[ek];
-    const lastOp = lastEntry?.op;
-    // INS(eo.intermediate_ops, {adjacency_violation, auto_repair})
-    // Auto-emit intermediate operations if transition is invalid
-    if (lastOp && !OP_ADJ[lastOp]?.includes(op)) {
-      const path = findOpPath(lastOp, op);
-      for (let i = 0; i < path.length - 1; i++) {
-        const midId = genOpId();
-        const mid = {
-          id: midId,
-          op: path[i],
-          target,
-          operand: {
-            auto_intermediate: true,
-            from: lastOp,
-            to: op
-          },
-          frame,
-          provenance: lastEntry ? [lastEntry.id] : [],
-          created_by: svc.userId,
-          origin_server: extractHomeserver(svc.userId),
-          ts: Date.now()
-        };
-        await svc.sendEvent(roomId, EVT.OP, mid);
-        entityOpHist[ek] = {
-          op: path[i],
-          id: midId
-        };
-      }
-    }
     // CON(eo.provenance.chain, {current → predecessor})
     const prevEntry = entityOpHist[ek];
     const chainedProvenance = [...provenance, ...(prevEntry?.id ? [prevEntry.id] : [])];
@@ -1779,7 +1714,7 @@ async function emitOp(roomId, op, target, operand, frame, provenance = []) {
       target,
       operand
     });
-    // Still update local history so subsequent ops don't break adjacency tracking
+    // Still update local history so subsequent ops maintain provenance tracking
     const ek = eKey(roomId, target);
     entityOpHist[ek] = {
       op,
@@ -15059,12 +14994,7 @@ const RecordProvenance = ({
         fontWeight: 600,
         color: 'var(--tx-1)'
       }
-    }, opDesc.verb), o.operand?.auto_intermediate && /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-orange",
-      style: {
-        fontSize: 7.5
-      }
-    }, "AUTO"), o.frame?.epistemic && /*#__PURE__*/React.createElement("span", {
+    }, opDesc.verb), o.frame?.epistemic && /*#__PURE__*/React.createElement("span", {
       className: `tag tag-${o.frame.epistemic === 'GIVEN' ? 'teal' : 'gold'}`,
       style: {
         fontSize: 7.5
@@ -15088,7 +15018,7 @@ const RecordProvenance = ({
         fontFamily: 'var(--mono)',
         color: 'var(--tx-3)'
       }
-    }, o.origin_server)), o.operand && !o.operand.auto_intermediate && /*#__PURE__*/React.createElement("div", {
+    }, o.origin_server)), o.operand && /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 3,
         fontSize: 10,
@@ -37832,7 +37762,7 @@ const TransparencyPage = ({ onBack }) => {
         React.createElement('p', { style: { marginBottom: 10 } },
           'Khora is a case management system built on Matrix, an open federated protocol for encrypted communication. Your data lives in encrypted Matrix rooms — not in a proprietary database controlled by any single organization.'),
         React.createElement('p', { style: { marginBottom: 10 } },
-          'Every state change in the system is governed by the EO (Elegant Objects) operation layer — a formal ontological framework with 9 canonical operators organized into 3 triads (Existence, Structure, Interpretation). This means every data change is traceable, auditable, and follows strict transition rules.'),
+          'Every state change in the system is governed by the EO (Elegant Objects) operation layer — a formal ontological framework with 9 canonical operators organized into 3 triads (Existence, Structure, Interpretation). This means every data change is traceable and auditable.'),
         React.createElement('p', null,
           'The source code of this application is fully visible on this page. Nothing is hidden. You can inspect exactly what the software does, verify the privacy claims, and audit the EO operation logic yourself.'))),
 
@@ -37863,26 +37793,7 @@ const TransparencyPage = ({ onBack }) => {
             React.createElement('span', { className: 'dt-eo', style: { fontWeight: 700 } }, op.op),
             React.createElement('span', { style: { fontSize: 12, fontWeight: 600 } }, op.name),
             React.createElement('span', { className: `tag tag-${triadColors[op.triad]}`, style: { fontSize: 8, padding: '1px 6px', marginLeft: 'auto' } }, op.triad)),
-          React.createElement('p', { style: { fontSize: 11.5, color: 'var(--tx-2)', lineHeight: 1.5 } }, op.desc))))),
-
-    // Adjacency Matrix
-    React.createElement('div', { className: 'card' },
-      React.createElement('span', { className: 'section-label' }, 'OPERATOR ADJACENCY — TRANSITION RULES'),
-      React.createElement('p', { style: { fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.5, marginBottom: 12 } },
-        'Every operation must follow the adjacency matrix below. If a transition is not adjacent, the EO engine automatically emits intermediate operations to create a valid path. This ensures structural integrity of all state changes.'),
-      React.createElement('div', { style: { overflowX: 'auto' } },
-        React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', fontFamily: 'var(--mono)', fontSize: 11 } },
-          React.createElement('thead', null,
-            React.createElement('tr', null,
-              React.createElement('th', { style: { padding: '6px 8px', textAlign: 'left', borderBottom: '1px solid var(--border-1)', color: 'var(--tx-2)' } }, 'From \\ To'),
-              ...OPERATORS.map(op => React.createElement('th', { key: op, style: { padding: '6px 8px', textAlign: 'center', borderBottom: '1px solid var(--border-1)', color: 'var(--tx-1)' } }, op)))),
-          React.createElement('tbody', null,
-            OPERATORS.map(from => React.createElement('tr', { key: from },
-              React.createElement('td', { style: { padding: '5px 8px', fontWeight: 600, color: 'var(--tx-1)', borderBottom: '1px solid var(--border-0)' } }, from),
-              ...OPERATORS.map(to => React.createElement('td', { key: to, style: { padding: '5px 8px', textAlign: 'center', borderBottom: '1px solid var(--border-0)' } },
-                OP_ADJ[from]?.includes(to)
-                  ? React.createElement('span', { style: { color: 'var(--green)', fontWeight: 700 } }, '●')
-                  : React.createElement('span', { style: { color: 'var(--tx-3)' } }, '·'))))))))));
+          React.createElement('p', { style: { fontSize: 11.5, color: 'var(--tx-2)', lineHeight: 1.5 } }, op.desc)))));
 
   // ── Privacy Tab ──
   const renderPrivacy = () => React.createElement('div', { className: 'anim-up' },

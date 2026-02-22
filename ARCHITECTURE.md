@@ -510,24 +510,6 @@ Each operation is stored as:
 | Resources inventory | `resources.inventory.{id}` | `resources.inventory.rel_456` |
 | Network | `network.{name}` | `network.metro_coalition` |
 
-### Adjacency Matrix
-
-Not all transitions are legal. The system enforces an adjacency matrix:
-
-```
-NUL → NUL, DES
-DES → NUL, DES, INS
-INS → DES, INS, SEG
-SEG → INS, SEG, CON
-CON → SEG, CON, SYN
-SYN → CON, SYN, ALT
-ALT → SYN, ALT, SUP
-SUP → ALT, SUP, REC
-REC → NUL, SUP, REC
-```
-
-If a requested transition is not directly adjacent, the system uses BFS to find the shortest valid path and **auto-emits intermediate operations**. For example, jumping from DES to CON would auto-emit INS and SEG in between.
-
 ### State Projection
 
 Given a history of EO operations, the system can **project the current state** of any entity by replaying the operation chain. The `projectCurrentState()` function extracts the field name from the dot-notation target's last segment, filters by epistemic frame (GIVEN or MEANT), and computes the latest value for each field using the operand data — handling INS, ALT, NUL, SUP, and DES operations.

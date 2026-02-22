@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Khora has a strong cryptographic and protocol foundation: Matrix as transport/identity, per-field AES-256-GCM encryption, EO operator adjacency with auto-intermediate emission, GIVEN/MEANT epistemic framing, structured observation prompts, anonymized metrics with k-anonymity goals, and a client-sovereign data model.
+Khora has a strong cryptographic and protocol foundation: Matrix as transport/identity, per-field AES-256-GCM encryption, EO operations with provenance chains, GIVEN/MEANT epistemic framing, structured observation prompts, anonymized metrics with k-anonymity goals, and a client-sovereign data model.
 
 **The entity model is flat in ways that will break past a two-person demo.** The seven gaps below are ordered by dependency — each one unblocks the next.
 
@@ -20,7 +20,7 @@ Khora has a strong cryptographic and protocol foundation: Matrix as transport/id
 |-------|--------|-------|-------|
 | Matrix transport (KhoraService) | Working | 242–373 | Login, room CRUD, state, events, messaging, invite/kick/tombstone |
 | Per-field crypto (FieldCrypto) | Working | 112–135 | AES-256-GCM, generate/encrypt/decrypt |
-| EO operations | Working | 137–211 | 9 operators, adjacency matrix, BFS pathfinding, auto-intermediates, state projection |
+| EO operations | Working | 137–211 | 9 operators, provenance chains, state projection |
 | Event type constants (EVT) | Defined | 220–239 | 18 custom event types across vault/bridge/roster/schema/metrics/network |
 | Room classification | Working | 503–515 | 7 room types: vault, bridge, roster, schema, metrics, network, unknown |
 | Client vault + observations | Working | 771–1331 | Vault CRUD, field-level sharing, observation recording, metrics consent, hard revoke |
