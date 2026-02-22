@@ -14928,20 +14928,44 @@ const RecordProvenance = ({
       }
     }, o.origin_server)), o.operand && !o.operand.auto_intermediate && /*#__PURE__*/React.createElement("div", {
       style: {
-        marginTop: 3,
-        fontSize: 10,
-        color: 'var(--tx-2)'
+        marginTop: 4,
+        fontSize: 10.5,
+        color: 'var(--tx-1)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2
       }
-    }, o.operand.value && /*#__PURE__*/React.createElement("span", null, "value: ", String(o.operand.value).slice(0, 50)), o.operand.from && o.operand.to && /*#__PURE__*/React.createElement("span", null, "changed: ", String(o.operand.from).slice(0, 25), " \u2192 ", String(o.operand.to).slice(0, 25)), o.operand.source && /*#__PURE__*/React.createElement("span", {
-      style: {
-        marginLeft: 6,
-        fontStyle: 'italic'
-      }
-    }, o.operand.source), o.operand.reason && /*#__PURE__*/React.createElement("span", {
-      style: {
-        marginLeft: 6
-      }
-    }, o.operand.reason)), o.provenance && o.provenance.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, o.op === 'INS' && o.operand.value != null && /*#__PURE__*/React.createElement("div", {
+      style: { display: 'flex', alignItems: 'center', gap: 4 }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: { color: 'var(--green)', fontSize: 9, fontWeight: 600 }
+    }, "SET"), /*#__PURE__*/React.createElement("span", {
+      style: { fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--green-dim)', padding: '1px 6px', borderRadius: 3 }
+    }, String(o.operand.value).slice(0, 60))),
+    o.op === 'ALT' && o.operand.from != null && o.operand.to != null && /*#__PURE__*/React.createElement("div", {
+      style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: { fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--red-dim)', padding: '1px 6px', borderRadius: 3, textDecoration: 'line-through', color: 'var(--tx-2)' }
+    }, String(o.operand.from).slice(0, 40)), /*#__PURE__*/React.createElement("span", {
+      style: { color: 'var(--tx-3)', fontSize: 10 }
+    }, "\u2192"), /*#__PURE__*/React.createElement("span", {
+      style: { fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--green-dim)', padding: '1px 6px', borderRadius: 3 }
+    }, String(o.operand.to).slice(0, 40))),
+    o.op === 'NUL' && /*#__PURE__*/React.createElement("div", {
+      style: { display: 'flex', alignItems: 'center', gap: 4 }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: { color: 'var(--red)', fontSize: 9, fontWeight: 600 }
+    }, "CLEARED"), o.operand.reason && /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 9.5, color: 'var(--tx-3)', fontStyle: 'italic' }
+    }, o.operand.reason), o.operand.previous_value && /*#__PURE__*/React.createElement("span", {
+      style: { fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--red-dim)', padding: '1px 6px', borderRadius: 3, textDecoration: 'line-through', color: 'var(--tx-3)' }
+    }, String(o.operand.previous_value).slice(0, 40))),
+    o.op !== 'INS' && o.op !== 'ALT' && o.op !== 'NUL' && o.operand.value != null && /*#__PURE__*/React.createElement("span", {
+      style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--tx-2)' }
+    }, String(o.operand.value).slice(0, 60)),
+    o.operand.source && /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 9, fontStyle: 'italic', color: 'var(--tx-3)' }
+    }, "via ", o.operand.source)), o.provenance && o.provenance.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 2,
         fontSize: 9,
@@ -25119,8 +25143,13 @@ const IndividualProfilePage = ({
     quantity: 1,
     notes: ''
   });
+  const [provenanceTarget, setProvenanceTarget] = useState(null);
   if (!individual) return null;
   const indNotes = (notes || []).filter(n => n.attached_to === individual.id || n.indId === individual.id);
+  const _provMeta = individual._case?.meta || {};
+  const _provServer = extractHomeserver(individual.bridgeRoom || individual.id);
+  const _provCreatedBy = _provMeta.created_by || _provMeta.provider || '';
+  const _provCreatedAt = _provMeta.created;
   const indAllocs = (allocations || []).filter(a => a.indId === individual.id);
   return /*#__PURE__*/React.createElement("div", {
     className: "anim-up profile-page"
@@ -25200,6 +25229,18 @@ const IndividualProfilePage = ({
     n: "msg",
     s: 12
   }), "Add Note")))), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', marginBottom: 12, background: 'var(--bg-2)', borderRadius: 'var(--r)', border: '1px solid var(--border-0)', fontSize: 11, color: 'var(--tx-2)', fontFamily: 'var(--mono)', flexWrap: 'wrap' }
+  }, /*#__PURE__*/React.createElement("span", { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+    /*#__PURE__*/React.createElement(I, { n: "server", s: 11, c: "var(--teal)" }), _provServer),
+  _provCreatedAt && /*#__PURE__*/React.createElement("span", { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+    /*#__PURE__*/React.createElement(I, { n: "clock", s: 11, c: "var(--blue)" }),
+    new Date(_provCreatedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })),
+  _provCreatedBy && /*#__PURE__*/React.createElement("span", { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+    /*#__PURE__*/React.createElement(I, { n: "user", s: 11, c: "var(--gold)" }),
+    (_provCreatedBy.startsWith('@') ? _provCreatedBy.split(':')[0].slice(1) : _provCreatedBy)),
+  individual.bridgeRoom && /*#__PURE__*/React.createElement("span", { style: { display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', fontSize: 9.5, color: 'var(--tx-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+    /*#__PURE__*/React.createElement(I, { n: "hash", s: 10, c: "var(--tx-3)" }), individual.bridgeRoom)
+  ), /*#__PURE__*/React.createElement("div", {
     className: "profile-tabs"
   }, [{
     id: 'fields',
@@ -25213,6 +25254,9 @@ const IndividualProfilePage = ({
   }, {
     id: 'activity',
     label: 'Activity'
+  }, {
+    id: 'provenance',
+    label: 'Provenance'
   }].map(t => /*#__PURE__*/React.createElement("button", {
     key: t.id,
     className: 'profile-tab' + (tab === t.id ? ' active' : ''),
@@ -25230,7 +25274,9 @@ const IndividualProfilePage = ({
     }
   }, "No fields shared yet.") : /*#__PURE__*/React.createElement("div", {
     className: "profile-fields-grid"
-  }, Object.entries(individual.fields || {}).map(([key, f]) => /*#__PURE__*/React.createElement("div", {
+  }, Object.entries(individual.fields || {}).map(([key, f]) => {
+    const _fpOpen = provenanceTarget?.entityKey === key && provenanceTarget?.roomId === individual.bridgeRoom;
+    return /*#__PURE__*/React.createElement("div", {
     key: key,
     className: "profile-field-card"
   }, /*#__PURE__*/React.createElement("div", {
@@ -25239,11 +25285,12 @@ const IndividualProfilePage = ({
     className: "dt-locked"
   }, /*#__PURE__*/React.createElement(DtLock, null), " not disclosed") : /*#__PURE__*/React.createElement("div", {
     className: "profile-field-value"
-  }, f.value || '—'), /*#__PURE__*/React.createElement("div", {
+  }, f.value || '\u2014'), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 4,
-      marginTop: 6
+      marginTop: 6,
+      alignItems: 'center'
     }
   }, f.eo_op && /*#__PURE__*/React.createElement(DtEo, {
     op: f.eo_op
@@ -25253,7 +25300,20 @@ const IndividualProfilePage = ({
       background: f.frame === 'GIVEN' ? 'var(--teal-dim)' : 'var(--gold-dim)',
       color: f.frame === 'GIVEN' ? 'var(--teal)' : 'var(--gold)'
     }
-  }, f.frame)))))), tab === 'notes' && /*#__PURE__*/React.createElement("div", {
+  }, f.frame), individual.bridgeRoom && /*#__PURE__*/React.createElement("span", {
+    onClick: () => setProvenanceTarget(_fpOpen ? null : { entityKey: key, label: key.replace(/_/g, ' '), roomId: individual.bridgeRoom }),
+    style: { cursor: 'pointer', color: _fpOpen ? 'var(--teal)' : 'var(--tx-3)', transition: 'color .15s', marginLeft: 'auto' },
+    title: "View field history"
+  }, /*#__PURE__*/React.createElement(I, { n: "git-commit", s: 11 }))),
+  _fpOpen && /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 6 }
+  }, /*#__PURE__*/React.createElement(RecordProvenance, {
+    roomId: individual.bridgeRoom,
+    entityKey: key,
+    label: key.replace(/_/g, ' '),
+    session: null
+  })));
+  }))), tab === 'notes' && /*#__PURE__*/React.createElement("div", {
     className: "profile-section"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -25379,7 +25439,67 @@ const IndividualProfilePage = ({
   }, "Recent Activity"), /*#__PURE__*/React.createElement(ProfileActivityFeed, {
     individual: individual,
     svc: svc
-  })), /*#__PURE__*/React.createElement(Modal, {
+  })), tab === 'provenance' && /*#__PURE__*/React.createElement("div", {
+    className: "profile-section"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "profile-section-title"
+  }, "Record Provenance"), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: individual.bridgeRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Individual Record",
+    members: [
+      ...(individual._case?.meta?.client ? [{ userId: individual._case.meta.client, role: 'client (sovereign owner)' }] : []),
+      ...(individual._case?.meta?.provider ? [{ userId: individual._case.meta.provider, role: 'provider' }] : []),
+      ...((individual._case?.meta?.assigned_staff || []).filter(s => s !== individual._case?.meta?.provider).map(s => ({ userId: s, role: 'assigned staff' })))
+    ],
+    extra: [
+      { label: 'Record type', value: 'Individual profile stored in a shared bridge room' },
+      { label: 'Sovereignty', value: individual._case?.meta?.client ? 'Client-owned bridge — client has superadmin power level' : 'Provider-created record' }
+    ]
+  }), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '14px 0' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 2 }
+  }, "Server"), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11.5, fontFamily: 'var(--mono)', color: 'var(--tx-1)', wordBreak: 'break-all' }
+  }, _provServer)), /*#__PURE__*/React.createElement("div", {
+    style: { padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 2 }
+  }, "Created by"), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11.5, color: 'var(--tx-1)' }
+  }, _provCreatedBy ? (_provCreatedBy.startsWith('@') ? _provCreatedBy.split(':')[0].slice(1) : _provCreatedBy) : 'Unknown'), _provCreatedBy && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9.5, color: 'var(--tx-3)', fontFamily: 'var(--mono)' }
+  }, extractHomeserver(_provCreatedBy))), /*#__PURE__*/React.createElement("div", {
+    style: { padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 2 }
+  }, "Created"), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11.5, color: 'var(--tx-1)' }
+  }, _provCreatedAt ? new Date(_provCreatedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + ' ' + new Date(_provCreatedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '\u2014')), /*#__PURE__*/React.createElement("div", {
+    style: { padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 2 }
+  }, "Status"), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 4 }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: { width: 6, height: 6, borderRadius: '50%', background: individual.status === 'active' ? 'var(--green)' : individual.status === 'revoked' ? 'var(--red)' : 'var(--gold)' }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 11.5, color: 'var(--tx-1)', textTransform: 'capitalize' }
+  }, individual.status || 'unknown')))), /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 4 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 10.5, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 8, fontWeight: 600 }
+  }, "Full EO Operation History"), /*#__PURE__*/React.createElement(RecordProvenance, {
+    roomId: individual.bridgeRoom,
+    entityKey: 'bridge',
+    label: individual.name || 'Individual',
+    session: null
+  }))), /*#__PURE__*/React.createElement(Modal, {
     open: profileAllocModal,
     onClose: () => setProfileAllocModal(false),
     title: "Allocate Resource",
@@ -25581,6 +25701,15 @@ const ResourceProfilePage = ({
   })(), /*#__PURE__*/React.createElement(DtRoom, {
     room: resource.orgRoom
   })))), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', marginBottom: 12, background: 'var(--bg-2)', borderRadius: 'var(--r)', border: '1px solid var(--border-0)', fontSize: 11, color: 'var(--tx-2)', fontFamily: 'var(--mono)', flexWrap: 'wrap' }
+  }, /*#__PURE__*/React.createElement("span", { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+    /*#__PURE__*/React.createElement(I, { n: "server", s: 11, c: "var(--teal)" }), extractHomeserver(resource.orgRoom || resource.id || '')),
+  resource.created && /*#__PURE__*/React.createElement("span", { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+    /*#__PURE__*/React.createElement(I, { n: "clock", s: 11, c: "var(--blue)" }),
+    new Date(resource.created).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })),
+  resource.orgRoom && /*#__PURE__*/React.createElement("span", { style: { display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto', fontSize: 9.5, color: 'var(--tx-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+    /*#__PURE__*/React.createElement(I, { n: "hash", s: 10, c: "var(--tx-3)" }), resource.orgRoom)
+  ), /*#__PURE__*/React.createElement("div", {
     className: "profile-tabs"
   }, [{
     id: 'details',
@@ -25591,6 +25720,9 @@ const ResourceProfilePage = ({
   }, {
     id: 'allocations',
     label: `Allocations (${resAllocs.length})`
+  }, {
+    id: 'provenance',
+    label: 'Provenance'
   }].map(t => /*#__PURE__*/React.createElement("button", {
     key: t.id,
     className: 'profile-tab' + (tab === t.id ? ' active' : ''),
@@ -25739,7 +25871,58 @@ const ResourceProfilePage = ({
     style: {
       fontSize: 10
     }
-  }, a.status)))))));
+  }, a.status)))))), tab === 'provenance' && /*#__PURE__*/React.createElement("div", {
+    className: "profile-section"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "profile-section-title"
+  }, "Record Provenance"), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+    storageType: "matrix",
+    roomId: resource.orgRoom,
+    encrypted: true,
+    encLabel: "Megolm E2EE",
+    label: "Resource Record",
+    extra: [
+      { label: 'Record type', value: 'Resource type stored in the organization room' },
+      { label: 'Holder', value: resource.holder || 'Organization' }
+    ]
+  }), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '14px 0' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 2 }
+  }, "Server"), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11.5, fontFamily: 'var(--mono)', color: 'var(--tx-1)', wordBreak: 'break-all' }
+  }, extractHomeserver(resource.orgRoom || resource.id || ''))), /*#__PURE__*/React.createElement("div", {
+    style: { padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 2 }
+  }, "Created"), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11.5, color: 'var(--tx-1)' }
+  }, resource.created ? new Date(resource.created).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + ' ' + new Date(resource.created).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '\u2014')), /*#__PURE__*/React.createElement("div", {
+    style: { padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 2 }
+  }, "Unit"), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11.5, color: 'var(--tx-1)' }
+  }, resource.unit || '\u2014')), /*#__PURE__*/React.createElement("div", {
+    style: { padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 6 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 9, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 2 }
+  }, "Category"), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11.5, color: 'var(--tx-1)', textTransform: 'capitalize' }
+  }, RESOURCE_CATEGORY_LABELS[resource.category] || resource.category || '\u2014'))), /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 4 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 10.5, textTransform: 'uppercase', color: 'var(--tx-3)', letterSpacing: '.04em', marginBottom: 8, fontWeight: 600 }
+  }, "Full EO Operation History"), resource.orgRoom ? /*#__PURE__*/React.createElement(RecordProvenance, {
+    roomId: resource.orgRoom,
+    entityKey: resource.id || 'resources',
+    label: resource.name || 'Resource',
+    session: null
+  }) : /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--tx-3)', padding: 12 }
+  }, "No room available for provenance lookup."))));
 };
 
 /* ─── DashboardOverview — lightweight home with stats and recent activity ─── */
