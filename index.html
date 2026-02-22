@@ -205,32 +205,60 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 
 /* ═══ Form Builder / Schema Builder UX ═══ */
 /* fb-canvas, fb-header, fb-header-title, fb-header-meta removed — now inline */
-.fb-mode-toggle{display:flex;gap:2px;background:var(--bg-1);border-radius:var(--r);padding:3px}
-.fb-mode-btn{padding:8px 16px;border-radius:var(--r);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;
-  color:var(--tx-2);background:transparent;border:none;font-family:inherit;display:flex;align-items:center;gap:6px}
-.fb-mode-btn.active{background:var(--bg-3);color:var(--tx-0);font-weight:600}
-.fb-mode-btn:hover:not(.active){background:var(--bg-2)}
-.fb-section{border:1px solid var(--border-0);border-radius:var(--r-lg);margin-bottom:16px;overflow:hidden;background:var(--bg-1)}
-.fb-section-header{padding:14px 18px;background:var(--bg-2);border-bottom:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between;cursor:pointer}
-.fb-section-title{font-size:14px;font-weight:600;color:var(--tx-0);display:flex;align-items:center;gap:8px}
-.fb-section-count{font-size:11px;color:var(--tx-2);font-family:var(--mono)}
-.fb-question{padding:16px 18px;border-bottom:1px solid var(--border-0);transition:background .15s}
+/* ── Progress Steps ── */
+.fb-progress{display:flex;align-items:center;gap:0}
+.fb-step{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;transition:all .2s}
+.fb-step.active{background:var(--teal-dim)}
+.fb-step-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;background:var(--border-1);color:var(--tx-3);transition:all .2s}
+.fb-step.active .fb-step-num{background:var(--teal);color:var(--bg-0)}
+.fb-step-label{font-size:12px;font-weight:500;color:var(--tx-3);transition:color .2s}
+.fb-step.active .fb-step-label{color:var(--teal)}
+.fb-step-line{width:24px;height:1px;background:var(--border-1);margin:0 2px}
+
+/* ── Mode Toggle (pill style) ── */
+.fb-mode-toggle{display:flex;gap:6px;align-items:center}
+.fb-mode-btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;
+  color:var(--tx-2);background:var(--bg-1);border:1px solid var(--border-0);font-family:inherit;display:flex;align-items:center;gap:6px;text-transform:capitalize}
+.fb-mode-btn.active{background:var(--teal-dim);color:var(--teal);border-color:var(--teal);font-weight:600}
+.fb-mode-btn:hover:not(.active){border-color:var(--border-2);color:var(--tx-1)}
+
+/* ── Sections ── */
+.fb-section{border:1px solid var(--border-0);border-radius:var(--r-lg);margin-bottom:12px;overflow:hidden;background:var(--bg-1)}
+.fb-section-header{padding:10px 18px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .15s}
+.fb-section-header:hover{background:var(--bg-2)}
+.fb-section-title{font-size:12px;font-weight:600;color:var(--tx-2);display:flex;align-items:center;gap:8px;
+  letter-spacing:.03em;text-transform:uppercase;font-family:var(--mono)}
+.fb-section-count{font-size:11px;color:var(--tx-3);font-family:var(--mono)}
+
+/* ── Questions ── */
+.fb-question{padding:14px 16px;border-bottom:1px solid var(--border-0);transition:background .15s;position:relative}
 .fb-question:last-child{border-bottom:none}
 .fb-question:hover{background:var(--bg-2)}
-.fb-question-prompt{font-size:15px;font-weight:600;color:var(--tx-0);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.fb-question-meta{font-size:11px;color:var(--tx-3);margin-bottom:3px;display:flex;align-items:center;gap:6px}
+.fb-question-prompt{font-size:14px;font-weight:500;color:var(--tx-0);margin-bottom:8px;display:flex;align-items:center;gap:8px}
 .fb-question-type{font-size:11px;color:var(--tx-2);font-family:var(--mono);padding:2px 8px;background:var(--bg-3);border-radius:3px}
+.fb-question-actions{position:absolute;top:12px;right:14px;display:flex;gap:2px;opacity:0;transition:opacity .15s}
+.fb-question:hover .fb-question-actions{opacity:1}
+
+/* ── Answers ── */
 .fb-answer-list{margin-top:10px;display:flex;flex-direction:column;gap:4px}
-.fb-answer{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:5px;transition:all .12s;cursor:pointer}
-.fb-answer:hover{background:var(--bg-3)}
-.fb-answer-radio{width:16px;height:16px;border-radius:50%;border:2px solid var(--border-2);flex-shrink:0}
-.fb-answer-check{width:16px;height:16px;border-radius:3px;border:2px solid var(--border-2);flex-shrink:0}
-.fb-answer-label{font-size:14px;color:var(--tx-0);flex:1}
+.fb-answer{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;transition:all .12s;cursor:pointer;border:1px solid transparent}
+.fb-answer:hover{background:var(--bg-3);border-color:var(--border-0)}
+.fb-answer-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-2);flex-shrink:0}
+.fb-answer-check{width:16px;height:16px;border-radius:3px;border:1.5px solid var(--border-2);flex-shrink:0}
+.fb-answer-label{font-size:13px;color:var(--tx-0);flex:1}
 .fb-answer-dots{display:flex;gap:3px;align-items:center;flex-shrink:0}
 .fb-prov-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:all .15s}
 .fb-prov-dot.bound{background:var(--green)}
 .fb-prov-dot.unbound{background:var(--border-2);border:1.5px solid var(--tx-3);box-sizing:border-box}
 .fb-prov-dot.conflict{background:var(--gold);box-shadow:0 0 4px var(--gold)}
 .fb-source-tag{font-size:11px;color:var(--tx-2);margin-top:8px;display:flex;align-items:center;gap:6px}
+
+/* ── Form name ── */
+.fb-form-name{font-size:22px;font-weight:700;font-family:var(--serif);letter-spacing:-.02em;color:var(--tx-0);
+  border:none;background:transparent;outline:none;width:100%;border-bottom:2px solid transparent;transition:border-color .2s;padding:2px 0}
+.fb-form-name:focus{border-bottom-color:var(--teal)}
 .fb-wire-btn{font-size:12px;color:var(--teal);cursor:pointer;padding:4px 10px;border:1px solid rgba(62,201,176,.2);
   border-radius:var(--r);background:var(--teal-dim);transition:all .15s;font-family:inherit;font-weight:500}
 .fb-wire-btn:hover{border-color:var(--teal);background:rgba(62,201,176,.12)}
@@ -315,6 +343,12 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .si-form-name{font-size:12.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx-0)}
 .si-form-item.active .si-form-name{font-weight:600}
 .si-form-meta{font-size:10px;font-family:var(--mono);color:var(--tx-2);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.si-form-status{font-size:9px;font-weight:600;letter-spacing:.03em;padding:1px 6px;border-radius:3px;text-transform:uppercase;display:inline-block}
+.si-form-status.normative{background:var(--green-dim);color:var(--green)}
+.si-form-status.trial{background:rgba(224,148,58,.12);color:var(--orange)}
+.si-form-status.draft{background:var(--bg-3);color:var(--tx-3)}
+.si-form-status.de_facto{background:rgba(167,139,250,.12);color:var(--purple)}
+.si-form-status.deprecated{background:var(--red-dim);color:var(--red)}
 .si-form-update{font-size:9px;font-family:var(--mono);font-weight:600;color:var(--gold);background:rgba(201,163,82,.10);padding:1px 5px;border-radius:3px;margin-top:2px;display:inline-block}
 .si-ctx-section{padding:12px 14px;border-bottom:1px solid var(--border-0)}
 .si-ctx-label{font-size:10px;font-family:var(--mono);font-weight:600;color:var(--tx-1);letter-spacing:.07em;margin-bottom:8px;display:block}
@@ -9646,6 +9680,23 @@ const diffFormVersions = (oldForm, newForm) => {
   changes.removedOptions = oldOpts.filter(o => !newOptIds.has(o.id));
   return changes;
 };
+
+/* ── Progress Steps — visual workflow indicator ── */
+const FB_STEPS = [
+  { num: 1, label: 'Add questions', key: 'compose' },
+  { num: 2, label: 'Wire to frameworks', key: 'wire' },
+  { num: 3, label: 'Publish', key: 'preview' },
+];
+const ProgressSteps = ({ activeStep }) => /*#__PURE__*/React.createElement("div", {
+  className: "fb-progress"
+}, FB_STEPS.map((step, i) => /*#__PURE__*/React.createElement(React.Fragment, { key: step.key },
+  /*#__PURE__*/React.createElement("div", {
+    className: `fb-step${activeStep === step.key ? ' active' : ''}`
+  }, /*#__PURE__*/React.createElement("span", { className: "fb-step-num" }, step.num),
+  /*#__PURE__*/React.createElement("span", { className: "fb-step-label" }, step.label)),
+  i < FB_STEPS.length - 1 && /*#__PURE__*/React.createElement("div", { className: "fb-step-line" })
+)));
+
 const FormBuilder = ({
   isOrg = false
 }) => {
@@ -10292,190 +10343,98 @@ const FormBuilder = ({
       maxWidth: 960,
       margin: '0 auto'
     }
+  },
+
+  /* ── Row 1: Form name + badges + actions ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 16
+    }
   }, /*#__PURE__*/React.createElement("div", {
+    style: { flex: 1, minWidth: 0 }
+  }, editingFormName ? /*#__PURE__*/React.createElement("input", {
+    className: "fb-form-name",
+    autoFocus: true,
+    value: draft,
+    onChange: e => setDraft(e.target.value),
+    placeholder: "Form name...",
+    onKeyDown: e => {
+      if (e.key === 'Enter' && draft.trim()) doRenameForm(draft);
+      if (e.key === 'Escape') { setEditingFormName(false); setDraft(''); }
+    },
+    onBlur: () => { if (draft.trim()) doRenameForm(draft); else { setEditingFormName(false); setDraft(''); } }
+  }) : /*#__PURE__*/React.createElement("span", {
+    className: "fb-form-name",
+    style: { cursor: 'pointer', display: 'inline-block' },
+    onClick: () => { setDraft(form.name); setEditingFormName(true); },
+    title: "Click to rename"
+  }, form.name),
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }
+  }, /*#__PURE__*/React.createElement(SwTag, {
+    color: MATURITY_LEVELS[form.maturity]?.color === 'green' ? SWC.given : MATURITY_LEVELS[form.maturity]?.color === 'red' ? SWC.red : SWC.meant,
+    sm: true
+  }, MATURITY_LEVELS[form.maturity]?.label || 'Draft'), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 11, color: SWC.dim, fontFamily: 'var(--mono)', cursor: 'pointer', borderBottom: `1px dashed ${SWC.dim}` },
+    onClick: () => setShowVersionBump(true),
+    title: "Click to bump version"
+  }, "v", form.version), form.status === 'persisted' && /*#__PURE__*/React.createElement(SwTag, {
+    color: SWC.given, sm: true
+  }, "Saved"), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 11, color: SWC.dim, fontFamily: 'var(--mono)' }
+  }, allQuestions.length, " question", allQuestions.length !== 1 ? 's' : '', " \xB7 ", allValues.length, " option", allValues.length !== 1 ? 's' : '', frameworks.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 ", frameworks.length, " fw"), totalBindings > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 ", totalBindings, " binding", totalBindings !== 1 ? 's' : ''), conflictCount > 0 && /*#__PURE__*/React.createElement("span", { style: { color: SWC.sup } }, " \xB7 ", conflictCount, " conflict", conflictCount !== 1 ? 's' : '')))),
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0 }
+  }, /*#__PURE__*/React.createElement(SwBtn, {
+    ghost: true, accent: SWC.muted, onClick: () => setShowFormList(true),
+    style: { padding: '5px 10px', fontSize: 11 }
+  }, /*#__PURE__*/React.createElement(I, { n: "folder", s: 11 }), " Library", savedForms.length > 0 && /*#__PURE__*/React.createElement("span", {
+    style: { marginLeft: 4, fontFamily: 'var(--mono)', fontSize: 10 }
+  }, savedForms.length)), /*#__PURE__*/React.createElement(SwBtn, {
+    ghost: true, accent: SWC.given, onClick: doSaveForm, disabled: saving,
+    style: { padding: '5px 10px', fontSize: 11 }
+  }, saving ? '...' : 'Save draft'), (form.versionHistory || []).length > 0 && /*#__PURE__*/React.createElement(SwBtn, {
+    ghost: true, accent: SWC.dim, onClick: () => setShowVersionHistory(true),
+    style: { padding: '5px 10px', fontSize: 11 }
+  }, "History"), /*#__PURE__*/React.createElement(SwBtn, {
+    ghost: true, accent: SWC.sup, onClick: doPersistToSchema, disabled: saving,
+    style: { padding: '5px 10px', fontSize: 11 }, title: "Save to Matrix schema room"
+  }, "Publish"))),
+
+  /* ── Row 2: Progress steps + mode toggle ── */
+  /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 20
+      marginBottom: 16,
+      padding: '10px 0',
+      borderBottom: `1px solid ${SWC.border}`
     }
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
-    style: {
-      fontFamily: 'var(--serif)',
-      fontSize: 22,
-      fontWeight: 700,
-      marginBottom: 4
-    }
-  }, "Schema Builder"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: 'var(--tx-1)',
-      fontSize: 12.5
-    }
-  }, "Build forms, wire them to frameworks, and manage your data vocabulary.")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(ProgressSteps, { activeStep: mode }),
+  /*#__PURE__*/React.createElement("div", {
     className: "fb-mode-toggle"
   }, /*#__PURE__*/React.createElement("button", {
     className: `fb-mode-btn ${mode === 'compose' ? 'active' : ''}`,
     onClick: () => setMode('compose')
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "grid",
-    s: 13
-  }), " Compose"), /*#__PURE__*/React.createElement("button", {
+  }, "\u270E Compose"), /*#__PURE__*/React.createElement("button", {
     className: `fb-mode-btn ${mode === 'wire' ? 'active' : ''}`,
     onClick: () => setMode('wire')
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "link",
-    s: 13
-  }), " Wire", frameworks.length > 0 && totalPossible > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 10,
-      color: totalBindings === totalPossible ? SWC.given : SWC.dim,
-      fontFamily: 'var(--mono)'
-    }
+  }, "\u26A1 Wire", frameworks.length > 0 && totalPossible > 0 && /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 10, color: totalBindings === totalPossible ? SWC.given : SWC.dim, fontFamily: 'var(--mono)' }
   }, totalBindings, "/", totalPossible)), /*#__PURE__*/React.createElement("button", {
     className: `fb-mode-btn ${mode === 'preview' ? 'active' : ''}`,
     onClick: () => setMode('preview')
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "eye",
-    s: 13
-  }), " Preview"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'flex-start',
-      justifyContent: 'space-between',
-      gap: 12,
-      marginBottom: 16,
-      padding: '14px 18px',
-      borderRadius: 'var(--r-lg)',
-      border: `1px solid ${SWC.border}`,
-      background: SWC.surface
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      minWidth: 0
-    }
+  }, "\u25CE Preview"))), mode === 'compose' && /*#__PURE__*/React.createElement("div", {
+    style: { maxWidth: 640, margin: '0 auto' }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
-      alignItems: 'center',
       gap: 8,
-      flexWrap: 'wrap'
-    }
-  }, editingFormName ? /*#__PURE__*/React.createElement(SwInput, {
-    autoFocus: true,
-    value: draft,
-    onChange: setDraft,
-    placeholder: "Form name...",
-    onKeyDown: e => {
-      if (e.key === 'Enter' && draft.trim()) {
-        doRenameForm(draft);
-      }
-      if (e.key === 'Escape') {
-        setEditingFormName(false);
-        setDraft('');
-      }
-    },
-    style: {
-      width: 260,
-      padding: '6px 10px',
-      fontSize: 17,
-      fontFamily: 'var(--serif)',
-      fontWeight: 700
-    }
-  }) : /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontFamily: 'var(--serif)',
-      fontSize: 17,
-      fontWeight: 700,
-      cursor: 'pointer'
-    },
-    onClick: () => {
-      setDraft(form.name);
-      setEditingFormName(true);
-    },
-    title: "Click to rename"
-  }, form.name), /*#__PURE__*/React.createElement(SwTag, {
-    color: MATURITY_LEVELS[form.maturity]?.color === 'green' ? SWC.given : MATURITY_LEVELS[form.maturity]?.color === 'red' ? SWC.red : SWC.meant,
-    sm: true
-  }, MATURITY_LEVELS[form.maturity]?.label || 'Draft'), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: SWC.dim,
-      fontFamily: 'var(--mono)',
-      cursor: 'pointer',
-      borderBottom: `1px dashed ${SWC.dim}`
-    },
-    onClick: () => setShowVersionBump(true),
-    title: "Click to bump version"
-  }, "v", form.version), form.status === 'persisted' && /*#__PURE__*/React.createElement(SwTag, {
-    color: SWC.given,
-    sm: true
-  }, "Saved")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: SWC.dim,
-      fontFamily: 'var(--mono)',
-      marginTop: 4
-    }
-  }, allQuestions.length, " question", allQuestions.length !== 1 ? 's' : '', " \xB7 ", allValues.length, " option", allValues.length !== 1 ? 's' : '', frameworks.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 ", frameworks.length, " fw"), totalBindings > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 ", totalBindings, " binding", totalBindings !== 1 ? 's' : ''), conflictCount > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: SWC.sup
-    }
-  }, " \xB7 ", conflictCount, " conflict", conflictCount !== 1 ? 's' : ''))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 5,
-      alignItems: 'center',
-      flexShrink: 0
-    }
-  }, /*#__PURE__*/React.createElement(SwBtn, {
-    ghost: true,
-    accent: SWC.muted,
-    onClick: () => setShowFormList(true),
-    style: {
-      padding: '5px 10px',
-      fontSize: 11
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "folder",
-    s: 11
-  }), " Library", savedForms.length > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      marginLeft: 4,
-      fontFamily: 'var(--mono)',
-      fontSize: 10
-    }
-  }, savedForms.length)), /*#__PURE__*/React.createElement(SwBtn, {
-    ghost: true,
-    accent: SWC.given,
-    onClick: doSaveForm,
-    disabled: saving,
-    style: {
-      padding: '5px 10px',
-      fontSize: 11
-    }
-  }, saving ? '...' : 'Save'), (form.versionHistory || []).length > 0 && /*#__PURE__*/React.createElement(SwBtn, {
-    ghost: true,
-    accent: SWC.dim,
-    onClick: () => setShowVersionHistory(true),
-    style: {
-      padding: '5px 10px',
-      fontSize: 11
-    }
-  }, "History"), /*#__PURE__*/React.createElement(SwBtn, {
-    ghost: true,
-    accent: SWC.sup,
-    onClick: doPersistToSchema,
-    disabled: saving,
-    style: {
-      padding: '5px 10px',
-      fontSize: 11
-    },
-    title: "Save to Matrix schema room"
-  }, "Publish"))), mode === 'compose' && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 10,
       alignItems: 'center',
       marginBottom: 14,
       fontSize: 12
@@ -10524,7 +10483,7 @@ const FormBuilder = ({
       fontSize: 11,
       fontFamily: 'inherit'
     }
-  })), mode === 'compose' && /*#__PURE__*/React.createElement("div", null, form.sections.map((sec, secIdx) => /*#__PURE__*/React.createElement("div", {
+  })), form.sections.map((sec, secIdx) => /*#__PURE__*/React.createElement("div", {
     key: sec.id,
     className: "fb-section"
   }, /*#__PURE__*/React.createElement("div", {
@@ -10549,26 +10508,55 @@ const FormBuilder = ({
   }, "\uD83C\uDFE0 Local")), isSectionExpanded(sec.id) && /*#__PURE__*/React.createElement("div", null, sec.questions.map((q, qIdx) => /*#__PURE__*/React.createElement("div", {
     key: q.id,
     className: "fb-question"
-  }, /*#__PURE__*/React.createElement("div", {
+  },
+  /* ── Meta line: section · type · origin ── */
+  /*#__PURE__*/React.createElement("div", {
+    className: "fb-question-meta"
+  }, /*#__PURE__*/React.createElement("span", null, sec.title), " \xB7 ", /*#__PURE__*/React.createElement("span", null,
+    q.type === 'single_select' ? 'Single choice' : q.type === 'multi_select' ? 'Multi choice' : q.type === 'text' ? 'Free text' : q.type),
+    q.origin === 'network' && /*#__PURE__*/React.createElement(SwTag, {
+      color: SWC.given, sm: true,
+      style: { marginLeft: 4, padding: '0 5px', fontSize: 9 }
+    }, "Network"),
+    q.origin === 'org' && /*#__PURE__*/React.createElement(SwTag, {
+      color: SWC.meant, sm: true,
+      style: { marginLeft: 4, padding: '0 5px', fontSize: 9 }
+    }, "Org"),
+    !q.givenTestPassed && /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 11, color: SWC.sup, marginLeft: 4 },
+      title: "This question may embed institutional interpretation"
+    }, "\u26A0")),
+
+  /* ── Question prompt ── */
+  /*#__PURE__*/React.createElement("div", {
     className: "fb-question-prompt"
-  }, /*#__PURE__*/React.createElement("span", null, q.prompt), /*#__PURE__*/React.createElement("span", {
-    className: "fb-question-type"
-  }, q.type), q.origin === 'network' && /*#__PURE__*/React.createElement("span", {
-    className: "fb-inherit-lock"
-  }, "\uD83D\uDD12"), q.origin === 'local' && /*#__PURE__*/React.createElement("span", {
-    className: "fb-inherit-local"
-  }, "\uD83C\uDFE0"), !q.givenTestPassed && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: SWC.sup
-    },
-    title: "This question may embed institutional interpretation"
-  }, "\u26A0"), hasConflict && q.options?.some(o => hasConflict(o.id)) && /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11
-    },
-    title: "Framework conflict"
-  }, "\u26A1")), (q.type === 'single_select' || q.type === 'multi_select') && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, q.prompt),
+    q.options?.some(o => hasConflict(o.id)) && /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 11 }, title: "Framework conflict"
+    }, "\u26A1")),
+
+  /* ── Hover actions (move/delete) ── */
+  /*#__PURE__*/React.createElement("div", {
+    className: "fb-question-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => doMoveQuestion(sec.id, qIdx, -1),
+    disabled: qIdx === 0,
+    style: { background: 'none', border: '1px solid ' + SWC.border, borderRadius: 4, color: SWC.dim,
+      cursor: qIdx === 0 ? 'default' : 'pointer', padding: '2px 6px', fontSize: 11, opacity: qIdx === 0 ? 0.3 : 1 }
+  }, "\u2191"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => doMoveQuestion(sec.id, qIdx, 1),
+    disabled: qIdx === sec.questions.length - 1,
+    style: { background: 'none', border: '1px solid ' + SWC.border, borderRadius: 4, color: SWC.dim,
+      cursor: qIdx === sec.questions.length - 1 ? 'default' : 'pointer', padding: '2px 6px', fontSize: 11, opacity: qIdx === sec.questions.length - 1 ? 0.3 : 1 }
+  }, "\u2193"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => doRemoveQuestion(sec.id, q.id),
+    style: { background: 'none', border: '1px solid ' + SWC.border, borderRadius: 4, color: SWC.dim, cursor: 'pointer', padding: '2px 6px', fontSize: 11 },
+    onMouseEnter: e => e.currentTarget.style.color = SWC.red,
+    onMouseLeave: e => e.currentTarget.style.color = SWC.dim
+  }, "\xD7")),
+
+  /* ── Answer options ── */
+  (q.type === 'single_select' || q.type === 'multi_select') && /*#__PURE__*/React.createElement("div", {
     className: "fb-answer-list"
   }, (q.options || []).map(opt => {
     const dotState = getProvDotState(opt.id);
@@ -10577,11 +10565,7 @@ const FormBuilder = ({
       className: "fb-answer",
       onClick: () => {
         if (frameworks.length > 0) {
-          setWiringValue({
-            question: q,
-            value: opt,
-            sectionIdx: secIdx
-          });
+          setWiringValue({ question: q, value: opt, sectionIdx: secIdx });
           setMode('wire');
         }
       }
@@ -10589,11 +10573,7 @@ const FormBuilder = ({
       className: q.type === 'single_select' ? 'fb-answer-radio' : 'fb-answer-check'
     }), /*#__PURE__*/React.createElement("span", {
       className: "fb-answer-label"
-    }, opt.label), opt.origin === 'network' && /*#__PURE__*/React.createElement("span", {
-      className: "fb-inherit-lock"
-    }, "\uD83D\uDD12"), opt.origin === 'local' && /*#__PURE__*/React.createElement("span", {
-      className: "fb-inherit-local"
-    }, "\uD83C\uDFE0"), /*#__PURE__*/React.createElement("div", {
+    }, opt.label), /*#__PURE__*/React.createElement("div", {
       className: "fb-answer-dots"
     }, frameworks.map((fw, fi) => {
       const code = getBindingCode(opt.id, fw.id);
@@ -10602,152 +10582,47 @@ const FormBuilder = ({
         key: fw.id,
         className: `fb-prov-dot ${code ? isConflict ? 'conflict' : 'bound' : 'unbound'}`,
         title: code ? `${fw.name}: ${code.code} — ${code.label}${isConflict ? ' (conflict)' : ''}` : `${fw.name}: not bound`,
-        style: code ? {
-          background: SWC.fw[fi % 5]
-        } : {}
+        style: code ? { background: SWC.fw[fi % 5] } : {}
       });
     })), /*#__PURE__*/React.createElement("button", {
-      onClick: e => {
-        e.stopPropagation();
-        doRemoveAnswer(sec.id, q.id, opt.id);
-      },
-      style: {
-        background: 'none',
-        border: 'none',
-        color: SWC.dim,
-        cursor: 'pointer',
-        fontSize: 14,
-        padding: '2px 4px',
-        opacity: 0.5,
-        transition: 'opacity .15s'
-      },
+      onClick: e => { e.stopPropagation(); doRemoveAnswer(sec.id, q.id, opt.id); },
+      style: { background: 'none', border: 'none', color: SWC.dim, cursor: 'pointer', fontSize: 14, padding: '2px 4px', opacity: 0.5, transition: 'opacity .15s' },
       onMouseEnter: e => e.currentTarget.style.opacity = '1',
       onMouseLeave: e => e.currentTarget.style.opacity = '0.5'
     }, "\xD7"));
   }), addingAnswer === q.id ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 6,
-      padding: '4px 10px',
-      alignItems: 'center'
-    }
+    style: { display: 'flex', gap: 6, padding: '4px 10px', alignItems: 'center' }
   }, /*#__PURE__*/React.createElement(SwInput, {
-    autoFocus: true,
-    value: draft,
-    onChange: setDraft,
+    autoFocus: true, value: draft, onChange: setDraft,
     placeholder: "Answer option...",
     onKeyDown: e => {
-      if (e.key === 'Enter') {
-        doAddAnswer(sec.id, q.id);
-      }
-      if (e.key === 'Escape') {
-        setAddingAnswer(null);
-        setDraft('');
-      }
+      if (e.key === 'Enter') doAddAnswer(sec.id, q.id);
+      if (e.key === 'Escape') { setAddingAnswer(null); setDraft(''); }
     },
-    style: {
-      padding: '6px 10px',
-      fontSize: 13
-    }
+    style: { padding: '6px 10px', fontSize: 13 }
   }), /*#__PURE__*/React.createElement(SwBtn, {
-    onClick: () => doAddAnswer(sec.id, q.id),
-    disabled: !draft.trim(),
-    style: {
-      padding: '5px 12px',
-      fontSize: 11
-    }
+    onClick: () => doAddAnswer(sec.id, q.id), disabled: !draft.trim(),
+    style: { padding: '5px 12px', fontSize: 11 }
   }, "Add"), /*#__PURE__*/React.createElement(SwBtn, {
-    ghost: true,
-    accent: SWC.muted,
-    onClick: () => {
-      setAddingAnswer(null);
-      setDraft('');
-    },
-    style: {
-      padding: '5px 8px',
-      fontSize: 11
-    }
+    ghost: true, accent: SWC.muted,
+    onClick: () => { setAddingAnswer(null); setDraft(''); },
+    style: { padding: '5px 8px', fontSize: 11 }
   }, "\xD7")) : /*#__PURE__*/React.createElement("button", {
     className: "fb-add-btn",
-    onClick: () => {
-      setAddingAnswer(q.id);
-      setDraft('');
-    }
-  }, "+ Add answer option")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: 8
-    }
+    onClick: () => { setAddingAnswer(q.id); setDraft(''); }
+  }, "+ Add answer option")),
+
+  /* ── Bottom bar: source + wire link ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }
   }, /*#__PURE__*/React.createElement("div", {
     className: "fb-source-tag"
   }, q.origin === 'network' ? 'Source: Network (required)' : q.origin === 'org' ? 'Source: Organization' : 'Source: Local', !q.givenTestPassed && /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: SWC.sup,
-      fontSize: 10
-    }
-  }, "MEANT-origin")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 6,
-      alignItems: 'center'
-    }
-  }, frameworks.length > 0 && q.options?.length > 0 && /*#__PURE__*/React.createElement("button", {
+    style: { color: SWC.sup, fontSize: 10 }
+  }, "MEANT-origin")), frameworks.length > 0 && q.options?.length > 0 && /*#__PURE__*/React.createElement("button", {
     className: "fb-wire-btn",
-    onClick: () => {
-      setWiringValue({
-        question: q,
-        value: q.options[0],
-        sectionIdx: secIdx
-      });
-      setMode('wire');
-    }
-  }, "Wire to frameworks \u2192"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 2
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => doMoveQuestion(sec.id, qIdx, -1),
-    disabled: qIdx === 0,
-    style: {
-      background: 'none',
-      border: '1px solid ' + SWC.border,
-      borderRadius: 4,
-      color: SWC.dim,
-      cursor: qIdx === 0 ? 'default' : 'pointer',
-      padding: '2px 6px',
-      fontSize: 11,
-      opacity: qIdx === 0 ? 0.3 : 1
-    }
-  }, "\u2191"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => doMoveQuestion(sec.id, qIdx, 1),
-    disabled: qIdx === sec.questions.length - 1,
-    style: {
-      background: 'none',
-      border: '1px solid ' + SWC.border,
-      borderRadius: 4,
-      color: SWC.dim,
-      cursor: qIdx === sec.questions.length - 1 ? 'default' : 'pointer',
-      padding: '2px 6px',
-      fontSize: 11,
-      opacity: qIdx === sec.questions.length - 1 ? 0.3 : 1
-    }
-  }, "\u2193"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => doRemoveQuestion(sec.id, q.id),
-    style: {
-      background: 'none',
-      border: '1px solid ' + SWC.border,
-      borderRadius: 4,
-      color: SWC.dim,
-      cursor: 'pointer',
-      padding: '2px 6px',
-      fontSize: 11
-    },
-    onMouseEnter: e => e.currentTarget.style.color = SWC.red,
-    onMouseLeave: e => e.currentTarget.style.color = SWC.dim
-  }, "\xD7")))))), addingQuestion === sec.id ? /*#__PURE__*/React.createElement("div", {
+    onClick: () => { setWiringValue({ question: q, value: q.options[0], sectionIdx: secIdx }); setMode('wire'); }
+  }, "Wire to frameworks \u2192"))))), addingQuestion === sec.id ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '14px 18px',
       borderTop: sec.questions.length > 0 ? `1px solid ${SWC.border}` : 'none'
@@ -10876,7 +10751,7 @@ const FormBuilder = ({
       setDraft('');
       setDraft2('');
     }
-  }, "+ Add question")))), addingSection ? /*#__PURE__*/React.createElement("div", {
+  }, "+ Add question"))), addingSection ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 16,
       border: `1px solid ${SWC.border}`,
@@ -13042,45 +12917,22 @@ const SiFormItem = ({
   sourceType
 }) => {
   const dotClass = isActive ? 'current' : form._unread ? 'unread' : 'read';
-  const matColor = {
-    draft: 'var(--blue)',
-    trial: 'var(--gold)',
-    normative: 'var(--green)',
-    deprecated: 'var(--red)'
-  }[form.maturity] || 'var(--tx-2)';
-  const srcColor = sourceType === 'network' ? 'var(--teal)' : sourceType === 'org' ? 'var(--blue)' : 'var(--tx-2)';
-  const srcLabel = sourceType === 'network' ? 'Network' : sourceType === 'org' ? 'Org' : 'Local';
+  const maturity = form.maturity || 'draft';
+  const matLabel = { draft: 'Draft', trial: 'Trial', normative: 'Adopted', de_facto: 'De facto', deprecated: 'Deprecated' }[maturity] || maturity;
   return /*#__PURE__*/React.createElement("div", {
     className: `si-form-item${isActive ? ' active' : ''}`,
     onClick: onClick
   }, /*#__PURE__*/React.createElement("div", {
     className: `si-dot ${dotClass}`
   }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      minWidth: 0
-    }
+    style: { flex: 1, minWidth: 0 }
   }, /*#__PURE__*/React.createElement("div", {
     className: "si-form-name"
   }, form.name), /*#__PURE__*/React.createElement("div", {
     className: "si-form-meta"
   }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: srcColor
-    }
-  }, srcLabel), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--tx-3)'
-    }
-  }, "\xB7"), /*#__PURE__*/React.createElement("span", null, "v", form.version), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--tx-3)'
-    }
-  }, "\xB7"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: matColor
-    }
-  }, form.maturity || 'draft')), form._hasUpdate && /*#__PURE__*/React.createElement("div", {
+    className: `si-form-status ${maturity}`
+  }, matLabel), /*#__PURE__*/React.createElement("span", null, "v", form.version)), form._hasUpdate && /*#__PURE__*/React.createElement("div", {
     className: "si-form-update"
   }, "\u25B2 new")));
 };
