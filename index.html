@@ -1351,6 +1351,14 @@ const I = ({
       fill: "currentColor",
       stroke: "none"
     })),
+    mail: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
+      d: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
+    }), /*#__PURE__*/React.createElement("polyline", {
+      points: "22,6 12,13 2,6"
+    })),
+    messageSquare: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
+      d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+    })),
     dodeca: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
       d: "M12 1L22.46 8.6L18.47 20.9L5.53 20.9L1.54 8.6Z M14.94 7.95L16.76 13.55L12 17L7.24 13.55L9.06 7.95Z M12 1L14.94 7.95 M22.46 8.6L16.76 13.55 M18.47 20.9L12 17 M5.53 20.9L7.24 13.55 M1.54 8.6L9.06 7.95"
     }))
@@ -29733,6 +29741,46 @@ const ProviderApp = ({
     }
   };
 
+  // ─── Share invite via email, SMS, or native share ───
+  const getInviteShareText = roomId => {
+    const link = getInviteUrl(roomId);
+    return `You've been invited to securely manage your information on Khora.\n\nJoin here: ${link}\n\n${getSetupInstructions(roomId)}`;
+  };
+
+  const shareInviteViaEmail = roomId => {
+    const subject = encodeURIComponent('You\'re invited to Khora');
+    const body = encodeURIComponent(getInviteShareText(roomId));
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
+  };
+
+  const shareInviteViaSMS = roomId => {
+    const body = encodeURIComponent(getInviteShareText(roomId));
+    // Use sms: URI — &body= works on most platforms, ;body= on some iOS versions
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    window.open(`sms:${isIOS ? '&' : '?'}body=${body}`, '_self');
+  };
+
+  const shareInviteNative = async roomId => {
+    const text = getInviteShareText(roomId);
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Khora Invite',
+          text,
+          url: getInviteUrl(roomId)
+        });
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          showToast('Share failed: ' + e.message, 'warn');
+        }
+      }
+    } else {
+      // Fallback: copy to clipboard
+      await copyToClipboard(text, 'share');
+      showToast('Invite copied to clipboard (share not supported in this browser)', 'info');
+    }
+  };
+
   // ─── Import completion handler ───
   const handleImportComplete = importResults => {
     const newRecords = importResults.created.map(r => ({
@@ -38714,6 +38762,60 @@ const ProviderApp = ({
       overflow: 'auto'
     }
   }, getSetupInstructions(clientInviteModal.roomId))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "SHARE INVITE"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => shareInviteViaEmail(clientInviteModal.roomId),
+    className: "b-gho",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flex: 1,
+      justifyContent: 'center',
+      minWidth: 120
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "mail",
+    s: 14
+  }), "Email"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => shareInviteViaSMS(clientInviteModal.roomId),
+    className: "b-gho",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flex: 1,
+      justifyContent: 'center',
+      minWidth: 120
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "messageSquare",
+    s: 14
+  }), "Text / SMS"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => shareInviteNative(clientInviteModal.roomId),
+    className: "b-gho",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      flex: 1,
+      justifyContent: 'center',
+      minWidth: 120
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "share",
+    s: 14
+  }), "More..."))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
