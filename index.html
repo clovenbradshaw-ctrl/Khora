@@ -3372,59 +3372,7 @@ class KhoraService {
   }
 }
 const svc = new KhoraService();
-
-/* ═══════════════════ WEBHOOK / AIRTABLE BRIDGE ═══════════════════
- * Operator Manifest:
- *   CON(webhook.browser, {dest: n8n_endpoint, auth: access_token}) — webhook_transport
- *   SYN(webhook.tables+records, {via: parallel_fetch}) — hydrated_dataset
- *
- * Triad Summary:
- *   Existence:       —
- *   Structure:       CON (transport link), SYN (parallel hydration)
- *   Interpretation:  —
- *   No REC — data passes through unchanged. No existence mutations.
- *
- * Fetches table and record data from n8n webhook endpoints backed by
- * the amino Postgres schema. Auth is forwarded via query-param so the
- * browser never sends an Authorization header, avoiding CORS preflight.
- * ═══════════════════════════════════════════════════════════════════ */
 const WEBHOOK_BASE = 'https://n8n.intelechia.com/webhook';
-
-// CON(webhook.browser, {dest: n8n_endpoint, auth: access_token}) — webhook_transport
-async function webhookFetch(path, token) {
-  const sep = path.includes('?') ? '&' : '?';
-  const url = `${WEBHOOK_BASE}${path}${token ? `${sep}access_token=${encodeURIComponent(token)}` : ''}`;
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    const body = await resp.json().catch(() => ({}));
-    throw new Error(body.error || body.message || `Webhook ${resp.status}`);
-  }
-  return resp.json();
-}
-
-// SYN(webhook.tables+records, {via: parallel_fetch}) — hydrated_dataset — merges table metadata with record data
-async function hydrateFromWebhooks(token) {
-  const {
-    tables
-  } = await webhookFetch('/api/tables', token);
-  const allTables = {};
-  await Promise.all(tables.map(async t => {
-    try {
-      const data = await webhookFetch(`/api/records/${encodeURIComponent(t.table_id)}`, token);
-      allTables[t.table_id] = {
-        ...t,
-        records: data.records || []
-      };
-    } catch (e) {
-      console.warn(`Failed to hydrate table ${t.table_id}:`, e.message);
-      allTables[t.table_id] = {
-        ...t,
-        records: []
-      };
-    }
-  }));
-  return allTables;
-}
 
 /* ═══════════════════ DOMAIN CONFIG (§C.0) ═══════════════════
  * Operator Manifest:
@@ -39804,7 +39752,7 @@ const App = () => {
   const [activeContext, setActiveContext] = useState(null);
   const [detectedRoles, setDetectedRoles] = useState(null); // roles from inferRolesFromRooms
   const [toast, setToast] = useState(null);
-  const [webhookData, setWebhookData] = useState(null);
+
   const [restoring, setRestoring] = useState(true);
   const [restoreError, setRestoreError] = useState(null); // {type:'expired'|'network', message?:string}
   const [detectingRoles, setDetectingRoles] = useState(false);
@@ -39887,8 +39835,6 @@ const App = () => {
       // Ensure restored session bypasses welcome screen (even if khora_welcomed was cleared)
       setWelcomed(true);
       try { localStorage.setItem('khora_welcomed', '1'); } catch {}
-      // Hydrate webhook data in background (non-blocking — don't delay app render)
-      hydrateFromWebhooks(svc._token).then(tables => setWebhookData(tables)).catch(e => console.warn('Webhook hydration failed:', e.message));
       await detectContexts();
     } catch (e) { console.warn('Session restore error:', e?.message); } finally {
       setRestoring(false);
@@ -39901,8 +39847,6 @@ const App = () => {
     setSession(s);
     // Detect contexts + roles from room membership (MVP §Screen 1)
     await detectContexts();
-    // Hydrate Airtable data from n8n webhooks in background (non-blocking)
-    hydrateFromWebhooks(svc._token).then(tables => setWebhookData(tables)).catch(e => console.warn('Webhook hydration failed (CORS or network):', e.message));
   };
   if (restoring || detectingRoles) return /*#__PURE__*/React.createElement("div", {
     className: "grid-bg",
@@ -40119,19 +40063,16 @@ const App = () => {
     setAvailableContexts([]);
     setActiveContext(null);
     setDetectedRoles(null);
-    setWebhookData(null);
     setWelcomed(false);
   };
   return /*#__PURE__*/React.createElement(React.Fragment, null, activeContext === 'client' ? /*#__PURE__*/React.createElement(ClientApp, {
     session: session,
     onLogout: handleLogout,
-    showToast: showToast,
-    webhookData: webhookData
+    showToast: showToast
   }) : /*#__PURE__*/React.createElement(ProviderApp, {
     session: session,
     onLogout: handleLogout,
-    showToast: showToast,
-    webhookData: webhookData
+    showToast: showToast
   }), availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
