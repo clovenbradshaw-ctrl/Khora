@@ -99,6 +99,10 @@ html.light .beta-banner{background:rgba(138,109,30,0.12);color:var(--gold);borde
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .anim-up{animation:fadeUp .3s ease both}.anim-in{animation:fadeIn .25s ease both}.anim-sl{animation:slideR .28s ease both}
+.dodeca-orb{position:fixed;top:38px;right:14px;z-index:50;width:36px;height:36px;border-radius:50%;background:rgba(20,23,32,0.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(176,144,212,0.15);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(167,139,250,0.08);cursor:default;transition:box-shadow .3s ease,border-color .3s ease;}
+.dodeca-orb:hover{box-shadow:0 2px 20px rgba(167,139,250,0.22);border-color:rgba(176,144,212,0.35);}
+html.light .dodeca-orb{background:rgba(245,245,247,0.65);border-color:rgba(105,56,192,0.18);box-shadow:0 2px 12px rgba(105,56,192,0.08);}
+html.light .dodeca-orb:hover{box-shadow:0 2px 20px rgba(105,56,192,0.18);border-color:rgba(105,56,192,0.32);}
 input,textarea,select{font-family:var(--sans);background:var(--bg-1);border:1px solid var(--border-1);color:var(--tx-0);padding:11px 15px;border-radius:var(--r);font-size:14.5px;outline:none;transition:border .2s,box-shadow .2s;width:100%;}
 input:focus,textarea:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
 input::placeholder,textarea::placeholder{color:var(--tx-3)}textarea{resize:vertical;min-height:72px;line-height:1.55}
@@ -1362,6 +1366,73 @@ const I = ({
       flexShrink: 0
     }
   }, d[n]);
+};
+
+/* ═══════════════════ SPINNING DODECA ICON ═══════════════════ */
+const SpinningDodeca = ({ size = 32 }) => {
+  const canvasRef = useRef(null);
+  const animRef = useRef(null);
+  const anglesRef = useRef({ ax: 0.3, ay: 0.5 });
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    c.width = size * dpr;
+    c.height = size * dpr;
+    ctx.scale(dpr, dpr);
+
+    const phi = (1 + Math.sqrt(5)) / 2, ip = 1 / phi;
+    const V = [
+      [-1,-1,-1],[-1,-1,1],[-1,1,-1],[-1,1,1],[1,-1,-1],[1,-1,1],[1,1,-1],[1,1,1],
+      [0,-ip,-phi],[0,-ip,phi],[0,ip,-phi],[0,ip,phi],
+      [-ip,-phi,0],[-ip,phi,0],[ip,-phi,0],[ip,phi,0],
+      [-phi,0,-ip],[-phi,0,ip],[phi,0,-ip],[phi,0,ip]
+    ];
+    const edges = [];
+    const thr = 2 / phi + 0.01;
+    for (let i = 0; i < 20; i++) for (let j = i + 1; j < 20; j++) {
+      const dx = V[i][0]-V[j][0], dy = V[i][1]-V[j][1], dz = V[i][2]-V[j][2];
+      if (Math.sqrt(dx*dx + dy*dy + dz*dz) < thr) edges.push([i, j]);
+    }
+
+    const draw = () => {
+      const a = anglesRef.current;
+      ctx.clearRect(0, 0, size, size);
+      a.ax += 0.004; a.ay += 0.006;
+      const light = document.documentElement.classList.contains('light');
+      const edgeRgb = light ? '105,56,192' : '176,144,212';
+      const vertRgb = light ? '130,80,200' : '212,184,240';
+      const sa = Math.sin(a.ax), ca = Math.cos(a.ax), sb = Math.sin(a.ay), cb = Math.cos(a.ay);
+      const P = V.map(v => {
+        const y1 = v[1]*ca - v[2]*sa, z1 = v[1]*sa + v[2]*ca;
+        const x2 = v[0]*cb - z1*sb, z2 = v[0]*sb + z1*cb;
+        const s = size * 0.27;
+        return [size/2 + x2*s, size/2 + y1*s, z2];
+      });
+      edges.forEach(e => {
+        const ea = P[e[0]], eb = P[e[1]];
+        const dz = (ea[2] + eb[2]) / 2;
+        const op = 0.2 + 0.5 * ((dz + 2) / 4);
+        ctx.beginPath(); ctx.moveTo(ea[0], ea[1]); ctx.lineTo(eb[0], eb[1]);
+        ctx.strokeStyle = 'rgba(' + edgeRgb + ',' + op + ')'; ctx.lineWidth = 0.8; ctx.stroke();
+      });
+      P.forEach(p => {
+        const op = 0.25 + 0.5 * ((p[2] + 2) / 4);
+        ctx.beginPath(); ctx.arc(p[0], p[1], 1, 0, 6.283);
+        ctx.fillStyle = 'rgba(' + vertRgb + ',' + op + ')'; ctx.fill();
+      });
+      animRef.current = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [size]);
+
+  return React.createElement('canvas', {
+    ref: canvasRef,
+    style: { width: size, height: size, display: 'block' }
+  });
 };
 
 /* ═══════════════════ THEME SYSTEM ═══════════════════ */
@@ -40077,7 +40148,10 @@ const App = () => {
     session: session,
     onLogout: handleLogout,
     showToast: showToast
-  }), availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("div", {
+    className: 'dodeca-orb',
+    title: 'Khora'
+  }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 28 })), availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
       bottom: 14,
