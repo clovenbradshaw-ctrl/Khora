@@ -38269,32 +38269,88 @@ const TransparencyPage = ({ onBack }) => {
     }
     setSourceCode(code);
 
-    // Parse EO section headers
+    // Parse EO section headers with full operator manifest extraction
     const lines = code.split('\n');
     const sections = [];
     const sectionRe = /\/\*\s*═{3,}\s*(.*?)\s*═{3,}\s*\*\//;
-    const operatorRe = /\/\*\s*═{3,}\s*(.*?)\s*═{3,}[\s\S]*?Triad Summary:([\s\S]*?)═{3,}/g;
     lines.forEach((line, i) => {
       const m = line.match(sectionRe);
       if (m) {
-        sections.push({ name: m[1].trim(), line: i + 1 });
+        sections.push({ name: m[1].trim(), line: i + 1, operators: [], triad: {}, manifestLines: [], definitions: [], emitOpCalls: [] });
       }
     });
+    // For each section, parse the Operator Manifest and Triad Summary from the header comment block
+    const opLineRe = /^\s*\*\s+(NUL|DES|INS|SEG|CON|SYN|ALT|SUP|REC)\(([^)]*)\)\s*—\s*(.*)$/;
+    const triadRe = /^\s*\*\s+(Existence|Structure|Interpretation):\s+(.*)$/;
+    const fnRe = /^(?:async\s+)?function\s+(\w+)/;
+    const constFnRe = /^const\s+(\w+)\s*=\s*(?:\([^)]*\)\s*=>|function|\(?\{)/;
+    const constCompRe = /^const\s+(\w+)\s*=\s*\(\s*\{/;
+    const emitOpRe = /emitOp\(\s*\S+,\s*'(NUL|DES|INS|SEG|CON|SYN|ALT|SUP|REC)',\s*dot\(([^)]*)\)/;
+    for (let si = 0; si < sections.length; si++) {
+      const sec = sections[si];
+      const endLine = si < sections.length - 1 ? sections[si + 1].line - 1 : lines.length;
+      // Scan the header comment block (first ~30 lines of section)
+      const headerEnd = Math.min(sec.line + 30, endLine);
+      for (let li = sec.line - 1; li < headerEnd; li++) {
+        const raw = lines[li] || '';
+        const opMatch = raw.match(opLineRe);
+        if (opMatch) {
+          sec.operators.push({ op: opMatch[1], target: opMatch[2].trim(), desc: opMatch[3].trim() });
+          sec.manifestLines.push(raw.replace(/^\s*\*\s+/, '').trim());
+        }
+        const triadMatch = raw.match(triadRe);
+        if (triadMatch) {
+          sec.triad[triadMatch[1]] = triadMatch[2].replace(/^\s*/, '').trim();
+        }
+      }
+      // Scan the section body for function/const definitions and emitOp calls
+      for (let li = sec.line - 1; li < endLine; li++) {
+        const raw = lines[li] || '';
+        const fnMatch = raw.match(fnRe);
+        if (fnMatch) sec.definitions.push({ name: fnMatch[1], line: li + 1, type: 'function' });
+        else {
+          const cfnMatch = raw.match(constFnRe);
+          if (cfnMatch) sec.definitions.push({ name: cfnMatch[1], line: li + 1, type: raw.includes('=>') ? 'arrow' : 'component' });
+        }
+        const emitMatch = raw.match(emitOpRe);
+        if (emitMatch) sec.emitOpCalls.push({ op: emitMatch[1], target: emitMatch[2].replace(/'/g, '').trim(), line: li + 1 });
+      }
+      // Deduplicate operators used
+      const opSet = new Set(sec.operators.map(o => o.op));
+      sec.emitOpCalls.forEach(c => opSet.add(c.op));
+      sec.allOps = [...opSet];
+    }
     setEoSections(sections);
     if (sections.length > 0) setActiveSection(sections[0]);
   }, []);
 
   const toggleCard = (id) => setExpandedCards(prev => ({ ...prev, [id]: !prev[id] }));
 
-  // Get code for a specific section
+  const [sourceView, setSourceView] = useState('code'); // 'code' | 'eomap' | 'info'
+  const [jumpToLine, setJumpToLine] = useState(null);
+
+  // Get code for a specific section (no arbitrary cap)
   const getSectionCode = (section) => {
     if (!sourceCode || !section) return '';
     const lines = sourceCode.split('\n');
     const startLine = section.line - 1;
-    // Find next section or end
     const nextSection = eoSections.find(s => s.line > section.line);
     const endLine = nextSection ? nextSection.line - 2 : lines.length;
-    return lines.slice(startLine, Math.min(endLine, startLine + 500)).join('\n');
+    return lines.slice(startLine, endLine).join('\n');
+  };
+
+  // Scroll code viewer to a specific line
+  const scrollToLine = (lineNum) => {
+    setSourceView('code');
+    setJumpToLine(lineNum);
+    setTimeout(() => {
+      const el = codeRef.current;
+      if (el) {
+        const lineHeight = 20;
+        const sectionStart = activeSection ? activeSection.line : 0;
+        el.scrollTop = (lineNum - sectionStart) * lineHeight;
+      }
+    }, 50);
   };
 
   // Filter sections by search
@@ -38368,7 +38424,7 @@ const TransparencyPage = ({ onBack }) => {
         React.createElement('p', { style: { marginBottom: 10 } },
           'Khora is a case management system built on Matrix, an open federated protocol for encrypted communication. Your data lives in encrypted Matrix rooms — not in a proprietary database controlled by any single organization.'),
         React.createElement('p', { style: { marginBottom: 10 } },
-          'Every state change in the system is governed by the EO (Elegant Objects) operation layer — a formal ontological framework with 9 canonical operators organized into 3 triads (Existence, Structure, Interpretation). This means every data change is traceable and auditable.'),
+          'Every state change in the system is governed by the EO (Epistemic Operations) layer — a formal ontological framework with 9 canonical operators organized into 3 triads (Existence, Structure, Interpretation). This means every data change is traceable and auditable.'),
         React.createElement('p', null,
           'The source code of this application is fully visible on this page. Nothing is hidden. You can inspect exactly what the software does, verify the privacy claims, and audit the EO operation logic yourself.'))),
 
@@ -38475,23 +38531,114 @@ const TransparencyPage = ({ onBack }) => {
           React.createElement('div', { style: { fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.5 } }, g.desc)))))));
 
   // ── Source Code Tab ──
+  const opBadgeColors = { NUL: 'var(--red, #e74c3c)', DES: 'var(--green)', INS: 'var(--teal)', SEG: 'var(--blue)', CON: 'var(--gold)', SYN: 'var(--purple, #9b59b6)', ALT: 'var(--gold)', SUP: 'var(--purple, #9b59b6)', REC: 'var(--red, #e74c3c)' };
+  const triadForOp = { NUL: 'Existence', DES: 'Existence', INS: 'Existence', SEG: 'Structure', CON: 'Structure', SYN: 'Structure', ALT: 'Interpretation', SUP: 'Interpretation', REC: 'Interpretation' };
+
+  // Build EO cross-reference: operator → sections that use it
+  const eoXref = useMemo(() => {
+    const xref = {};
+    OPERATORS.forEach(op => { xref[op] = []; });
+    eoSections.forEach(sec => {
+      const ops = new Set((sec.operators || []).map(o => o.op));
+      (sec.emitOpCalls || []).forEach(c => ops.add(c.op));
+      ops.forEach(op => { if (xref[op]) xref[op].push(sec); });
+    });
+    return xref;
+  }, [eoSections]);
+
+  // Section info panel (above code, shows manifest + definitions + emitOp calls)
+  const renderSectionInfo = (sec) => {
+    if (!sec) return null;
+    const hasManifest = sec.operators && sec.operators.length > 0;
+    const hasDefs = sec.definitions && sec.definitions.length > 0;
+    const hasEmitOps = sec.emitOpCalls && sec.emitOpCalls.length > 0;
+    const hasTriad = sec.triad && Object.keys(sec.triad).length > 0;
+    if (!hasManifest && !hasDefs && !hasEmitOps) return null;
+
+    return React.createElement('div', { style: { borderBottom: '1px solid var(--border-0)', background: 'var(--bg-2)', maxHeight: 280, overflow: 'auto' } },
+      // Operator Manifest
+      hasManifest && React.createElement('div', { style: { padding: '8px 16px', borderBottom: '1px solid var(--border-0)' } },
+        React.createElement('div', { style: { fontSize: 9, fontWeight: 700, color: 'var(--tx-3)', letterSpacing: '0.05em', marginBottom: 6 } }, 'OPERATOR MANIFEST'),
+        sec.operators.map((o, i) => React.createElement('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0', fontSize: 11, fontFamily: 'var(--mono)' } },
+          React.createElement('span', { style: { display: 'inline-block', padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700, color: '#fff', background: opBadgeColors[o.op] || 'var(--tx-3)', minWidth: 28, textAlign: 'center' } }, o.op),
+          React.createElement('span', { style: { color: 'var(--tx-1)' } }, o.target),
+          React.createElement('span', { style: { color: 'var(--tx-3)', fontSize: 10 } }, '— ' + o.desc)))),
+      // Triad Summary
+      hasTriad && React.createElement('div', { style: { padding: '6px 16px', borderBottom: '1px solid var(--border-0)', display: 'flex', gap: 12, flexWrap: 'wrap' } },
+        Object.entries(sec.triad).map(([triad, detail]) => React.createElement('div', { key: triad, style: { fontSize: 10, display: 'flex', alignItems: 'center', gap: 4 } },
+          React.createElement('span', { className: `tag tag-${triadColors[triad]}`, style: { fontSize: 8, padding: '1px 5px' } }, triad),
+          React.createElement('span', { style: { color: 'var(--tx-2)', fontFamily: 'var(--mono)' } }, detail)))),
+      // Definitions index + emitOp calls side by side
+      (hasDefs || hasEmitOps) && React.createElement('div', { style: { display: 'flex', gap: 0 } },
+        // Definitions
+        hasDefs && React.createElement('div', { style: { flex: 1, padding: '6px 16px', borderRight: hasEmitOps ? '1px solid var(--border-0)' : 'none' } },
+          React.createElement('div', { style: { fontSize: 9, fontWeight: 700, color: 'var(--tx-3)', letterSpacing: '0.05em', marginBottom: 4 } },
+            'DEFINITIONS (' + sec.definitions.length + ')'),
+          React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 3 } },
+            sec.definitions.slice(0, 20).map((d, i) => React.createElement('span', {
+              key: i,
+              onClick: () => scrollToLine(d.line),
+              style: { fontSize: 10, fontFamily: 'var(--mono)', padding: '2px 6px', borderRadius: 3, background: 'var(--bg-3)', color: d.type === 'function' ? 'var(--blue)' : 'var(--teal)', cursor: 'pointer', whiteSpace: 'nowrap' },
+              title: d.type + ' at line ' + d.line
+            }, d.name)))),
+        // emitOp calls
+        hasEmitOps && React.createElement('div', { style: { flex: 1, padding: '6px 16px' } },
+          React.createElement('div', { style: { fontSize: 9, fontWeight: 700, color: 'var(--tx-3)', letterSpacing: '0.05em', marginBottom: 4 } },
+            'EO CALLS (' + sec.emitOpCalls.length + ')'),
+          React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 3 } },
+            sec.emitOpCalls.slice(0, 20).map((c, i) => React.createElement('span', {
+              key: i,
+              onClick: () => scrollToLine(c.line),
+              style: { fontSize: 10, fontFamily: 'var(--mono)', padding: '2px 6px', borderRadius: 3, background: 'var(--bg-3)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }
+            },
+              React.createElement('span', { style: { color: opBadgeColors[c.op], fontWeight: 700 } }, c.op),
+              React.createElement('span', { style: { color: 'var(--tx-2)' } }, c.target.split(', ').slice(0, 2).join('.'))))))));
+  };
+
+  // EO Map: cross-reference view showing how operators map to sections
+  const renderEoMap = () => React.createElement('div', { style: { padding: 16, overflow: 'auto', flex: 1 } },
+    React.createElement('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 4 } }, 'EO Operator → Section Map'),
+    React.createElement('p', { style: { fontSize: 11, color: 'var(--tx-2)', marginBottom: 14, lineHeight: 1.5 } },
+      'Shows which sections declare or invoke each EO operator. Click a section to navigate to its code.'),
+    // Triads
+    ['Existence', 'Structure', 'Interpretation'].map(triad => React.createElement('div', { key: triad, style: { marginBottom: 16 } },
+      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 } },
+        React.createElement('span', { className: `tag tag-${triadColors[triad]}`, style: { fontSize: 9, padding: '2px 8px' } }, triad)),
+      OPERATORS.filter(op => triadForOp[op] === triad).map(op => React.createElement('div', { key: op, style: { marginBottom: 10, paddingLeft: 8 } },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 } },
+          React.createElement('span', { style: { display: 'inline-block', padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 700, color: '#fff', background: opBadgeColors[op], minWidth: 32, textAlign: 'center' } }, op),
+          React.createElement('span', { style: { fontSize: 11, fontWeight: 600, color: 'var(--tx-1)' } },
+            eoExplainer.find(e => e.op === op)?.name || ''),
+          React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)', marginLeft: 4 } },
+            (eoXref[op] || []).length + ' section' + ((eoXref[op] || []).length !== 1 ? 's' : ''))),
+        React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4, paddingLeft: 4 } },
+          (eoXref[op] || []).map((sec, i) => React.createElement('span', {
+            key: i,
+            onClick: () => { setActiveSection(sec); setSourceView('code'); },
+            style: { fontSize: 10, fontFamily: 'var(--mono)', padding: '3px 8px', borderRadius: 4, background: 'var(--bg-3)', color: 'var(--tx-1)', cursor: 'pointer', border: '1px solid var(--border-0)', whiteSpace: 'nowrap' },
+            onMouseEnter: e => { e.currentTarget.style.background = 'var(--bg-4)'; },
+            onMouseLeave: e => { e.currentTarget.style.background = 'var(--bg-3)'; }
+          }, sec.name))))))));
+
   const renderSource = () => React.createElement('div', { className: 'anim-up', style: { display: 'flex', gap: 0, border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', overflow: 'hidden', height: 'calc(100vh - 220px)', minHeight: 500 } },
-    // Section navigator sidebar
-    React.createElement('div', { style: { width: 260, minWidth: 260, background: 'var(--bg-2)', borderRight: '1px solid var(--border-0)', display: 'flex', flexDirection: 'column' } },
+    // Section navigator sidebar (enhanced with operator badges)
+    React.createElement('div', { style: { width: 280, minWidth: 280, background: 'var(--bg-2)', borderRight: '1px solid var(--border-0)', display: 'flex', flexDirection: 'column' } },
       React.createElement('div', { style: { padding: '12px 10px', borderBottom: '1px solid var(--border-0)' } },
         React.createElement('input', {
           type: 'text', placeholder: 'Search sections…',
           value: searchQuery, onChange: e => setSearchQuery(e.target.value),
           style: { fontSize: 12, padding: '7px 10px' }
         })),
-      React.createElement('div', { style: { padding: '4px 0', fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', textAlign: 'center', borderBottom: '1px solid var(--border-0)' } },
-        filteredSections.length + ' EO sections found'),
+      React.createElement('div', { style: { padding: '6px 10px', fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', textAlign: 'center', borderBottom: '1px solid var(--border-0)', display: 'flex', justifyContent: 'center', gap: 8 } },
+        React.createElement('span', null, filteredSections.length + ' sections'),
+        React.createElement('span', null, '·'),
+        React.createElement('span', null, eoSections.reduce((n, s) => n + (s.emitOpCalls?.length || 0), 0) + ' EO calls')),
       React.createElement('div', { style: { flex: 1, overflow: 'auto', padding: '4px 0' } },
         filteredSections.map((sec, i) => React.createElement('div', {
           key: i,
-          onClick: () => setActiveSection(sec),
+          onClick: () => { setActiveSection(sec); setSourceView('code'); },
           style: {
-            padding: '7px 10px', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--mono)',
+            padding: '7px 10px', cursor: 'pointer', fontSize: 11,
             background: activeSection?.line === sec.line ? 'var(--bg-4)' : 'transparent',
             borderLeft: activeSection?.line === sec.line ? '2px solid var(--gold)' : '2px solid transparent',
             color: activeSection?.line === sec.line ? 'var(--tx-0)' : 'var(--tx-2)',
@@ -38500,34 +38647,78 @@ const TransparencyPage = ({ onBack }) => {
           onMouseEnter: e => { if (activeSection?.line !== sec.line) e.currentTarget.style.background = 'var(--bg-3)'; },
           onMouseLeave: e => { if (activeSection?.line !== sec.line) e.currentTarget.style.background = 'transparent'; }
         },
-          React.createElement('div', { style: { fontWeight: activeSection?.line === sec.line ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, sec.name),
-          React.createElement('div', { style: { fontSize: 9, color: 'var(--tx-3)', marginTop: 2 } }, 'line ' + sec.line))))),
-    // Code viewer
+          React.createElement('div', { style: { fontWeight: activeSection?.line === sec.line ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--mono)', fontSize: 10.5 } }, sec.name),
+          React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 } },
+            React.createElement('span', { style: { fontSize: 9, color: 'var(--tx-3)', fontFamily: 'var(--mono)' } }, 'L' + sec.line),
+            (sec.allOps && sec.allOps.length > 0) && React.createElement('span', { style: { display: 'flex', gap: 2, marginLeft: 4 } },
+              sec.allOps.slice(0, 5).map((op, j) => React.createElement('span', {
+                key: j,
+                style: { fontSize: 7, padding: '0px 3px', borderRadius: 2, fontWeight: 700, color: '#fff', background: opBadgeColors[op] || 'var(--tx-3)', lineHeight: '14px' }
+              }, op))),
+            sec.definitions && sec.definitions.length > 0 && React.createElement('span', { style: { fontSize: 9, color: 'var(--tx-3)', marginLeft: 'auto', fontFamily: 'var(--mono)' } },
+              sec.definitions.length + ' fn')))))),
+    // Main content area
     React.createElement('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--bg-1)', minWidth: 0 } },
-      React.createElement('div', { style: { padding: '10px 16px', borderBottom: '1px solid var(--border-0)', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-2)' } },
+      // Header with view toggle
+      React.createElement('div', { style: { padding: '8px 16px', borderBottom: '1px solid var(--border-0)', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-2)' } },
         React.createElement(I, { n: 'eye', s: 14, c: 'var(--gold)' }),
         React.createElement('span', { style: { fontSize: 13, fontWeight: 600 } }, activeSection?.name || 'Source Code'),
-        React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginLeft: 'auto' } },
-          activeSection ? 'line ' + activeSection.line : sourceCode.split('\n').length + ' total lines'),
+        // View toggle buttons
+        React.createElement('div', { style: { display: 'flex', gap: 2, marginLeft: 'auto', background: 'var(--bg-3)', borderRadius: 'var(--r)', padding: 2 } },
+          [{ id: 'code', label: 'Code' }, { id: 'eomap', label: 'EO Map' }].map(v => React.createElement('button', {
+            key: v.id,
+            onClick: () => setSourceView(v.id),
+            style: { fontSize: 10, padding: '3px 10px', borderRadius: 3, border: 'none', cursor: 'pointer', fontWeight: sourceView === v.id ? 700 : 400, background: sourceView === v.id ? 'var(--bg-1)' : 'transparent', color: sourceView === v.id ? 'var(--tx-0)' : 'var(--tx-3)', transition: 'all .12s' }
+          }, v.label))),
         React.createElement('span', { style: { fontSize: 9, color: 'var(--tx-3)', fontFamily: 'var(--mono)', background: 'var(--bg-3)', padding: '2px 6px', borderRadius: 'var(--r)' } }, 'LIVE · READ-ONLY')),
-      React.createElement('pre', {
+      // Section info panel (manifests, definitions, emitOp calls)
+      sourceView === 'code' && renderSectionInfo(activeSection),
+      // EO Map view
+      sourceView === 'eomap' && renderEoMap(),
+      // Code viewer with EO highlighting
+      sourceView === 'code' && React.createElement('pre', {
         ref: codeRef,
         style: { flex: 1, overflow: 'auto', padding: '12px 0', margin: 0, fontFamily: 'var(--mono)', fontSize: 11.5, lineHeight: 1.6, color: 'var(--tx-1)', whiteSpace: 'pre', tabSize: 2 }
       },
-        (activeSection ? getSectionCode(activeSection) : sourceCode.slice(0, 5000)).split('\n').map((line, i) => React.createElement('div', {
-          key: i,
-          style: { display: 'flex', paddingRight: 16, minHeight: 20 }
-        },
-          React.createElement('span', { style: { width: 52, textAlign: 'right', paddingRight: 12, color: 'var(--tx-3)', userSelect: 'none', flexShrink: 0, fontSize: 10 } },
-            (activeSection ? activeSection.line + i : i + 1)),
-          React.createElement('span', { style: {
-            flex: 1, paddingLeft: 4,
-            color: line.trim().startsWith('/*') || line.trim().startsWith('*') || line.trim().startsWith('//') ? 'var(--tx-3)' :
-                   line.includes('const ') || line.includes('function ') || line.includes('async ') ? 'var(--blue)' :
-                   line.match(/['"`]/) ? 'var(--green)' : 'var(--tx-1)'
-          } }, line || ' '))))));
+        (activeSection ? getSectionCode(activeSection) : sourceCode.slice(0, 5000)).split('\n').map((line, i) => {
+          const lineNum = activeSection ? activeSection.line + i : i + 1;
+          const isEmitOp = line.includes('emitOp(');
+          const isComment = line.trim().startsWith('/*') || line.trim().startsWith('*') || line.trim().startsWith('//');
+          const isDef = line.match(/^(?:async\s+)?function\s+/) || line.match(/^const\s+\w+\s*=/);
+          const isSectionHeader = line.includes('═══');
+          return React.createElement('div', {
+            key: i,
+            style: {
+              display: 'flex', paddingRight: 16, minHeight: 20,
+              background: isEmitOp ? 'rgba(243, 156, 18, 0.06)' : isSectionHeader ? 'rgba(52, 152, 219, 0.04)' : 'transparent'
+            }
+          },
+            React.createElement('span', { style: { width: 52, textAlign: 'right', paddingRight: 12, color: isEmitOp ? 'var(--gold)' : 'var(--tx-3)', userSelect: 'none', flexShrink: 0, fontSize: 10, fontWeight: isEmitOp ? 700 : 400 } }, lineNum),
+            isEmitOp ? React.createElement('span', { style: { flex: 1, paddingLeft: 4 } },
+              (() => {
+                const parts = line.split(/(emitOp\([^,]+,\s*'(?:NUL|DES|INS|SEG|CON|SYN|ALT|SUP|REC)')/);
+                return parts.map((part, pi) => {
+                  const m = part.match(/emitOp\([^,]+,\s*'(NUL|DES|INS|SEG|CON|SYN|ALT|SUP|REC)'/);
+                  if (m) return React.createElement('span', { key: pi },
+                    React.createElement('span', { style: { color: 'var(--gold)', fontWeight: 600 } }, 'emitOp'),
+                    React.createElement('span', { style: { color: 'var(--tx-1)' } }, part.slice(6, part.indexOf("'" + m[1] + "'"))),
+                    React.createElement('span', { style: { display: 'inline-block', padding: '0 4px', borderRadius: 2, fontSize: 10, fontWeight: 700, color: '#fff', background: opBadgeColors[m[1]], margin: '0 1px' } }, m[1]),
+                    React.createElement('span', { style: { color: 'var(--tx-1)' } }, "'"));
+                  return React.createElement('span', { key: pi, style: { color: 'var(--tx-1)' } }, part);
+                });
+              })()
+            ) : React.createElement('span', { style: {
+              flex: 1, paddingLeft: 4,
+              color: isComment ? 'var(--tx-3)' :
+                     isSectionHeader ? 'var(--blue)' :
+                     isDef ? 'var(--blue)' :
+                     line.includes("'NUL'") || line.includes("'DES'") || line.includes("'INS'") || line.includes("'SEG'") || line.includes("'CON'") || line.includes("'SYN'") || line.includes("'ALT'") || line.includes("'SUP'") || line.includes("'REC'") ? 'var(--gold)' :
+                     line.match(/['"`]/) ? 'var(--green)' : 'var(--tx-1)',
+              fontWeight: isDef ? 600 : isSectionHeader ? 700 : 400
+            } }, line || ' '));
+        }))));
 
-  return React.createElement('div', { className: 'anim-up', style: { maxWidth: 1000, margin: '0 auto' } },
+  return React.createElement('div', { className: 'anim-up', style: { maxWidth: activeTab === 'source' ? 1400 : 1000, margin: '0 auto', transition: 'max-width .3s' } },
     // Header
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 } },
       onBack && React.createElement('button', { onClick: onBack, className: 'b-gho b-sm', style: { display: 'flex', alignItems: 'center', gap: 4 } },
