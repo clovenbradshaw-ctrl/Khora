@@ -206,15 +206,15 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 /* ═══ Form Builder / Schema Builder UX ═══ */
 /* fb-canvas, fb-header, fb-header-title, fb-header-meta removed — now inline */
 /* ── Progress Steps ── */
-.fb-progress{display:flex;align-items:center;gap:0}
-.fb-step{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;transition:all .2s}
+.fb-progress{display:flex;align-items:center;gap:4px;justify-content:center;padding:6px 0}
+.fb-step{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;transition:all .2s}
 .fb-step.active{background:var(--teal-dim)}
-.fb-step-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+.fb-step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-size:11px;font-weight:700;background:var(--border-1);color:var(--tx-3);transition:all .2s}
 .fb-step.active .fb-step-num{background:var(--teal);color:var(--bg-0)}
 .fb-step-label{font-size:12px;font-weight:500;color:var(--tx-3);transition:color .2s}
 .fb-step.active .fb-step-label{color:var(--teal)}
-.fb-step-line{width:24px;height:1px;background:var(--border-1);margin:0 2px}
+.fb-step-line{width:28px;height:1px;background:var(--border-1);margin:0 4px}
 
 /* ── Mode Toggle (pill style) ── */
 .fb-mode-toggle{display:flex;gap:6px;align-items:center}
@@ -224,26 +224,26 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .fb-mode-btn:hover:not(.active){border-color:var(--border-2);color:var(--tx-1)}
 
 /* ── Sections ── */
-.fb-section{border:1px solid var(--border-0);border-radius:var(--r-lg);margin-bottom:12px;overflow:hidden;background:var(--bg-1)}
-.fb-section-header{padding:10px 18px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .15s}
+.fb-section{border:1px solid var(--border-0);border-radius:var(--r-lg);margin-bottom:16px;overflow:hidden;background:var(--bg-1)}
+.fb-section-header{padding:12px 20px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .15s}
 .fb-section-header:hover{background:var(--bg-2)}
 .fb-section-title{font-size:12px;font-weight:600;color:var(--tx-2);display:flex;align-items:center;gap:8px;
   letter-spacing:.03em;text-transform:uppercase;font-family:var(--mono)}
 .fb-section-count{font-size:11px;color:var(--tx-3);font-family:var(--mono)}
 
 /* ── Questions ── */
-.fb-question{padding:14px 16px;border-bottom:1px solid var(--border-0);transition:background .15s;position:relative}
+.fb-question{padding:16px 20px;border-bottom:1px solid var(--border-0);transition:background .15s;position:relative}
 .fb-question:last-child{border-bottom:none}
 .fb-question:hover{background:var(--bg-2)}
-.fb-question-meta{font-size:11px;color:var(--tx-3);margin-bottom:3px;display:flex;align-items:center;gap:6px}
-.fb-question-prompt{font-size:14px;font-weight:500;color:var(--tx-0);margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.fb-question-meta{font-size:11px;color:var(--tx-3);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.fb-question-prompt{font-size:14.5px;font-weight:500;color:var(--tx-0);margin-bottom:10px;display:flex;align-items:center;gap:8px}
 .fb-question-type{font-size:11px;color:var(--tx-2);font-family:var(--mono);padding:2px 8px;background:var(--bg-3);border-radius:3px}
-.fb-question-actions{position:absolute;top:12px;right:14px;display:flex;gap:2px;opacity:0;transition:opacity .15s}
+.fb-question-actions{position:absolute;top:14px;right:16px;display:flex;gap:2px;opacity:0;transition:opacity .15s}
 .fb-question:hover .fb-question-actions{opacity:1}
 
 /* ── Answers ── */
-.fb-answer-list{margin-top:10px;display:flex;flex-direction:column;gap:4px}
-.fb-answer{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;transition:all .12s;cursor:pointer;border:1px solid transparent}
+.fb-answer-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.fb-answer{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;transition:all .12s;cursor:pointer;border:1px solid transparent}
 .fb-answer:hover{background:var(--bg-3);border-color:var(--border-0)}
 .fb-answer-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-2);flex-shrink:0}
 .fb-answer-check{width:16px;height:16px;border-radius:3px;border:1.5px solid var(--border-2);flex-shrink:0}
@@ -257,7 +257,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 
 /* ── Form name ── */
 .fb-form-name{font-size:22px;font-weight:700;font-family:var(--serif);letter-spacing:-.02em;color:var(--tx-0);
-  border:none;background:transparent;outline:none;width:100%;border-bottom:2px solid transparent;transition:border-color .2s;padding:2px 0}
+  border:none;background:transparent;outline:none;width:100%;max-width:100%;border-bottom:2px solid transparent;transition:border-color .2s;padding:2px 0;overflow:hidden;text-overflow:ellipsis}
 .fb-form-name:focus{border-bottom-color:var(--teal)}
 .fb-wire-btn{font-size:12px;color:var(--teal);cursor:pointer;padding:4px 10px;border:1px solid rgba(62,201,176,.2);
   border-radius:var(--r);background:var(--teal-dim);transition:all .15s;font-family:inherit;font-weight:500}
@@ -273,7 +273,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .fb-nudge-suggestion:hover{border-color:var(--blue);color:var(--blue);background:rgba(91,156,245,.06)}
 
 /* Wiring Panel */
-.fb-wire-panel{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:90vw;background:var(--bg-1);
+.fb-wire-panel{position:fixed;top:0;right:0;bottom:0;width:520px;min-width:340px;max-width:90vw;background:var(--bg-1);
   border-left:1px solid var(--border-0);z-index:40;display:flex;flex-direction:column;
   animation:slideInRight .2s ease both;box-shadow:-8px 0 32px rgba(0,0,0,.3)}
 @keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}
@@ -341,11 +341,11 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 /* ═══ Schema Builder Layout ═══ */
 @keyframes siPulse{0%,100%{opacity:1}50%{opacity:.5}}
 @keyframes notifSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
-.si-wrap{display:flex;height:calc(100vh - 104px);overflow:hidden;margin:-24px;border-radius:var(--r-lg);border:1px solid var(--border-0)}
-.si-sidebar{width:280px;min-width:280px;border-right:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2);overflow:hidden}
+.si-wrap{display:flex;gap:0;height:calc(100vh - 104px);overflow:hidden;margin:-24px;border-radius:var(--r-lg);border:1px solid var(--border-0)}
+.si-sidebar{width:280px;min-width:280px;border-right:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2);overflow:hidden;flex-shrink:0}
 .si-sidebar-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
-.si-canvas{flex:1;min-width:0;overflow:auto;padding:20px}
-.si-context{width:260px;min-width:260px;border-left:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2);overflow-y:auto;transition:width 200ms ease-out,min-width 200ms ease-out,opacity 150ms}
+.si-canvas{flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;padding:24px 28px}
+.si-context{width:260px;min-width:260px;border-left:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2);overflow-y:auto;flex-shrink:0;transition:width 200ms ease-out,min-width 200ms ease-out,opacity 150ms}
 .si-context.collapsed{width:36px;min-width:36px;overflow:hidden}
 .si-header{padding:14px 16px 10px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between}
 .si-search{margin:8px 12px;position:relative}
@@ -389,9 +389,9 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .si-lineage-connector::before{content:'';width:1px;height:14px;background:var(--border-1);flex-shrink:0}
 .si-adopt-bar{height:4px;border-radius:2px;background:var(--border-0);overflow:hidden;margin:6px 0 10px}
 .si-adopt-fill{height:100%;background:var(--teal);border-radius:2px;transition:width 300ms ease-out}
-.si-breadcrumb{display:flex;align-items:center;gap:0;font-size:12px;color:var(--tx-2);font-family:var(--sans)}
-.si-breadcrumb span.sep{color:var(--tx-3);padding:0 6px;font-size:10px}
-.si-breadcrumb span.current{color:var(--tx-0);font-weight:600}
+.si-breadcrumb{display:flex;align-items:center;gap:0;font-size:12px;color:var(--tx-2);font-family:var(--sans);overflow:hidden;min-width:0;flex:1}
+.si-breadcrumb span.sep{color:var(--tx-3);padding:0 6px;font-size:10px;flex-shrink:0}
+.si-breadcrumb span.current{color:var(--tx-0);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .si-empty{padding:20px 16px;text-align:center}
 .si-empty-icon{margin-bottom:6px;opacity:.5}
 .si-empty-title{font-size:12px;font-weight:600;color:var(--tx-1);margin-bottom:4px}
@@ -402,14 +402,74 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 @media(max-width:1100px){
   .si-sidebar{width:240px;min-width:240px}
   .si-context:not(.collapsed){width:36px;min-width:36px}
+  .si-canvas{padding:20px 22px}
 }
 @media(max-width:900px){
   .si-sidebar{position:fixed;left:-300px;top:56px;bottom:0;width:300px;min-width:300px;z-index:40;transition:left 250ms ease-out;box-shadow:8px 0 32px rgba(0,0,0,.4)}
   .si-sidebar.open{left:0}
   .si-context{display:none}
-  .si-canvas{padding:14px}
+  .si-canvas{padding:16px 18px}
   .si-mobile-menu{display:inline-flex!important}
+  .fb-wire-panel{min-width:280px;width:90vw}
 }
+@media(max-width:768px){
+  .fb-progress{flex-wrap:wrap;gap:2px}
+  .fb-step-label{font-size:10px}
+  .fb-step-line{width:16px}
+  .fb-question{padding:12px 14px}
+  .fb-answer{padding:6px 10px}
+}
+
+/* ═══ Create Field / Merge / Evolve Modals ═══ */
+.cf-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);z-index:50;display:flex;align-items:center;justify-content:center}
+.cf-modal{background:var(--bg-1);border:1px solid var(--border-1);border-radius:var(--r-lg);width:580px;max-width:92vw;max-height:88vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.5);animation:fadeUp .2s ease both}
+.cf-header{padding:18px 22px 14px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between}
+.cf-header h3{font-size:16px;font-weight:700;font-family:var(--serif);color:var(--tx-0)}
+.cf-body{padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+.cf-row{display:flex;flex-direction:column;gap:4px}
+.cf-row-pair{display:flex;gap:12px}
+.cf-row-pair>.cf-row{flex:1}
+.cf-label{font-size:11px;font-weight:600;color:var(--tx-2);letter-spacing:.03em;display:flex;align-items:center;gap:4px}
+.cf-label .required{color:var(--red);font-size:13px}
+.cf-help{font-size:10px;color:var(--tx-3);margin-top:2px;line-height:1.4}
+.cf-char-count{font-size:9px;font-family:var(--mono);color:var(--tx-3);text-align:right;margin-top:2px}
+.cf-char-count.warn{color:var(--orange)}
+.cf-char-count.ok{color:var(--green)}
+.cf-preview{margin-top:8px;padding:12px 14px;background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r);font-size:11px}
+.cf-preview-uri{font-family:var(--mono);font-size:10px;color:var(--teal);margin-top:4px}
+.cf-footer{padding:14px 22px;border-top:1px solid var(--border-0);display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.cf-gov-notice{padding:8px 12px;background:var(--orange-dim);border:1px solid rgba(224,148,58,.25);border-radius:var(--r);font-size:11px;color:var(--orange);display:flex;align-items:center;gap:6px}
+.cf-toggle{display:flex;align-items:center;gap:8px;cursor:pointer}
+.cf-toggle-track{width:32px;height:18px;border-radius:9px;background:var(--border-1);position:relative;transition:background .2s}
+.cf-toggle-track.on{background:var(--teal)}
+.cf-toggle-knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .2s}
+.cf-toggle-track.on .cf-toggle-knob{left:16px}
+
+/* ── Merge modal extras ── */
+.cf-merge-fields{display:flex;flex-direction:column;gap:8px;margin:8px 0}
+.cf-merge-card{padding:10px 14px;border:1px solid var(--border-0);border-radius:var(--r);background:var(--bg-2);display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .15s}
+.cf-merge-card:hover{border-color:var(--border-2)}
+.cf-merge-card.canonical{border-color:var(--teal);background:var(--teal-dim)}
+.cf-merge-arrow{display:flex;align-items:center;justify-content:center;padding:4px 0;color:var(--tx-3);font-size:16px}
+.cf-migrate-badge{font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;display:inline-flex;align-items:center;gap:3px}
+.cf-migrate-badge.outdated{background:var(--orange-dim);color:var(--orange)}
+.cf-migrate-badge.current{background:var(--green-dim);color:var(--green)}
+
+/* ── Field picker for FormBuilder ── */
+.fp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:45;display:flex;align-items:center;justify-content:center}
+.fp-modal{background:var(--bg-1);border:1px solid var(--border-1);border-radius:var(--r-lg);width:500px;max-width:90vw;max-height:80vh;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column;animation:fadeUp .2s ease both}
+.fp-header{padding:14px 18px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between}
+.fp-search{padding:8px 14px;border-bottom:1px solid var(--border-0)}
+.fp-search input{width:100%;padding:8px 12px;border-radius:var(--r);border:1px solid var(--border-0);background:var(--bg-2);color:var(--tx-0);font-size:12px;outline:none}
+.fp-search input:focus{border-color:var(--teal)}
+.fp-list{flex:1;overflow-y:auto;padding:6px 0}
+.fp-item{padding:10px 18px;cursor:pointer;border-bottom:1px solid var(--border-0);transition:background .12s;display:flex;align-items:center;gap:10px}
+.fp-item:hover{background:var(--bg-3)}
+.fp-item-info{flex:1;min-width:0}
+.fp-item-label{font-size:13px;font-weight:500;color:var(--tx-0)}
+.fp-item-def{font-size:10.5px;color:var(--tx-2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fp-item-meta{display:flex;gap:4px;flex-shrink:0}
+
 /* ═══ Notification System ═══ */
 .notif-bell{position:relative;background:none;border:none;color:var(--tx-1);cursor:pointer;padding:4px;border-radius:6px;transition:all .15s;display:flex;align-items:center;justify-content:center}
 .notif-bell:hover{background:var(--bg-3);color:var(--tx-0)}
@@ -1979,6 +2039,7 @@ const EVT = {
   // Field definitions & crosswalks
   FIELD_DEF: `${NS}.field.definition`,
   FIELD_CROSSWALK: `${NS}.field.crosswalk`,
+  FIELD_GOV_CONFIG: `${NS}.field.governance_config`,
   // Matching / dedup
   MATCH_TOKEN: `${NS}.match.token`,
   MATCH_HIT: `${NS}.match.hit`,
@@ -9908,10 +9969,17 @@ const ProgressSteps = ({ activeStep }) => /*#__PURE__*/React.createElement("div"
 )));
 
 const FormBuilder = ({
-  isOrg = false
+  isOrg = false,
+  fieldDefs: fbFieldDefs,
+  catLabels: fbCatLabels,
+  catColors: fbCatColors,
+  onSaveFieldDef: fbOnSaveFieldDef,
+  activeForm: fbActiveForm
 }) => {
   SWC = useSWC();
   const [mode, setMode] = useState('compose'); // compose | wire | preview
+  const [fieldPickerOpen, setFieldPickerOpen] = useState(false);
+  const [fieldPickerSection, setFieldPickerSection] = useState(null); // section ID to add to
   const [forms, setForms] = useState([{
     id: fbUid(),
     name: 'New Form',
@@ -10094,6 +10162,32 @@ const FormBuilder = ({
     setDraft('');
     setDraft2('');
     setAddingQuestion(null);
+  };
+
+  // Insert a question from the field dictionary
+  const doInsertFromDictionary = (fieldDef, secId) => {
+    const qId = fbUid();
+    const typeMap = { text: 'text', text_long: 'text', date: 'text', email: 'text', phone: 'text', address: 'text', number: 'numeric', single_select: 'single_select', multi_select: 'multi_select', boolean: 'single_select', document: 'text' };
+    const qType = typeMap[fieldDef.data_type] || 'single_select';
+    const options = qType === 'single_select' && fieldDef.data_type === 'boolean'
+      ? [{ id: fbUid(), label: 'Yes' }, { id: fbUid(), label: 'No' }]
+      : [];
+    updateSection(secId, s => ({
+      ...s,
+      questions: [...s.questions, {
+        id: qId,
+        key: fieldDef.key,
+        prompt: fieldDef.label,
+        type: qType,
+        options,
+        origin: isOrg ? 'org' : 'local',
+        givenTestPassed: true,
+        helpText: fieldDef.definition || '',
+        field_uri: fieldDef.uri
+      }]
+    }));
+    setFieldPickerOpen(false);
+    setFieldPickerSection(null);
   };
   const doAddAnswer = (secId, qId) => {
     if (!draft.trim()) return;
@@ -10324,6 +10418,36 @@ const FormBuilder = ({
       updatedAt: new Date().toISOString(),
       status: 'saved'
     }));
+    // Auto-register form fields into field dictionary
+    if (fbOnSaveFieldDef && fbFieldDefs) {
+      const allQs = form.sections.flatMap(s => s.questions || []);
+      for (const q of allQs) {
+        const fieldKey = q.key || formNameToKey(q.prompt);
+        const uri = q.field_uri || `khora:form/${form.key}/${fieldKey}`;
+        if (!fbFieldDefs[uri]) {
+          const typeMap = { single_select: 'single_select', multi_select: 'multi_select', numeric: 'number', text: 'text' };
+          const def = {
+            uri,
+            key: fieldKey,
+            label: q.prompt,
+            category: 'case',
+            data_type: typeMap[q.type] || 'text',
+            definition: q.helpText || `Data collected via form "${form.name}" — ${q.prompt}`,
+            scope: null,
+            sensitive: false,
+            authority: null,
+            version: 1,
+            version_history: [],
+            migration_rules: [],
+            supersedes: null,
+            superseded_by: null,
+            created_by: 'form_builder',
+            created_at: Date.now()
+          };
+          try { fbOnSaveFieldDef(def); } catch (e) { console.debug('Auto-register field:', e.message); }
+        }
+      }
+    }
     setTimeout(() => setSaving(false), 600);
   };
 
@@ -10741,6 +10865,9 @@ const FormBuilder = ({
   /*#__PURE__*/React.createElement("div", {
     className: "fb-question-prompt"
   }, /*#__PURE__*/React.createElement("span", null, q.prompt),
+    q.field_uri && React.createElement("span", {
+      className: "tag tag-teal", style: { fontSize: 8, marginLeft: 4 }, title: q.field_uri
+    }, React.createElement(I, { n: 'grid', s: 8 }), ' Linked'),
     q.options?.some(o => hasConflict(o.id)) && /*#__PURE__*/React.createElement("span", {
       style: { fontSize: 11 }, title: "Framework conflict"
     }, "\u26A1")),
@@ -10961,7 +11088,21 @@ const FormBuilder = ({
       setDraft('');
       setDraft2('');
     }
-  }, "+ Add question"))), addingSection ? /*#__PURE__*/React.createElement("div", {
+  }, "+ Add question"),
+    fbFieldDefs && Object.keys(fbFieldDefs).length > 0 && React.createElement('button', {
+      className: 'fb-add-btn',
+      style: { color: 'var(--teal)', fontSize: 12, borderTop: 'none', paddingTop: 0 },
+      onClick: () => { setFieldPickerSection(sec.id); setFieldPickerOpen(true); }
+    }, React.createElement(I, { n: 'grid', s: 11, c: 'var(--teal)' }), ' Insert from field dictionary'),
+    fieldPickerOpen && fieldPickerSection === sec.id && React.createElement(FieldPicker, {
+      open: true,
+      onClose: () => { setFieldPickerOpen(false); setFieldPickerSection(null); },
+      onSelect: fd => doInsertFromDictionary(fd, sec.id),
+      fieldDefs: fbFieldDefs,
+      catLabels: fbCatLabels,
+      catColors: fbCatColors
+    })
+  ))), addingSection ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 16,
       border: `1px solid ${SWC.border}`,
@@ -13785,7 +13926,11 @@ const SiFormsSidebar = ({
 const SchemaView = ({
   isOrg,
   orgMeta,
-  networkMembers
+  networkMembers,
+  fieldDefs,
+  catLabels,
+  catColors,
+  onSaveFieldDef
 }) => {
   SWC = useSWC();
   const [contextOpen, setContextOpen] = useState(true);
@@ -13891,7 +14036,12 @@ const SchemaView = ({
       fontSize: 10
     }
   }, "v", activeForm.version)))), /*#__PURE__*/React.createElement(FormBuilder, {
-    isOrg: isOrg
+    isOrg: isOrg,
+    fieldDefs: fieldDefs,
+    catLabels: catLabels,
+    catColors: catColors,
+    onSaveFieldDef: onSaveFieldDef,
+    activeForm: activeForm
   })), /*#__PURE__*/React.createElement(SiContextPanel, {
     form: activeForm,
     collapsed: !contextOpen,
@@ -16943,6 +17093,7 @@ const ClientApp = ({
   const [newFieldLabel, setNewFieldLabel] = useState('');
   const [newFieldCategory, setNewFieldCategory] = useState('details');
   const [newFieldSensitive, setNewFieldSensitive] = useState(false);
+  const [newFieldDefinition, setNewFieldDefinition] = useState('');
   const [enabledFrameworks, setEnabledFrameworks] = useState([]); // framework ids toggled on
   const [frameworkModal, setFrameworkModal] = useState(false);
   const [myTeams, setMyTeams] = useState([]);
@@ -16969,7 +17120,12 @@ const ClientApp = ({
   // INS(vault.custom_field_def, {user_defined}) — schema_extension — client creates custom vault field
   const handleAddCustomField = async () => {
     const label = newFieldLabel.trim();
+    const definition = newFieldDefinition.trim();
     if (!label) return;
+    if (definition.length < 20) {
+      showToast('Definition must be at least 20 characters', 'error');
+      return;
+    }
     const key = 'custom_' + label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     if (allFields.some(f => f.key === key)) {
       showToast('A field with that name already exists', 'error');
@@ -16980,19 +17136,22 @@ const ClientApp = ({
       label,
       category: newFieldCategory,
       sensitive: newFieldSensitive,
-      custom: true
+      custom: true,
+      definition
     };
     const updated = [...customFieldDefs, def];
     await emitOp(vaultRoom, 'INS', dot('vault', 'custom_field_def', key), {
       label,
       category: newFieldCategory,
-      sensitive: newFieldSensitive
+      sensitive: newFieldSensitive,
+      definition
     }, vaultFrame());
     await saveSnapshot(undefined, undefined, undefined, updated);
     setAddFieldModal(false);
     setNewFieldLabel('');
     setNewFieldCategory('details');
     setNewFieldSensitive(false);
+    setNewFieldDefinition('');
     showToast(`Custom field "${label}" created`, 'success');
   };
 
@@ -20873,6 +21032,7 @@ const ClientApp = ({
       setNewFieldLabel('');
       setNewFieldCategory('details');
       setNewFieldSensitive(false);
+      setNewFieldDefinition('');
     },
     title: "Add Custom Field",
     w: 440
@@ -20935,6 +21095,28 @@ const ClientApp = ({
     onChange: () => setNewFieldSensitive(!newFieldSensitive)
   })), /*#__PURE__*/React.createElement("div", {
     style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "DEFINITION *"), /*#__PURE__*/React.createElement("textarea", {
+    value: newFieldDefinition,
+    onChange: e => setNewFieldDefinition(e.target.value),
+    placeholder: "Describe what this field means and how it should be interpreted (min 20 characters)...",
+    rows: 3,
+    style: {
+      width: '100%',
+      resize: 'vertical'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: newFieldDefinition.trim().length >= 20 ? 'var(--green)' : 'var(--tx-3)',
+      marginTop: 3,
+      textAlign: 'right'
+    }
+  }, newFieldDefinition.trim().length, "/20 characters min")), /*#__PURE__*/React.createElement("div", {
+    style: {
       background: 'var(--purple-dim)',
       border: '1px solid rgba(167,139,250,.15)',
       borderRadius: 'var(--r)',
@@ -20950,7 +21132,7 @@ const ClientApp = ({
   }, "Custom fields are encrypted with AES-256-GCM, stored in your vault, and can be selectively shared with providers \u2014 identical to built-in fields.")), /*#__PURE__*/React.createElement("button", {
     onClick: handleAddCustomField,
     className: "b-pri",
-    disabled: !newFieldLabel.trim(),
+    disabled: !newFieldLabel.trim() || newFieldDefinition.trim().length < 20,
     style: {
       width: '100%'
     }
@@ -22557,7 +22739,9 @@ const DatabaseView = ({
   fieldCrosswalks,
   teams,
   onSaveFieldDef,
-  onSaveCrosswalk
+  onSaveCrosswalk,
+  fieldGovernanceConfig,
+  onPropose
 }) => {
   const [dbTab, setDbTab] = useState('individuals');
 
@@ -22945,7 +23129,9 @@ const DatabaseView = ({
     svc: svc,
     orgRoom: orgRoom,
     networkRoom: networkRoom,
-    showToast: showToast
+    showToast: showToast,
+    fieldGovernanceConfig: fieldGovernanceConfig,
+    onPropose: onPropose
   }));
 };
 
@@ -23005,7 +23191,7 @@ async function fetchWikidataDefinition(fieldKey, label) {
 const SIMPLE_FIELD_KEYS = new Set(['full_name', 'email', 'phone', 'address', 'affiliation', 'case_notes', 'documents']);
 
 /* ─── DefinitionPopup — slide-from-right panel for field definitions ─── */
-const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSaveCrosswalk, onSaveFieldDef, teams, svc, orgRoom, networkRoom, showToast }) => {
+const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSaveCrosswalk, onSaveFieldDef, teams, svc, orgRoom, networkRoom, showToast, onEvolve, onMerge }) => {
   const [wikiData, setWikiData] = useState(null);
   const [wikiLoading, setWikiLoading] = useState(false);
   const [addCrosswalkFor, setAddCrosswalkFor] = useState(false);
@@ -23106,7 +23292,19 @@ const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSave
               React.createElement(I, { n: 'lock', s: 8 }), 'Sensitive')
           )
         ),
+        React.createElement('div', { style: { display: 'flex', gap: 4, marginLeft: 'auto', marginRight: 8 } },
+          onEvolve && React.createElement('button', { className: 'b-gho b-xs', onClick: () => onEvolve(d), style: { display: 'flex', alignItems: 'center', gap: 3, fontSize: 10 } },
+            React.createElement(I, { n: 'layers', s: 10 }), 'Evolve'),
+          onMerge && React.createElement('button', { className: 'b-gho b-xs', onClick: () => onMerge(d), style: { display: 'flex', alignItems: 'center', gap: 3, fontSize: 10 } },
+            React.createElement(I, { n: 'grid', s: 10 }), 'Merge with...')
+        ),
         React.createElement('button', { className: 'def-popup-close', onClick: onClose }, '\u2715')
+      ),
+      // Version badge
+      (d.version && d.version > 1) && React.createElement('div', { style: { padding: '6px 18px', borderBottom: '1px solid var(--border-0)', display: 'flex', gap: 6, alignItems: 'center' } },
+        React.createElement('span', { className: 'cf-migrate-badge current' }, 'v', d.version),
+        (d.version_history || []).length > 0 && React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)' } }, d.version_history.length, ' previous version(s)'),
+        d.superseded_by && React.createElement('span', { className: 'cf-migrate-badge outdated' }, 'Superseded')
       ),
       /* Body */
       React.createElement('div', { className: 'def-popup-body' },
@@ -23250,12 +23448,19 @@ const FieldDictionaryView = ({
   svc,
   orgRoom,
   networkRoom,
-  showToast
+  showToast,
+  fieldGovernanceConfig,
+  onPropose
 }) => {
   const [expandedUri, setExpandedUri] = useState(null);
   const [crosswalkPopover, setCrosswalkPopover] = useState(null);
   const [potentialCrosswalks, setPotentialCrosswalks] = useState([]);
   const [scanningCrosswalks, setScanningCrosswalks] = useState(false);
+  const [createFieldOpen, setCreateFieldOpen] = useState(false);
+  const [mergeFieldsOpen, setMergeFieldsOpen] = useState(false);
+  const [mergeSelection, setMergeSelection] = useState([]);
+  const [evolveFieldOpen, setEvolveFieldOpen] = useState(false);
+  const [evolveTarget, setEvolveTarget] = useState(null);
   const scanDone = React.useRef(false);
 
   // Background scan for potential crosswalks (runs once when tab opens)
@@ -23476,9 +23681,32 @@ const FieldDictionaryView = ({
       s: 11,
       c: "var(--red)"
     }) : null;
+    if (col.key === 'definition') {
+      if (!row.definition) return React.createElement('span', { className: 'tag tag-orange', style: { fontSize: 9 } }, '\u26A0 Missing definition');
+    }
     return row[col.key] || '';
   };
-  return /*#__PURE__*/React.createElement("div", null, potentialCrosswalks.length > 0 && /*#__PURE__*/React.createElement("div", {
+
+  const govRequired = !!(fieldGovernanceConfig?.governance_required);
+
+  return /*#__PURE__*/React.createElement("div", null,
+    // ── Toolbar: New Field + Merge ──
+    React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 } },
+      React.createElement('button', { className: 'b-pri b-xs', onClick: () => setCreateFieldOpen(true), style: { display: 'flex', alignItems: 'center', gap: 4 } },
+        React.createElement(I, { n: 'plus', s: 11 }), 'New Field'),
+      mergeSelection.length >= 2 && React.createElement('button', { className: 'b-gho b-xs', onClick: () => {
+        setMergeFieldsOpen(true);
+      }, style: { display: 'flex', alignItems: 'center', gap: 4, color: 'var(--teal)' } },
+        React.createElement(I, { n: 'grid', s: 11 }), 'Merge ', mergeSelection.length, ' Fields'),
+      mergeSelection.length > 0 && React.createElement('button', { className: 'b-gho b-xs', onClick: () => setMergeSelection([]),
+        style: { fontSize: 10, color: 'var(--tx-3)' } }, 'Clear selection'),
+      React.createElement('div', { style: { flex: 1 } }),
+      React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)' } }, defs.length, ' fields'),
+      govRequired && React.createElement('span', { className: 'tag tag-orange', style: { fontSize: 8, marginLeft: 4 } },
+        React.createElement(I, { n: 'shieldCheck', s: 8 }), ' Governance')
+    ),
+    // ── Potential crosswalks banner ──
+    potentialCrosswalks.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '10px 14px',
       background: 'var(--teal-dim)',
@@ -23509,16 +23737,17 @@ const FieldDictionaryView = ({
       color: 'var(--tx-2)',
       marginLeft: 8
     }
-  }, "Fields that may refer to the same concept.")), /*#__PURE__*/React.createElement("button", {
-    className: "b-gho b-xs",
-    style: {
-      color: 'var(--teal)'
-    },
+  }, "Fields that may refer to the same concept.")),
+    React.createElement("button", {
+    className: "b-gho b-xs", style: { color: 'var(--teal)' },
     onClick: () => {
-      // Expand the first potential match
-      if (potentialCrosswalks[0]) setExpandedUri(potentialCrosswalks[0].from.uri);
+      // Pre-select fields for merge
+      const fields = potentialCrosswalks.slice(0, 3).flatMap(pc => [pc.from, pc.to]);
+      const unique = [...new Map(fields.map(f => [f.uri, f])).values()];
+      setMergeSelection(unique);
+      setMergeFieldsOpen(true);
     }
-  }, "Review")), /*#__PURE__*/React.createElement(DataTable, {
+  }, "Review & Merge")), /*#__PURE__*/React.createElement(DataTable, {
     data: defRows,
     columns: DEF_COLS,
     defaultVisibleCols: ['label', 'category', 'definition', 'source', 'authority_name', 'crosswalks', 'sensitive'],
@@ -23532,8 +23761,19 @@ const FieldDictionaryView = ({
     getVal: getDefVal,
     renderCell: renderDefCell,
     label: "field definitions",
+    selectable: true,
     onRowClick: row => setExpandedUri(expandedUri === row.uri ? null : row.uri),
-    selectedId: expandedUri
+    selectedId: expandedUri,
+    bulkActions: [{ id: 'merge', label: 'Merge', cls: 'b-gho b-xs', icon: 'grid' }, { id: 'evolve', label: 'Evolve', cls: 'b-gho b-xs', icon: 'layers' }],
+    onBulkAction: (action, selectedRows) => {
+      if (action === 'merge' && selectedRows.length >= 2) {
+        setMergeSelection(selectedRows.map(r => fieldDefs[r.uri]).filter(Boolean));
+        setMergeFieldsOpen(true);
+      } else if (action === 'evolve' && selectedRows.length === 1) {
+        setEvolveTarget(fieldDefs[selectedRows[0].uri]);
+        setEvolveFieldOpen(true);
+      }
+    }
   }), expandedUri && fieldDefs[expandedUri] && React.createElement(DefinitionPopup, {
     fieldDef: fieldDefs[expandedUri],
     fieldDefs: fieldDefs,
@@ -23545,8 +23785,564 @@ const FieldDictionaryView = ({
     svc: svc,
     orgRoom: orgRoom,
     networkRoom: networkRoom,
-    showToast: showToast
-  }));
+    showToast: showToast,
+    onEvolve: fd => { setEvolveTarget(fd); setEvolveFieldOpen(true); setExpandedUri(null); },
+    onMerge: fd => { setMergeSelection([fd]); setExpandedUri(null); }
+  }),
+    // ── Modals ──
+    React.createElement(CreateFieldModal, {
+      open: createFieldOpen,
+      onClose: () => setCreateFieldOpen(false),
+      onSave: onSaveFieldDef,
+      onPropose: onPropose || (async (proposal, room) => { if (svc) await svc.setState(room, EVT.GOV_PROPOSAL, proposal, proposal.id); }),
+      fieldDefs: fieldDefs,
+      categories: FIELD_CATEGORIES,
+      catLabels: CAT_LABELS,
+      namespace: networkRoom ? 'network' : orgRoom ? 'org' : 'local',
+      governanceRequired: govRequired,
+      svc: svc,
+      orgRoom: orgRoom,
+      networkRoom: networkRoom,
+      showToast: showToast
+    }),
+    React.createElement(MergeFieldsModal, {
+      open: mergeFieldsOpen,
+      onClose: () => { setMergeFieldsOpen(false); setMergeSelection([]); },
+      fieldsToMerge: mergeSelection,
+      fieldDefs: fieldDefs,
+      onSaveFieldDef: onSaveFieldDef,
+      onSaveCrosswalk: onSaveCrosswalk,
+      governanceRequired: govRequired,
+      svc: svc,
+      orgRoom: orgRoom,
+      networkRoom: networkRoom,
+      showToast: showToast
+    }),
+    React.createElement(EvolveFieldModal, {
+      open: evolveFieldOpen,
+      onClose: () => { setEvolveFieldOpen(false); setEvolveTarget(null); },
+      fieldDef: evolveTarget,
+      onSaveFieldDef: onSaveFieldDef,
+      governanceRequired: govRequired,
+      svc: svc,
+      orgRoom: orgRoom,
+      networkRoom: networkRoom,
+      showToast: showToast
+    })
+  );
+};
+
+/* ─── CreateFieldModal — create a new field definition with required definition ─── */
+const FIELD_DATA_TYPES = [
+  { v: 'text', l: 'Text' }, { v: 'text_long', l: 'Long Text' }, { v: 'date', l: 'Date' },
+  { v: 'email', l: 'Email' }, { v: 'phone', l: 'Phone' }, { v: 'address', l: 'Address' },
+  { v: 'number', l: 'Number' }, { v: 'single_select', l: 'Single Select' },
+  { v: 'multi_select', l: 'Multi Select' }, { v: 'boolean', l: 'Yes / No' }, { v: 'document', l: 'Document' }
+];
+const fieldLabelToKey = label => label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48) || 'unnamed_field';
+
+const CreateFieldModal = ({ open, onClose, onSave, onPropose, fieldDefs, categories, catLabels, namespace, governanceRequired, svc, orgRoom, networkRoom, showToast }) => {
+  const [label, setLabel] = useState('');
+  const [key, setKey] = useState('');
+  const [keyEdited, setKeyEdited] = useState(false);
+  const [category, setCategory] = useState('details');
+  const [dataType, setDataType] = useState('text');
+  const [definition, setDefinition] = useState('');
+  const [scope, setScope] = useState('');
+  const [sensitive, setSensitive] = useState(false);
+  const [authOrg, setAuthOrg] = useState('');
+  const [authName, setAuthName] = useState('');
+  const [authProvision, setAuthProvision] = useState('');
+  const [authUri, setAuthUri] = useState('');
+  const [showAuth, setShowAuth] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+
+  if (!open) return null;
+
+  const ns = namespace || 'org';
+  const uri = `khora:${ns}/${key || fieldLabelToKey(label)}`;
+  const computedKey = key || fieldLabelToKey(label);
+  const defLen = definition.length;
+  const isValid = label.trim().length > 0 && computedKey.length > 0 && defLen >= 20 && dataType;
+
+  // Check for duplicate URIs / keys
+  React.useEffect(() => {
+    if (!computedKey || !fieldDefs) { setDuplicateWarning(null); return; }
+    const existing = Object.values(fieldDefs).find(d => d.key === computedKey || d.uri === uri);
+    setDuplicateWarning(existing ? `A field with key "${computedKey}" already exists (${existing.label})` : null);
+  }, [computedKey, uri, fieldDefs]);
+
+  const handleSave = async () => {
+    if (!isValid || duplicateWarning) return;
+    setSaving(true);
+    const authority = (authOrg || authName) ? { org: authOrg, name: authName, provision: authProvision, uri: authUri } : null;
+    const def = {
+      uri,
+      key: computedKey,
+      label: label.trim(),
+      category,
+      data_type: dataType,
+      definition: definition.trim(),
+      scope: scope.trim() || null,
+      sensitive,
+      authority,
+      version: 1,
+      version_history: [],
+      migration_rules: [],
+      supersedes: null,
+      superseded_by: null,
+      created_by: svc?.userId || 'unknown',
+      created_at: Date.now()
+    };
+    try {
+      if (governanceRequired && (orgRoom || networkRoom)) {
+        // Create governance proposal instead of saving directly
+        const targetRoom = networkRoom || orgRoom;
+        const proposal = {
+          id: 'prop_field_' + computedKey + '_' + Date.now(),
+          type: 'new_field_definition',
+          summary: `Create new field: "${label.trim()}"`,
+          detail: `New ${dataType} field in ${(catLabels || {})[category] || category} category. Definition: ${definition.trim().slice(0, 100)}${defLen > 100 ? '...' : ''}`,
+          field_definition: def,
+          proposed_by: svc?.userId,
+          proposed_at: Date.now(),
+          status: 'submitted',
+          positions: {}
+        };
+        if (onPropose) await onPropose(proposal, targetRoom);
+        if (showToast) showToast('Governance proposal created for new field');
+      } else {
+        if (onSave) await onSave(def);
+        if (showToast) showToast(`Field "${label.trim()}" created`);
+      }
+      onClose();
+    } catch (e) {
+      console.error('CreateField error:', e);
+      if (showToast) showToast('Error creating field: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  return React.createElement('div', { className: 'cf-overlay', onClick: e => { if (e.target === e.currentTarget) onClose(); } },
+    React.createElement('div', { className: 'cf-modal' },
+      React.createElement('div', { className: 'cf-header' },
+        React.createElement('h3', null, 'Create Field Definition'),
+        React.createElement('button', { className: 'b-gho b-xs', onClick: onClose, style: { fontSize: 16, lineHeight: 1, padding: '2px 8px' } }, '\u2715')
+      ),
+      React.createElement('div', { className: 'cf-body' },
+        // Label & Key
+        React.createElement('div', { className: 'cf-row-pair' },
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('label', { className: 'cf-label' }, 'Field Label', React.createElement('span', { className: 'required' }, '*')),
+            React.createElement('input', { value: label, onChange: e => { setLabel(e.target.value); if (!keyEdited) setKey(fieldLabelToKey(e.target.value)); },
+              placeholder: 'e.g. Housing Status', style: { fontSize: 13 } })
+          ),
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('label', { className: 'cf-label' }, 'Key'),
+            React.createElement('input', { value: key || fieldLabelToKey(label), onChange: e => { setKey(e.target.value); setKeyEdited(true); },
+              style: { fontSize: 12, fontFamily: 'var(--mono)' } })
+          )
+        ),
+        // Category & Type
+        React.createElement('div', { className: 'cf-row-pair' },
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('label', { className: 'cf-label' }, 'Category', React.createElement('span', { className: 'required' }, '*')),
+            React.createElement('select', { value: category, onChange: e => setCategory(e.target.value), style: { fontSize: 13 } },
+              (categories || ['identity', 'contact', 'details', 'case', 'sensitive']).map(c =>
+                React.createElement('option', { key: c, value: c }, (catLabels || {})[c] || c)
+              )
+            )
+          ),
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('label', { className: 'cf-label' }, 'Data Type', React.createElement('span', { className: 'required' }, '*')),
+            React.createElement('select', { value: dataType, onChange: e => setDataType(e.target.value), style: { fontSize: 13 } },
+              FIELD_DATA_TYPES.map(t => React.createElement('option', { key: t.v, value: t.v }, t.l))
+            )
+          )
+        ),
+        // Definition (required)
+        React.createElement('div', { className: 'cf-row' },
+          React.createElement('label', { className: 'cf-label' }, 'Definition', React.createElement('span', { className: 'required' }, '*')),
+          React.createElement('textarea', { value: definition, onChange: e => setDefinition(e.target.value),
+            placeholder: 'Describe what this field means and how it should be interpreted (min 20 characters)...',
+            style: { fontSize: 13, minHeight: 72 } }),
+          React.createElement('div', { className: `cf-char-count ${defLen < 20 ? 'warn' : 'ok'}` }, defLen, '/20 min')
+        ),
+        // Scope
+        React.createElement('div', { className: 'cf-row' },
+          React.createElement('label', { className: 'cf-label' }, 'Scope', React.createElement('span', { style: { fontSize: 9, color: 'var(--tx-3)', marginLeft: 4 } }, 'recommended')),
+          React.createElement('textarea', { value: scope, onChange: e => setScope(e.target.value),
+            placeholder: "What's included vs excluded in this field...", style: { fontSize: 13, minHeight: 48 } })
+        ),
+        // Sensitive toggle
+        React.createElement('div', { className: 'cf-row' },
+          React.createElement('div', { className: 'cf-toggle', onClick: () => setSensitive(!sensitive) },
+            React.createElement('div', { className: `cf-toggle-track${sensitive ? ' on' : ''}` },
+              React.createElement('div', { className: 'cf-toggle-knob' })
+            ),
+            React.createElement('span', { style: { fontSize: 12, color: sensitive ? 'var(--red)' : 'var(--tx-2)' } },
+              sensitive ? 'Sensitive — requires elevated access' : 'Not sensitive')
+          )
+        ),
+        // Authority (collapsible)
+        React.createElement('div', { className: 'cf-row' },
+          React.createElement('button', { className: 'b-gho b-xs', onClick: () => setShowAuth(!showAuth),
+            style: { display: 'flex', alignItems: 'center', gap: 4, alignSelf: 'flex-start' } },
+            React.createElement(I, { n: showAuth ? 'chevronDown' : 'chevronRight', s: 10 }), 'Authority ', showAuth ? '(hide)' : '(optional)')
+        ),
+        showAuth && React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, padding: '0 0 0 8px', borderLeft: '2px solid var(--border-1)' } },
+          React.createElement('input', { value: authOrg, onChange: e => setAuthOrg(e.target.value), placeholder: 'Organization (e.g. HUD)', style: { fontSize: 12, padding: '6px 10px' } }),
+          React.createElement('input', { value: authName, onChange: e => setAuthName(e.target.value), placeholder: 'Standard name', style: { fontSize: 12, padding: '6px 10px' } }),
+          React.createElement('input', { value: authProvision, onChange: e => setAuthProvision(e.target.value), placeholder: 'Provision (e.g. Element 3.01)', style: { fontSize: 12, padding: '6px 10px' } }),
+          React.createElement('input', { value: authUri, onChange: e => setAuthUri(e.target.value), placeholder: 'Reference URI', style: { fontSize: 12, padding: '6px 10px' } })
+        ),
+        // Duplicate warning
+        duplicateWarning && React.createElement('div', { style: { fontSize: 11, color: 'var(--orange)', padding: '6px 10px', background: 'var(--orange-dim)', borderRadius: 'var(--r)', border: '1px solid rgba(224,148,58,.2)' } },
+          '\u26A0 ', duplicateWarning),
+        // Governance notice
+        governanceRequired && React.createElement('div', { className: 'cf-gov-notice' },
+          React.createElement(I, { n: 'shieldCheck', s: 12 }), 'Governance is required — this will create a proposal for review'
+        ),
+        // Preview
+        React.createElement('div', { className: 'cf-preview' },
+          React.createElement('span', { style: { fontWeight: 600, fontSize: 12 } }, 'Preview'),
+          React.createElement('div', { className: 'cf-preview-uri' }, uri),
+          React.createElement('div', { style: { marginTop: 6, fontSize: 11, color: 'var(--tx-1)', lineHeight: 1.5 } },
+            label.trim() || 'Field Name', ' — ', definition.trim().slice(0, 80) || 'definition...', definition.length > 80 ? '...' : '')
+        )
+      ),
+      React.createElement('div', { className: 'cf-footer' },
+        React.createElement('button', { className: 'b-gho', onClick: onClose }, 'Cancel'),
+        React.createElement('button', { className: 'b-pri', disabled: !isValid || !!duplicateWarning || saving, onClick: handleSave },
+          saving ? 'Saving...' : governanceRequired ? 'Submit Proposal' : 'Create Field')
+      )
+    )
+  );
+};
+
+/* ─── MergeFieldsModal — merge duplicate field definitions into a canonical one ─── */
+const MergeFieldsModal = ({ open, onClose, fieldsToMerge, fieldDefs, onSaveFieldDef, onSaveCrosswalk, governanceRequired, svc, orgRoom, networkRoom, showToast }) => {
+  const [canonicalUri, setCanonicalUri] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (fieldsToMerge && fieldsToMerge.length > 0) setCanonicalUri(fieldsToMerge[0].uri);
+  }, [fieldsToMerge]);
+
+  if (!open || !fieldsToMerge || fieldsToMerge.length < 2) return null;
+
+  const canonical = fieldsToMerge.find(f => f.uri === canonicalUri) || fieldsToMerge[0];
+  const deprecated = fieldsToMerge.filter(f => f.uri !== canonicalUri);
+
+  const handleMerge = async () => {
+    setSaving(true);
+    try {
+      // Mark deprecated fields
+      for (const dep of deprecated) {
+        const updated = {
+          ...dep,
+          superseded_by: canonical.uri,
+          deprecated_at: Date.now(),
+          deprecated_reason: 'merged'
+        };
+        if (onSaveFieldDef) await onSaveFieldDef(updated);
+        // Create crosswalk
+        if (onSaveCrosswalk) {
+          await onSaveCrosswalk({
+            id: 'xw_merge_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            from_uri: dep.uri,
+            to_uri: canonical.uri,
+            relationship: 'equivalent',
+            bidirectional: true,
+            notes: `Merged: "${dep.label}" → "${canonical.label}"`,
+            created_at: Date.now(),
+            merge_operation: true
+          });
+        }
+      }
+      if (showToast) showToast(`Merged ${deprecated.length} field(s) into "${canonical.label}"`);
+      onClose();
+    } catch (e) {
+      console.error('Merge error:', e);
+      if (showToast) showToast('Error merging: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  return React.createElement('div', { className: 'cf-overlay', onClick: e => { if (e.target === e.currentTarget) onClose(); } },
+    React.createElement('div', { className: 'cf-modal' },
+      React.createElement('div', { className: 'cf-header' },
+        React.createElement('h3', null, 'Merge Field Definitions'),
+        React.createElement('button', { className: 'b-gho b-xs', onClick: onClose, style: { fontSize: 16, lineHeight: 1, padding: '2px 8px' } }, '\u2715')
+      ),
+      React.createElement('div', { className: 'cf-body' },
+        React.createElement('div', { style: { fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.6, marginBottom: 8 } },
+          'Select the canonical (primary) field. Other fields will be deprecated and linked as equivalents.'),
+        React.createElement('div', { className: 'cf-merge-fields' },
+          fieldsToMerge.map(f => React.createElement('div', {
+            key: f.uri,
+            className: `cf-merge-card${f.uri === canonicalUri ? ' canonical' : ''}`,
+            onClick: () => setCanonicalUri(f.uri)
+          },
+            React.createElement('input', { type: 'radio', checked: f.uri === canonicalUri, readOnly: true, style: { accentColor: 'var(--teal)' } }),
+            React.createElement('div', { style: { flex: 1 } },
+              React.createElement('div', { style: { fontWeight: 600, fontSize: 13 } }, f.label),
+              React.createElement('div', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 2 } }, f.uri),
+              f.definition && React.createElement('div', { style: { fontSize: 11, color: 'var(--tx-2)', marginTop: 4, lineHeight: 1.4 } }, f.definition.slice(0, 100))
+            ),
+            f.uri === canonicalUri
+              ? React.createElement('span', { className: 'tag tag-teal', style: { fontSize: 9 } }, 'CANONICAL')
+              : React.createElement('span', { className: 'tag tag-red', style: { fontSize: 9 } }, 'DEPRECATED')
+          ))
+        ),
+        deprecated.length > 0 && React.createElement('div', { style: { padding: '10px 14px', background: 'var(--bg-2)', borderRadius: 'var(--r)', border: '1px solid var(--border-0)', fontSize: 11, color: 'var(--tx-2)', lineHeight: 1.5 } },
+          React.createElement('strong', null, 'What happens:'), React.createElement('br', null),
+          '\u2022 ', deprecated.map(d => `"${d.label}"`).join(', '), ' will be marked as superseded', React.createElement('br', null),
+          '\u2022 Equivalent crosswalks will be created automatically', React.createElement('br', null),
+          '\u2022 Existing data is preserved — only metadata changes')
+      ),
+      React.createElement('div', { className: 'cf-footer' },
+        React.createElement('button', { className: 'b-gho', onClick: onClose }, 'Cancel'),
+        React.createElement('button', { className: 'b-pri', disabled: saving, onClick: handleMerge },
+          saving ? 'Merging...' : `Merge into "${canonical.label}"`)
+      )
+    )
+  );
+};
+
+/* ─── EvolveFieldModal — evolve a field definition with migration rules ─── */
+const EVOLVE_TYPES = [
+  { v: 'rename', l: 'Rename', desc: 'Change the field key or label' },
+  { v: 'type_change', l: 'Type Change', desc: 'Change the data type (e.g. text → select)' },
+  { v: 'split', l: 'Split', desc: 'Split into multiple fields' },
+  { v: 'deprecate', l: 'Deprecate', desc: 'Mark as deprecated (data preserved)' }
+];
+
+const EvolveFieldModal = ({ open, onClose, fieldDef, onSaveFieldDef, governanceRequired, svc, orgRoom, networkRoom, showToast }) => {
+  const [evolveType, setEvolveType] = useState('rename');
+  const [newLabel, setNewLabel] = useState('');
+  const [newKey, setNewKey] = useState('');
+  const [newDataType, setNewDataType] = useState('');
+  const [transformNotes, setTransformNotes] = useState('');
+  const [deprecateReason, setDeprecateReason] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (fieldDef) {
+      setNewLabel(fieldDef.label || '');
+      setNewKey(fieldDef.key || '');
+      setNewDataType(fieldDef.data_type || 'text');
+    }
+  }, [fieldDef?.uri]);
+
+  if (!open || !fieldDef) return null;
+
+  const currentVersion = fieldDef.version || 1;
+  const nextVersion = currentVersion + 1;
+
+  const handleEvolve = async () => {
+    setSaving(true);
+    try {
+      const historyEntry = {
+        version: nextVersion,
+        previous_version: currentVersion,
+        change_type: evolveType,
+        changes: {},
+        transform_notes: transformNotes.trim(),
+        created_at: Date.now(),
+        created_by: svc?.userId
+      };
+
+      const migrationRule = {
+        from_version: currentVersion,
+        to_version: nextVersion,
+        transform_type: evolveType,
+        transform_config: {}
+      };
+
+      if (evolveType === 'rename') {
+        historyEntry.changes = { old_label: fieldDef.label, new_label: newLabel.trim(), old_key: fieldDef.key, new_key: newKey || fieldDef.key };
+        migrationRule.transform_config = { old_key: fieldDef.key, new_key: newKey || fieldDef.key };
+      } else if (evolveType === 'type_change') {
+        historyEntry.changes = { old_type: fieldDef.data_type, new_type: newDataType };
+        migrationRule.transform_config = { old_type: fieldDef.data_type, new_type: newDataType, notes: transformNotes.trim() };
+      } else if (evolveType === 'deprecate') {
+        historyEntry.changes = { reason: deprecateReason.trim() };
+        migrationRule.transform_config = { action: 'archive', reason: deprecateReason.trim() };
+      } else if (evolveType === 'split') {
+        historyEntry.changes = { notes: transformNotes.trim() };
+        migrationRule.transform_config = { notes: transformNotes.trim() };
+      }
+
+      const updated = {
+        ...fieldDef,
+        version: nextVersion,
+        label: evolveType === 'rename' ? newLabel.trim() : fieldDef.label,
+        key: evolveType === 'rename' && newKey ? newKey : fieldDef.key,
+        data_type: evolveType === 'type_change' ? newDataType : fieldDef.data_type,
+        superseded_by: evolveType === 'deprecate' ? 'deprecated' : fieldDef.superseded_by,
+        deprecated_at: evolveType === 'deprecate' ? Date.now() : fieldDef.deprecated_at,
+        deprecated_reason: evolveType === 'deprecate' ? deprecateReason.trim() : fieldDef.deprecated_reason,
+        version_history: [...(fieldDef.version_history || []), historyEntry],
+        migration_rules: [...(fieldDef.migration_rules || []), migrationRule]
+      };
+
+      if (onSaveFieldDef) await onSaveFieldDef(updated);
+      if (showToast) showToast(`Field "${fieldDef.label}" evolved to v${nextVersion}`);
+      onClose();
+    } catch (e) {
+      console.error('Evolve error:', e);
+      if (showToast) showToast('Error: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  return React.createElement('div', { className: 'cf-overlay', onClick: e => { if (e.target === e.currentTarget) onClose(); } },
+    React.createElement('div', { className: 'cf-modal' },
+      React.createElement('div', { className: 'cf-header' },
+        React.createElement('h3', null, 'Evolve Field Definition'),
+        React.createElement('button', { className: 'b-gho b-xs', onClick: onClose, style: { fontSize: 16, lineHeight: 1, padding: '2px 8px' } }, '\u2715')
+      ),
+      React.createElement('div', { className: 'cf-body' },
+        // Current version info
+        React.createElement('div', { className: 'cf-preview', style: { marginTop: 0 } },
+          React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+            React.createElement('span', { style: { fontWeight: 600, fontSize: 13 } }, fieldDef.label),
+            React.createElement('span', { className: 'cf-migrate-badge current' }, 'v', currentVersion)
+          ),
+          React.createElement('div', { className: 'cf-preview-uri' }, fieldDef.uri),
+          React.createElement('div', { style: { fontSize: 11, color: 'var(--tx-2)', marginTop: 4 } }, fieldDef.definition?.slice(0, 100))
+        ),
+        React.createElement('div', { className: 'cf-merge-arrow' }, '\u2193 evolves to v', nextVersion),
+        // Change type
+        React.createElement('div', { className: 'cf-row' },
+          React.createElement('label', { className: 'cf-label' }, 'Change Type'),
+          React.createElement('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+            EVOLVE_TYPES.map(t => React.createElement('button', {
+              key: t.v,
+              className: `b-gho b-xs${evolveType === t.v ? ' active' : ''}`,
+              style: evolveType === t.v ? { background: 'var(--teal-dim)', color: 'var(--teal)', borderColor: 'var(--teal)' } : {},
+              onClick: () => setEvolveType(t.v)
+            }, t.l))
+          )
+        ),
+        // Type-specific fields
+        evolveType === 'rename' && React.createElement(React.Fragment, null,
+          React.createElement('div', { className: 'cf-row-pair' },
+            React.createElement('div', { className: 'cf-row' },
+              React.createElement('label', { className: 'cf-label' }, 'New Label'),
+              React.createElement('input', { value: newLabel, onChange: e => setNewLabel(e.target.value), style: { fontSize: 13 } })
+            ),
+            React.createElement('div', { className: 'cf-row' },
+              React.createElement('label', { className: 'cf-label' }, 'New Key'),
+              React.createElement('input', { value: newKey, onChange: e => setNewKey(e.target.value), style: { fontSize: 12, fontFamily: 'var(--mono)' } })
+            )
+          )
+        ),
+        evolveType === 'type_change' && React.createElement(React.Fragment, null,
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('label', { className: 'cf-label' }, 'New Data Type'),
+            React.createElement('select', { value: newDataType, onChange: e => setNewDataType(e.target.value), style: { fontSize: 13 } },
+              FIELD_DATA_TYPES.map(t => React.createElement('option', { key: t.v, value: t.v }, t.l))
+            )
+          ),
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('label', { className: 'cf-label' }, 'Transform Notes'),
+            React.createElement('textarea', { value: transformNotes, onChange: e => setTransformNotes(e.target.value),
+              placeholder: 'Describe how to convert old values to new type (e.g. "text values map to select options as follows...")',
+              style: { fontSize: 12, minHeight: 56 } })
+          )
+        ),
+        evolveType === 'deprecate' && React.createElement('div', { className: 'cf-row' },
+          React.createElement('label', { className: 'cf-label' }, 'Deprecation Reason'),
+          React.createElement('textarea', { value: deprecateReason, onChange: e => setDeprecateReason(e.target.value),
+            placeholder: 'Why is this field being deprecated?', style: { fontSize: 12, minHeight: 48 } })
+        ),
+        evolveType === 'split' && React.createElement('div', { className: 'cf-row' },
+          React.createElement('label', { className: 'cf-label' }, 'Split Details'),
+          React.createElement('textarea', { value: transformNotes, onChange: e => setTransformNotes(e.target.value),
+            placeholder: 'Describe how this field will be split and which new fields will be created...',
+            style: { fontSize: 12, minHeight: 56 } })
+        ),
+        // Version history
+        (fieldDef.version_history || []).length > 0 && React.createElement('div', { className: 'cf-row' },
+          React.createElement('label', { className: 'cf-label' }, 'Version History'),
+          React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } },
+            (fieldDef.version_history || []).map((h, i) => React.createElement('div', {
+              key: i, style: { fontSize: 10.5, padding: '4px 8px', background: 'var(--bg-2)', borderRadius: 'var(--r)', color: 'var(--tx-2)', fontFamily: 'var(--mono)' }
+            }, `v${h.version}: ${h.change_type} — ${new Date(h.created_at).toLocaleDateString()}`))
+          )
+        )
+      ),
+      React.createElement('div', { className: 'cf-footer' },
+        React.createElement('button', { className: 'b-gho', onClick: onClose }, 'Cancel'),
+        React.createElement('button', { className: 'b-pri', disabled: saving, onClick: handleEvolve },
+          saving ? 'Saving...' : `Evolve to v${nextVersion}`)
+      )
+    )
+  );
+};
+
+/* ─── FieldPicker — select a field definition to insert into a form ─── */
+const FieldPicker = ({ open, onClose, onSelect, fieldDefs, catLabels, catColors }) => {
+  const [search, setSearch] = useState('');
+  const [filterCat, setFilterCat] = useState('all');
+
+  if (!open) return null;
+
+  const defs = Object.values(fieldDefs || {});
+  const filtered = defs.filter(d => {
+    if (d.superseded_by || d.deprecated_at) return false;
+    if (filterCat !== 'all' && d.category !== filterCat) return false;
+    if (search && !d.label.toLowerCase().includes(search.toLowerCase()) && !d.key.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const cats = [...new Set(defs.map(d => d.category).filter(Boolean))];
+
+  return React.createElement('div', { className: 'fp-overlay', onClick: e => { if (e.target === e.currentTarget) onClose(); } },
+    React.createElement('div', { className: 'fp-modal' },
+      React.createElement('div', { className: 'fp-header' },
+        React.createElement('span', { style: { fontSize: 14, fontWeight: 600 } }, 'Insert from Field Dictionary'),
+        React.createElement('button', { className: 'b-gho b-xs', onClick: onClose, style: { fontSize: 14, lineHeight: 1, padding: '2px 8px' } }, '\u2715')
+      ),
+      React.createElement('div', { className: 'fp-search' },
+        React.createElement('input', { value: search, onChange: e => setSearch(e.target.value), placeholder: 'Search fields...',  autoFocus: true }),
+        React.createElement('div', { style: { display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' } },
+          React.createElement('button', {
+            className: `b-gho b-xs${filterCat === 'all' ? ' active' : ''}`,
+            style: filterCat === 'all' ? { background: 'var(--teal-dim)', color: 'var(--teal)', borderColor: 'var(--teal)' } : {},
+            onClick: () => setFilterCat('all')
+          }, 'All'),
+          cats.map(c => React.createElement('button', {
+            key: c,
+            className: `b-gho b-xs${filterCat === c ? ' active' : ''}`,
+            style: filterCat === c ? { background: `var(--${(catColors || {})[c] || 'blue'}-dim)`, color: `var(--${(catColors || {})[c] || 'blue'})`, borderColor: `var(--${(catColors || {})[c] || 'blue'})` } : {},
+            onClick: () => setFilterCat(c)
+          }, (catLabels || {})[c] || c))
+        )
+      ),
+      React.createElement('div', { className: 'fp-list' },
+        filtered.length === 0
+          ? React.createElement('div', { style: { padding: 20, textAlign: 'center', fontSize: 12, color: 'var(--tx-3)' } }, 'No matching fields')
+          : filtered.map(d => React.createElement('div', {
+              key: d.uri,
+              className: 'fp-item',
+              onClick: () => { onSelect(d); onClose(); }
+            },
+            React.createElement('div', { className: 'fp-item-info' },
+              React.createElement('div', { className: 'fp-item-label' }, d.label),
+              React.createElement('div', { className: 'fp-item-def' }, d.definition || 'No definition')
+            ),
+            React.createElement('div', { className: 'fp-item-meta' },
+              React.createElement('span', { className: `tag tag-${(catColors || {})[d.category] || 'blue'}`, style: { fontSize: 8 } }, (catLabels || {})[d.category] || d.category),
+              React.createElement('span', { className: 'tag tag-blue', style: { fontSize: 8 } }, (d.data_type || 'text').toUpperCase())
+            )
+          ))
+      )
+    )
+  );
 };
 
 /* ─── TeamDetailView — expanded team view with Overview / Schema / Activity tabs ─── */
@@ -26728,6 +27524,7 @@ const ProviderApp = ({
   // Field definitions & crosswalks
   const [fieldDefs, setFieldDefs] = useState({}); // uri → definition object
   const [fieldCrosswalks, setFieldCrosswalks] = useState([]); // crosswalk records
+  const [fieldGovernanceConfig, setFieldGovernanceConfig] = useState({}); // {governance_required: bool}
   const [sharingConsentModal, setSharingConsentModal] = useState(null); // {team, member} or null — prompts team member to choose sharing preference
   // Client data import
   const [importModal, setImportModal] = useState(false);
@@ -27193,6 +27990,14 @@ const ProviderApp = ({
       }
       setFieldDefs(detectedFieldDefs);
       setFieldCrosswalks(detectedCrosswalks);
+      // Load field governance config from org or network room
+      if (detectedOrg || network) {
+        try {
+          const govRoom = network || detectedOrg;
+          const govConfig = await svc.getState(govRoom, EVT.FIELD_GOV_CONFIG);
+          if (govConfig) setFieldGovernanceConfig(govConfig);
+        } catch { /* no config yet */ }
+      }
       // Load client records detected during scan
       if (detectedClientRecords.length > 0) {
         // Check room membership to determine status
@@ -30206,7 +31011,9 @@ const ProviderApp = ({
         crosswalks: updated
       });
       setFieldCrosswalks(updated);
-    }
+    },
+    fieldGovernanceConfig: fieldGovernanceConfig,
+    onPropose: async (proposal, room) => { if (svc) await svc.setState(room, EVT.GOV_PROPOSAL, proposal, proposal.id); }
   }), /*#__PURE__*/React.createElement(NoteCreateModal, {
     open: newNoteModal,
     onClose: () => setNewNoteModal(false),
@@ -32719,7 +33526,20 @@ const ProviderApp = ({
   }, "K-anonymity (k=5):"), " Combinations with fewer than 5 matching individuals are suppressed. This data is suitable for compliance reporting and aggregate analysis. PII fields (name, DOB, SSN, address, phone, email) are never present \u2014 only demographic ranges and hashed identifiers.")), view === 'schema' && /*#__PURE__*/React.createElement(SchemaView, {
     isOrg: !!orgRoom,
     orgMeta: orgMeta,
-    networkMembers: networkMembers
+    networkMembers: networkMembers,
+    fieldDefs: fieldDefs,
+    catLabels: CAT_LABELS,
+    catColors: CAT_COLORS,
+    onSaveFieldDef: async def => {
+      const schemaRoom = svc.client ? svc.client.getRooms().find(r => {
+        const id = r.currentState.getStateEvents(EVT.IDENTITY, '');
+        return id?.getContent()?.account_type === 'schema' && id.getContent().owner === svc.userId;
+      })?.roomId : null;
+      if (!schemaRoom) return;
+      const updated = { ...fieldDefs, [def.uri]: def };
+      await svc.setState(schemaRoom, EVT.FIELD_DEF, { definitions: updated });
+      setFieldDefs(updated);
+    }
   }), view === 'org-settings' && orgRoom && orgRole === 'admin' && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
     style: {
