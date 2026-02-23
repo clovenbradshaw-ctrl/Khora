@@ -27350,6 +27350,7 @@ const ProviderApp = ({
   const [orgMeta, setOrgMeta] = useState({});
   const [staff, setStaff] = useState([]);
   const [orgRole, setOrgRole] = useState(null); // null = no org, 'admin', 'case_manager', etc.
+  const [allOrgs, setAllOrgs] = useState([]); // multi-org: all orgs user belongs to [{roomId, role, meta, roster, ...}]
   const [createOrgModal, setCreateOrgModal] = useState(false);
   const [joinOrgModal, setJoinOrgModal] = useState(false);
   const [joinOrgId, setJoinOrgId] = useState('');
@@ -27502,6 +27503,53 @@ const ProviderApp = ({
   const [rosterNotes, setRosterNotes] = useState([]); // internal notes from roster
   const [allAllocations, setAllAllocations] = useState([]); // all allocations across cases
 
+  // ─── Multi-org switching ───
+  const switchOrg = React.useCallback(async (targetRoomId) => {
+    const target = allOrgs.find(o => o.roomId === targetRoomId);
+    if (!target || target.roomId === orgRoom) return;
+    setOrgRoom(target.roomId);
+    setOrgRole(target.role);
+    setOrgMeta(target.meta || {});
+    setStaff(target.roster?.staff || []);
+    try { localStorage.setItem('khora_active_org', target.roomId); } catch {}
+    // Reload org-specific settings from cached scan data
+    if (target.opacity) setOrgOpacity(target.opacity.level || 'translucent');
+    if (target.msgAccess) setOrgMsgAccess(target.msgAccess);
+    if (target.terminology) {
+      const t = { ...TERMINOLOGY_DEFAULTS, ...target.terminology };
+      setOrgTerminology(t);
+      setTerminologyDraft(t);
+    }
+    // Reload email verification config from Matrix state
+    try {
+      const evConfig = await svc.getState(target.roomId, EVT.ORG_EMAIL_CONFIG).catch(() => null);
+      if (evConfig) { setEmailVerifyConfig(evConfig); setEmailConfigDraft(evConfig); }
+      const myStaff = target.roster?.staff?.find(s => s.userId === svc.userId);
+      if (myStaff?.email_verification) setMyVerification(myStaff.email_verification);
+    } catch {}
+    // Reload case assignments
+    try {
+      const assignments = await svc.getState(target.roomId, EVT.ROSTER_ASSIGN);
+      if (assignments?.assignments) setCaseAssignments(assignments.assignments);
+      else setCaseAssignments({});
+    } catch {}
+    // Reload org channels for the new org
+    try {
+      const scanned = await svc.scanRooms([EVT.ORG_MSG_CHANNEL]);
+      const newChannels = [];
+      for (const [rid, state] of Object.entries(scanned)) {
+        const chanMeta = state[EVT.ORG_MSG_CHANNEL];
+        if (chanMeta && chanMeta.type === 'org_msg_channel') {
+          newChannels.push({ roomId: rid, ...chanMeta });
+        }
+      }
+      setOrgChannels(newChannels);
+    } catch {}
+    // Reset active channel when switching orgs
+    setActiveChannel(null);
+    setChannelMessages([]);
+  }, [allOrgs, orgRoom]);
+
   // Notification helpers
   const addNotification = notif => {
     setNotifications(prev => [{
@@ -27631,8 +27679,7 @@ const ProviderApp = ({
         metricsR = null,
         schema = null,
         network = null;
-      let detectedOrg = null,
-        detectedOrgRole = null;
+      const detectedOrgs = []; // multi-org: collect all orgs user belongs to
       const bridgeData = [];
       const detectedClientRecords = [];
       const detectedOrgChannels = [];
@@ -27652,18 +27699,27 @@ const ProviderApp = ({
             ...id
           });
         }
-        // Detect org rooms — owned or joined as staff
+        // Detect org rooms — owned or joined as staff (collect ALL orgs for multi-org support)
         if (id?.account_type === 'organization') {
+          let myOrgRole = null;
           if (id.owner === svc.userId) {
-            detectedOrg = rid;
-            detectedOrgRole = 'admin';
+            myOrgRole = 'admin';
           } else {
             const orgRoster = state[EVT.ORG_ROSTER];
             const entry = orgRoster?.staff?.find(s => s.userId === svc.userId);
-            if (entry) {
-              detectedOrg = rid;
-              detectedOrgRole = entry.role;
-            }
+            if (entry) myOrgRole = entry.role;
+          }
+          if (myOrgRole) {
+            detectedOrgs.push({
+              roomId: rid,
+              role: myOrgRole,
+              meta: state[EVT.ORG_METADATA] || {},
+              roster: state[EVT.ORG_ROSTER],
+              opacity: state[EVT.ORG_OPACITY],
+              msgAccess: state[EVT.ORG_MSG_ACCESS],
+              terminology: state[EVT.ORG_TERMINOLOGY],
+              identity: id
+            });
           }
         }
         // Detect inter-org messaging channels
@@ -27719,6 +27775,12 @@ const ProviderApp = ({
           }
         }
       }
+      // Multi-org: select preferred org from localStorage, or fall back to first detected
+      let preferredOrgId = null;
+      try { preferredOrgId = localStorage.getItem('khora_active_org'); } catch {}
+      const selectedOrg = detectedOrgs.find(o => o.roomId === preferredOrgId) || detectedOrgs[0] || null;
+      const detectedOrg = selectedOrg?.roomId || null;
+      const detectedOrgRole = selectedOrg?.role || null;
       if (!roster) {
         roster = await svc.createRoom('[Khora Roster]', 'Provider case index', [{
           type: EVT.IDENTITY,
@@ -27782,10 +27844,13 @@ const ProviderApp = ({
         setNetworkRoom(network);
         await loadNetworkMembers(network);
       }
+      // Store all detected orgs for multi-org switching
+      setAllOrgs(detectedOrgs);
       // Load org context if detected during scan
       if (detectedOrg) {
         setOrgRoom(detectedOrg);
         setOrgRole(detectedOrgRole);
+        try { localStorage.setItem('khora_active_org', detectedOrg); } catch {}
         const orgState = scanned[detectedOrg];
         if (orgState?.[EVT.ORG_METADATA]) setOrgMeta(orgState[EVT.ORG_METADATA]);
         if (orgState?.[EVT.ORG_ROSTER]?.staff) setStaff(orgState[EVT.ORG_ROSTER].staff);
@@ -30459,7 +30524,14 @@ const ProviderApp = ({
       fontSize: 7.5,
       padding: '1px 5px'
     }
-  }, "VERIFIED")) : /*#__PURE__*/React.createElement("div", {
+  }, "VERIFIED"), allOrgs.length > 1 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      color: 'var(--tx-3)',
+      fontFamily: 'var(--mono)',
+      marginLeft: 2
+    }
+  }, (allOrgs.findIndex(o => o.roomId === orgRoom) + 1) + "/" + allOrgs.length)) : /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -30863,6 +30935,65 @@ const ProviderApp = ({
     style: {
       flex: 1,
       overflow: 'auto',
+      padding: 0
+    }
+  }, orgRoom && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '8px 20px',
+      background: 'var(--blue-dim)',
+      borderBottom: '1px solid rgba(91,156,245,.15)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      minHeight: 40,
+      position: 'sticky',
+      top: 0,
+      zIndex: 5
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "shieldCheck",
+    s: 16,
+    c: "var(--blue)"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13.5,
+      color: 'var(--blue)',
+      fontFamily: 'var(--serif)'
+    }
+  }, orgMeta.name || 'Organization'), orgMeta.type && /*#__PURE__*/React.createElement("span", {
+    className: "tag tag-teal",
+    style: {
+      fontSize: 8
+    }
+  }, ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type), /*#__PURE__*/React.createElement("span", {
+    className: "tag tag-blue",
+    style: {
+      fontSize: 8
+    }
+  }, ORG_ROLE_LABELS[orgRole] || orgRole), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), allOrgs.length > 1 && /*#__PURE__*/React.createElement("select", {
+    value: orgRoom,
+    onChange: e => switchOrg(e.target.value),
+    style: {
+      background: 'var(--bg-2)',
+      color: 'var(--tx-0)',
+      border: '1px solid var(--border-1)',
+      borderRadius: 'var(--r)',
+      padding: '4px 8px',
+      fontSize: 11,
+      fontFamily: 'var(--sans)',
+      cursor: 'pointer',
+      outline: 'none'
+    }
+  }, allOrgs.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o.roomId,
+    value: o.roomId
+  }, o.meta?.name || o.roomId)))), /*#__PURE__*/React.createElement("div", {
+    style: {
       padding: 24
     }
   }, view === 'dashboard' && !activeCase && /*#__PURE__*/React.createElement(DashboardOverview, {
@@ -35607,7 +35738,7 @@ const ProviderApp = ({
     session: session
   }), view === 'transparency' && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  })), /*#__PURE__*/React.createElement(Modal, {
+  }))), /*#__PURE__*/React.createElement(Modal, {
     open: discoverModal,
     onClose: () => setDiscoverModal(false),
     title: "Find Client"
@@ -39160,6 +39291,7 @@ const App = () => {
     try {
       localStorage.removeItem('khora_session');
       localStorage.removeItem('khora_active_context');
+      localStorage.removeItem('khora_active_org');
       localStorage.removeItem('khora_welcomed');
     } catch {}
     await svc.logout();
