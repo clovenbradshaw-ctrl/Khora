@@ -20339,7 +20339,7 @@ const ClientApp = ({
       color: 'var(--tx-3)',
       fontFamily: 'var(--mono)'
     }
-  }, Object.values(p.sharedFields || {}).filter(Boolean).length, " shared")))))))) : /*#__PURE__*/React.createElement(React.Fragment, null, clientTeamDMs.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }, Object.values(p.sharedFields || {}).filter(Boolean).length, " shared"))))))) : /*#__PURE__*/React.createElement(React.Fragment, null, clientTeamDMs.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: { padding: '40px 16px', textAlign: 'center' }
   }, /*#__PURE__*/React.createElement(I, { n: "users", s: 28, c: "var(--tx-3)" }),
   /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 11.5, marginTop: 10 } }, "No team DMs yet"),
@@ -20372,7 +20372,7 @@ const ClientApp = ({
           userType: dm.peerType || 'provider',
           teamName: dm.teamName,
           size: "xs"
-        })))))))), /*#__PURE__*/React.createElement("div", {
+        }))))))))), /*#__PURE__*/React.createElement("div", {
     className: "inbox-chat"
   }, inboxConvo !== null && (typeof inboxConvo === 'string' || providers[inboxConvo]) ? (() => {
     const isTeamDM = typeof inboxConvo === 'string';
@@ -31312,7 +31312,7 @@ const ProviderApp = ({
         fontFamily: 'var(--mono)'
       }
     }, "org channel")))));
-  }))) : /*#__PURE__*/React.createElement(React.Fragment, null, teamDMs.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  })) : /*#__PURE__*/React.createElement(React.Fragment, null, teamDMs.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: { padding: '40px 16px', textAlign: 'center' }
   }, /*#__PURE__*/React.createElement(I, { n: "users", s: 28, c: "var(--tx-3)" }),
   /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 11.5, marginTop: 10 } }, "No team DMs yet"),
@@ -31346,7 +31346,7 @@ const ProviderApp = ({
           orgName: dm.orgName,
           teamName: dm.teamName,
           size: "xs"
-        })))))))), /*#__PURE__*/React.createElement("div", {
+        }))))))))), /*#__PURE__*/React.createElement("div", {
     className: "inbox-chat"
   }, inboxConvo ? (() => {
     const convoType = getInboxConvoType(inboxConvo);
