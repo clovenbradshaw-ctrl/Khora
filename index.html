@@ -861,6 +861,20 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .sw-cols-usage-bar{width:40px;height:4px;border-radius:2px;background:var(--border-0);overflow:hidden;display:inline-block;vertical-align:middle;margin-left:6px}
 .sw-cols-usage-fill{height:100%;border-radius:2px;background:var(--teal);transition:width .3s}
 
+/* ── Add Column Modal ── */
+.acm-gov-banner{display:flex;align-items:flex-start;gap:10px;padding:12px 18px;background:var(--bg-3);border-bottom:1px solid var(--border-0);font-size:12px}
+.acm-mode-tabs{display:flex;border-bottom:1px solid var(--border-0)}
+.acm-mode-tab{flex:1;padding:10px 14px;background:none;border:none;border-bottom:2px solid transparent;font-size:12px;font-family:var(--sans);
+  color:var(--tx-2);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s}
+.acm-mode-tab:hover{color:var(--tx-0);background:var(--bg-3)}
+.acm-mode-tab.active{color:var(--purple);border-bottom-color:var(--purple);font-weight:600}
+.acm-existing-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;padding:2px 0}
+.acm-existing-item{padding:10px 12px;border:1px solid var(--border-0);border-radius:var(--r);cursor:pointer;transition:all .15s;background:var(--bg-2)}
+.acm-existing-item:hover{border-color:var(--border-2);background:var(--bg-3)}
+.acm-existing-item.selected{border-color:var(--purple);background:rgba(139,92,246,.06)}
+.acm-existing-radio{width:14px;height:14px;border-radius:50%;border:2px solid var(--border-1);flex-shrink:0;transition:all .15s}
+.acm-existing-radio.checked{border-color:var(--purple);background:var(--purple);box-shadow:inset 0 0 0 2.5px var(--bg-1)}
+
 /* ── Governance Tab ── */
 .sw-gov-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
 @media(max-width:900px){.sw-gov-grid{grid-template-columns:1fr}}
@@ -26247,11 +26261,14 @@ const DatabaseView = ({
   onSaveFieldDef,
   onSaveCrosswalk,
   fieldGovernanceConfig,
-  onPropose
+  onPropose,
+  teamMode,
+  activeTeamObj
 }) => {
   const [dbTab, setDbTab] = useState('individuals');
   const [enabledFieldCols, setEnabledFieldCols] = useState([]);
   const [addFieldDd, setAddFieldDd] = useState(false);
+  const [addColumnModal, setAddColumnModal] = useState(false);
 
   // Transform cases into individual rows (same as IndividualsView)
   const individuals = cases.map(c => {
@@ -26578,38 +26595,72 @@ const DatabaseView = ({
     }
   }, s.v)))), /*#__PURE__*/React.createElement("div", {
     style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }
-  }, /*#__PURE__*/React.createElement("div", {
+  },
+  // Add Column button (primary action)
+  /*#__PURE__*/React.createElement("button", {
+    className: "b-pri b-sm",
+    style: { display: 'flex', alignItems: 'center', gap: 4 },
+    onClick: () => setAddColumnModal(true)
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Add Column"),
+  // Quick-add from existing definitions dropdown
+  /*#__PURE__*/React.createElement("div", {
     className: "dt-dd-wrap",
     style: { position: 'relative' }
   }, /*#__PURE__*/React.createElement("button", {
-    className: "b-pri b-sm",
+    className: "b-gho b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 4 },
     onClick: () => setAddFieldDd(!addFieldDd)
-  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Add Field"), addFieldDd && /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(I, { n: "grid", s: 11 }), "Columns (", (IND_COLS.length - 6 + enabledFieldCols.filter(k => !fieldKeys.has(k)).length), ")"), addFieldDd && /*#__PURE__*/React.createElement("div", {
     className: "dt-dd",
-    style: { minWidth: 260, maxHeight: 320, overflow: 'auto' }
+    style: { minWidth: 280, maxHeight: 360, overflow: 'auto' }
   }, /*#__PURE__*/React.createElement("div", {
     className: "dt-dd-label"
-  }, "Select a field to add as column"), Object.values(fieldDefs || {}).length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: { padding: '12px 14px', fontSize: 11.5, color: 'var(--tx-3)' }
-  }, "No field definitions yet. Create one in the Definitions tab.") : Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !fieldKeys.has(d.key) && !enabledFieldCols.includes(d.key)).length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: { padding: '12px 14px', fontSize: 11.5, color: 'var(--tx-3)' }
-  }, "All available fields are already added.") : Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !fieldKeys.has(d.key) && !enabledFieldCols.includes(d.key)).map(d => /*#__PURE__*/React.createElement("div", {
-    key: d.uri || d.key,
+  }, "Toggle column visibility"), Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name').map(d => {
+    const isEnabled = fieldKeys.has(d.key) || enabledFieldCols.includes(d.key);
+    return /*#__PURE__*/React.createElement("div", {
+      key: d.uri || d.key,
+      className: "dt-dd-item",
+      style: { display: 'flex', alignItems: 'center', gap: 8 },
+      onClick: () => {
+        if (isEnabled && !fieldKeys.has(d.key)) {
+          setEnabledFieldCols(prev => prev.filter(x => x !== d.key));
+        } else if (!isEnabled) {
+          // Require definition for any column
+          if (!d.definition || d.definition.length < 10) {
+            if (showToast) showToast('This field needs a definition before it can be added as a column. Use "Add Column" to create one with a definition.', 'warning');
+            setAddFieldDd(false);
+            return;
+          }
+          setEnabledFieldCols(prev => [...prev, d.key]);
+        }
+        setAddFieldDd(false);
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: { width: 14, height: 14, borderRadius: 3, border: '1.5px solid ' + (isEnabled ? 'var(--teal)' : 'var(--border-1)'), background: isEnabled ? 'var(--teal)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }
+    }, isEnabled && /*#__PURE__*/React.createElement("span", { style: { color: '#fff', fontSize: 9, fontWeight: 700 } }, "\u2713")),
+    /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 500, fontSize: 12 } }, d.label || d.key),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 9.5, color: 'var(--tx-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+        d.definition ? d.definition.slice(0, 50) + (d.definition.length > 50 ? '...' : '') : '\u26A0 No definition')),
+    fieldKeys.has(d.key) && /*#__PURE__*/React.createElement("span", { className: "tag tag-green", style: { fontSize: 7, flexShrink: 0 } }, "DATA"));
+  }),
+  /*#__PURE__*/React.createElement("div", {
     className: "dt-dd-item",
-    onClick: () => {
-      setEnabledFieldCols(prev => [...prev, d.key]);
-      setAddFieldDd(false);
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: { fontWeight: 500, fontSize: 12.5 }
-  }, d.label || d.key), /*#__PURE__*/React.createElement("div", {
-    style: { fontSize: 10, color: 'var(--tx-3)', marginTop: 1 }
-  }, [d.category, d.data_type].filter(Boolean).join(' \u00b7 ')))), /*#__PURE__*/React.createElement("div", {
-    className: "dt-dd-item",
-    style: { borderTop: '1px solid var(--border-0)', color: 'var(--gold)', fontWeight: 600, fontSize: 11.5, marginTop: 4 },
-    onClick: () => { setAddFieldDd(false); setDbTab('definitions'); }
-  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 10, c: "var(--gold)" }), " New Field Definition..."))), enabledFieldCols.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: { borderTop: '1px solid var(--border-0)', color: 'var(--purple)', fontWeight: 600, fontSize: 11.5, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 },
+    onClick: () => { setAddFieldDd(false); setAddColumnModal(true); }
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 10, c: "var(--purple)" }), "Create New Column..."))),
+  // Team governance indicator
+  teamMode && /*#__PURE__*/React.createElement("span", {
+    className: "tag tag-purple",
+    style: { fontSize: 9, display: 'inline-flex', alignItems: 'center', gap: 3 }
+  }, /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 9, c: "var(--purple)" }),
+    (() => {
+      const at = activeTeamObj || (teamMode ? (teams || []).find(t => t.roomId === teamMode.roomId) : null);
+      const mode = at?.schemaRule?.mode || 'lead_decides';
+      return (TEAM_CONSENT_MODES[mode] || TEAM_CONSENT_MODES.lead_decides).label;
+    })(), " governance"),
+  // Active column chips
+  enabledFieldCols.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: { display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }
   }, enabledFieldCols.map(k => {
     const def = Object.values(fieldDefs || {}).find(d => d.key === k);
@@ -26617,10 +26668,39 @@ const DatabaseView = ({
       key: k,
       className: "tag tag-teal",
       style: { fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer' },
-      title: "Click to remove column",
+      title: def?.definition ? def.definition.slice(0, 100) : 'Click to remove column',
       onClick: () => setEnabledFieldCols(prev => prev.filter(x => x !== k))
     }, def?.label || k, " \u00d7");
-  }))), /*#__PURE__*/React.createElement(DataTable, {
+  }))),
+  // Add Column Modal
+  /*#__PURE__*/React.createElement(AddColumnModal, {
+    open: addColumnModal,
+    onClose: (addedKey) => { setAddColumnModal(false); if (addedKey) setEnabledFieldCols(prev => prev.includes(addedKey) ? prev : [...prev, addedKey]); },
+    onSave: async (def) => {
+      // Save field definition
+      const schemaRoom = svc.client ? svc.client.getRooms().find(r => {
+        const id = r.currentState.getStateEvents(EVT.IDENTITY, '');
+        return id?.getContent()?.account_type === 'schema' && id.getContent().owner === svc.userId;
+      })?.roomId : null;
+      if (schemaRoom) {
+        const updated = { ...fieldDefs, [def.uri]: def };
+        await svc.setState(schemaRoom, EVT.FIELD_DEF, { definitions: updated });
+      }
+      // Add as enabled column
+      setEnabledFieldCols(prev => prev.includes(def.key) ? prev : [...prev, def.key]);
+    },
+    onPropose: onPropose,
+    fieldDefs: fieldDefs,
+    teams: teams,
+    teamMode: teamMode,
+    activeTeamObj: activeTeamObj,
+    svc: svc,
+    orgRoom: orgRoom,
+    networkRoom: networkRoom,
+    showToast: showToast,
+    fieldGovernanceConfig: fieldGovernanceConfig
+  }),
+  /*#__PURE__*/React.createElement(DataTable, {
     data: allIndividuals,
     columns: IND_COLS,
     groupOptions: IND_GROUPS,
@@ -27581,6 +27661,377 @@ const CreateFieldModal = ({ open, onClose, onSave, onPropose, fieldDefs, categor
         React.createElement('button', { className: 'b-gho', onClick: onClose }, 'Cancel'),
         React.createElement('button', { className: 'b-pri', disabled: !isValid || !!duplicateWarning || saving, onClick: handleSave },
           saving ? 'Saving...' : governanceRequired ? 'Submit Proposal' : 'Create Field')
+      )
+    )
+  );
+};
+
+/* ─── AddColumnModal — add a column to the Individuals table with required definition + team governance ─── */
+const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, teamMode, activeTeamObj, svc, orgRoom, networkRoom, showToast, fieldGovernanceConfig }) => {
+  const [label, setLabel] = useState('');
+  const [key, setKey] = useState('');
+  const [keyEdited, setKeyEdited] = useState(false);
+  const [category, setCategory] = useState('details');
+  const [dataType, setDataType] = useState('text');
+  const [definition, setDefinition] = useState('');
+  const [scope, setScope] = useState('');
+  const [sensitive, setSensitive] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+  const [mode, setMode] = useState('new'); // 'new' | 'existing'
+  const [selectedExistingUri, setSelectedExistingUri] = useState('');
+  const [existingSearch, setExistingSearch] = useState('');
+
+  if (!open) return null;
+
+  const computedKey = key || fieldLabelToKey(label);
+  const uri = `khora:${teamMode ? 'team/' + teamMode.roomId + '/' : 'org/'}${computedKey}`;
+  const defLen = definition.length;
+  const isValidNew = label.trim().length > 0 && computedKey.length > 0 && defLen >= 20 && dataType;
+  const isValidExisting = !!selectedExistingUri;
+
+  // Resolve team governance context
+  const activeTeam = activeTeamObj || (teamMode ? (teams || []).find(t => t.roomId === teamMode.roomId) : null);
+  const teamSchemaRule = activeTeam?.schemaRule || { mode: 'lead_decides' };
+  const consentMode = TEAM_CONSENT_MODES[teamSchemaRule.mode] || TEAM_CONSENT_MODES.lead_decides;
+  const isTeamLead = activeTeam?.owner === svc?.userId;
+  const isInTeamContext = !!activeTeam;
+  const teamGovRequired = isInTeamContext && (teamSchemaRule.mode !== 'lead_decides' || !isTeamLead);
+  const orgGovRequired = !!(fieldGovernanceConfig?.governance_required);
+  const governanceRequired = teamGovRequired || orgGovRequired;
+
+  // Cascading governance: team rules cascade from org/network
+  const cascadeSource = activeTeam && orgRoom ? 'org' : activeTeam && networkRoom ? 'network' : null;
+
+  // Check for duplicate URIs / keys
+  React.useEffect(() => {
+    if (!computedKey || !fieldDefs) { setDuplicateWarning(null); return; }
+    const existing = Object.values(fieldDefs).find(d => d.key === computedKey || d.uri === uri);
+    setDuplicateWarning(existing ? `A column with key "${computedKey}" already exists (${existing.label})` : null);
+  }, [computedKey, uri, fieldDefs]);
+
+  const handleReset = () => {
+    setLabel(''); setKey(''); setKeyEdited(false); setCategory('details');
+    setDataType('text'); setDefinition(''); setScope(''); setSensitive(false);
+    setSelectedExistingUri(''); setExistingSearch(''); setDuplicateWarning(null);
+  };
+
+  const handleSaveNew = async () => {
+    if (!isValidNew || duplicateWarning) return;
+    setSaving(true);
+    const def = {
+      uri,
+      key: computedKey,
+      label: label.trim(),
+      category,
+      data_type: dataType,
+      definition: definition.trim(),
+      scope: scope.trim() || null,
+      sensitive,
+      authority: null,
+      version: 1,
+      version_history: [],
+      migration_rules: [],
+      supersedes: null,
+      superseded_by: null,
+      created_by: svc?.userId || 'unknown',
+      created_at: Date.now()
+    };
+
+    try {
+      if (governanceRequired) {
+        // Create governance proposal
+        const targetRoom = activeTeam ? activeTeam.roomId : (networkRoom || orgRoom);
+        const proposal = {
+          id: 'prop_col_' + computedKey + '_' + Date.now(),
+          type: 'add_column',
+          summary: `Add column: "${label.trim()}"`,
+          detail: `New ${dataType} column in ${category} category. Definition: ${definition.trim().slice(0, 120)}${defLen > 120 ? '...' : ''}`,
+          field_definition: def,
+          proposed_by: svc?.userId,
+          proposed_at: Date.now(),
+          status: 'submitted',
+          positions: {},
+          governance_context: {
+            team: activeTeam ? { roomId: activeTeam.roomId, name: activeTeam.name, consent_mode: teamSchemaRule.mode } : null,
+            org: orgRoom || null,
+            network: networkRoom || null,
+            cascading: !!cascadeSource,
+            cascade_source: cascadeSource
+          }
+        };
+
+        if (isInTeamContext) {
+          // Route through team schema governance
+          const currentSchema = { ...(activeTeam.schema || { version: 1, fields: [], pending_changes: [], change_log: [] }) };
+          const change = {
+            id: 'chg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+            action: 'add_field',
+            uri: def.uri,
+            required: false,
+            summary: `Add column "${label.trim()}" — ${definition.trim().slice(0, 80)}`,
+            proposed_by: svc.userId,
+            proposed_at: Date.now(),
+            field_definition: def,
+            approvals: teamSchemaRule.mode === 'lead_decides' ? {} : { [svc.userId]: Date.now() },
+            blocks: {}
+          };
+
+          if (teamSchemaRule.mode === 'lead_decides' && isTeamLead) {
+            // Apply immediately
+            if (onSave) await onSave(def);
+            currentSchema.fields = [...(currentSchema.fields || []), { uri: def.uri, required: false, added_version: (currentSchema.version || 1) + 1 }];
+            currentSchema.version = (currentSchema.version || 1) + 1;
+            currentSchema.last_modified = Date.now();
+            currentSchema.modified_by = svc.userId;
+            currentSchema.change_log = [...(currentSchema.change_log || []), { version: currentSchema.version, summary: change.summary, by: svc.userId, ts: Date.now() }];
+            await svc.setState(activeTeam.roomId, EVT.TEAM_SCHEMA, currentSchema);
+            if (showToast) showToast(`Column "${label.trim()}" added to team schema (v${currentSchema.version})`, 'success');
+          } else {
+            // Save definition first, then add as pending change
+            if (onSave) await onSave(def);
+            currentSchema.pending_changes = [...(currentSchema.pending_changes || []), change];
+            await svc.setState(activeTeam.roomId, EVT.TEAM_SCHEMA, currentSchema);
+            const modeLabel = consentMode.label.toLowerCase();
+            if (showToast) showToast(`Column proposal submitted — awaiting ${modeLabel} approval from team`, 'info');
+          }
+        } else {
+          // Org/network level governance
+          if (onPropose) await onPropose(proposal, targetRoom);
+          if (showToast) showToast('Governance proposal created for new column');
+        }
+      } else {
+        // No governance — save directly
+        if (onSave) await onSave(def);
+        if (showToast) showToast(`Column "${label.trim()}" created`);
+      }
+      handleReset();
+      onClose();
+    } catch (e) {
+      console.error('AddColumn error:', e);
+      if (showToast) showToast('Error adding column: ' + e.message, 'error');
+    }
+    setSaving(false);
+  };
+
+  const handleSelectExisting = async () => {
+    if (!selectedExistingUri) return;
+    setSaving(true);
+    const existingDef = fieldDefs[selectedExistingUri];
+    if (!existingDef) { setSaving(false); return; }
+
+    // Existing field must have a definition
+    if (!existingDef.definition || existingDef.definition.length < 10) {
+      if (showToast) showToast('This field is missing a definition. Please add a definition in the Definitions tab first.', 'warning');
+      setSaving(false);
+      return;
+    }
+
+    try {
+      if (isInTeamContext) {
+        const currentSchema = { ...(activeTeam.schema || { version: 1, fields: [], pending_changes: [], change_log: [] }) };
+        // Check if already in team schema
+        if ((currentSchema.fields || []).some(f => f.uri === selectedExistingUri)) {
+          if (showToast) showToast('This field is already in the team schema', 'warning');
+          setSaving(false);
+          return;
+        }
+        const change = {
+          id: 'chg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          action: 'add_field',
+          uri: selectedExistingUri,
+          required: false,
+          summary: `Add column "${existingDef.label}" from definitions`,
+          proposed_by: svc.userId,
+          proposed_at: Date.now(),
+          approvals: teamSchemaRule.mode === 'lead_decides' ? {} : { [svc.userId]: Date.now() },
+          blocks: {}
+        };
+
+        if (teamSchemaRule.mode === 'lead_decides' && isTeamLead) {
+          currentSchema.fields = [...(currentSchema.fields || []), { uri: selectedExistingUri, required: false, added_version: (currentSchema.version || 1) + 1 }];
+          currentSchema.version = (currentSchema.version || 1) + 1;
+          currentSchema.last_modified = Date.now();
+          currentSchema.modified_by = svc.userId;
+          currentSchema.change_log = [...(currentSchema.change_log || []), { version: currentSchema.version, summary: change.summary, by: svc.userId, ts: Date.now() }];
+          await svc.setState(activeTeam.roomId, EVT.TEAM_SCHEMA, currentSchema);
+          if (showToast) showToast(`Column "${existingDef.label}" added to team schema`, 'success');
+        } else {
+          currentSchema.pending_changes = [...(currentSchema.pending_changes || []), change];
+          await svc.setState(activeTeam.roomId, EVT.TEAM_SCHEMA, currentSchema);
+          const modeLabel = consentMode.label.toLowerCase();
+          if (showToast) showToast(`Column proposal submitted — awaiting ${modeLabel} approval`, 'info');
+        }
+      }
+      // Always add to enabledFieldCols locally
+      onClose(existingDef.key);
+      handleReset();
+    } catch (e) {
+      console.error('AddColumn existing error:', e);
+      if (showToast) showToast('Error: ' + e.message, 'error');
+    }
+    setSaving(false);
+  };
+
+  const existingDefs = Object.values(fieldDefs || {}).filter(d =>
+    d.key !== 'full_name' && d.definition && d.definition.length >= 10
+  );
+  const filteredExisting = existingSearch
+    ? existingDefs.filter(d => d.label?.toLowerCase().includes(existingSearch.toLowerCase()) || d.key?.toLowerCase().includes(existingSearch.toLowerCase()))
+    : existingDefs;
+
+  return React.createElement('div', { className: 'cf-overlay', onClick: e => { if (e.target === e.currentTarget) { handleReset(); onClose(); } } },
+    React.createElement('div', { className: 'cf-modal', style: { width: 560 } },
+      React.createElement('div', { className: 'cf-header' },
+        React.createElement('h3', null, 'Add Column'),
+        React.createElement('button', { className: 'b-gho b-xs', onClick: () => { handleReset(); onClose(); }, style: { fontSize: 16, lineHeight: 1, padding: '2px 8px' } }, '\u2715')
+      ),
+      // Governance context banner
+      isInTeamContext && React.createElement('div', { className: 'acm-gov-banner' },
+        React.createElement(I, { n: 'shieldCheck', s: 13, c: consentMode.color === 'gold' ? 'var(--gold)' : consentMode.color === 'green' ? 'var(--green)' : 'var(--blue)' }),
+        React.createElement('div', { style: { flex: 1 } },
+          React.createElement('div', { style: { fontWeight: 600, fontSize: 12 } },
+            'Team: ', activeTeam.name, ' \u2014 ', consentMode.label, ' governance'),
+          React.createElement('div', { style: { fontSize: 10.5, color: 'var(--tx-2)', marginTop: 1 } },
+            consentMode.desc),
+          cascadeSource && React.createElement('div', { style: { fontSize: 9.5, color: 'var(--tx-3)', marginTop: 2, fontStyle: 'italic' } },
+            'Rules cascade from ', cascadeSource, ' level')
+        )
+      ),
+      // Mode tabs
+      React.createElement('div', { className: 'acm-mode-tabs' },
+        React.createElement('button', {
+          className: 'acm-mode-tab' + (mode === 'existing' ? ' active' : ''),
+          onClick: () => setMode('existing')
+        }, React.createElement(I, { n: 'grid', s: 11 }), 'From Definitions'),
+        React.createElement('button', {
+          className: 'acm-mode-tab' + (mode === 'new' ? ' active' : ''),
+          onClick: () => setMode('new')
+        }, React.createElement(I, { n: 'plus', s: 11 }), 'Create New')
+      ),
+      React.createElement('div', { className: 'cf-body' },
+        mode === 'existing' && React.createElement(React.Fragment, null,
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('input', {
+              value: existingSearch, onChange: e => setExistingSearch(e.target.value),
+              placeholder: 'Search defined fields...', style: { fontSize: 13 }
+            })
+          ),
+          existingDefs.length === 0
+            ? React.createElement('div', { style: { padding: '20px 0', textAlign: 'center', color: 'var(--tx-3)', fontSize: 12 } },
+                'No field definitions with definitions yet. Create one using "Create New" tab.')
+            : React.createElement('div', { className: 'acm-existing-list' },
+                filteredExisting.map(d => React.createElement('div', {
+                  key: d.uri,
+                  className: 'acm-existing-item' + (selectedExistingUri === d.uri ? ' selected' : ''),
+                  onClick: () => setSelectedExistingUri(d.uri === selectedExistingUri ? '' : d.uri)
+                },
+                  React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                    React.createElement('div', { className: 'acm-existing-radio' + (selectedExistingUri === d.uri ? ' checked' : '') }),
+                    React.createElement('div', null,
+                      React.createElement('div', { style: { fontWeight: 600, fontSize: 12.5 } }, d.label),
+                      React.createElement('div', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 1 } }, d.key)
+                    )
+                  ),
+                  React.createElement('div', { style: { fontSize: 11, color: 'var(--tx-1)', marginTop: 4, lineHeight: 1.4 } },
+                    (d.definition || '').slice(0, 100), (d.definition || '').length > 100 ? '...' : ''),
+                  React.createElement('div', { style: { display: 'flex', gap: 4, marginTop: 4 } },
+                    React.createElement('span', { className: 'tag tag-blue', style: { fontSize: 8 } }, (d.data_type || 'text').toUpperCase()),
+                    React.createElement('span', { className: 'tag tag-' + (CAT_COLORS[d.category] || 'blue'), style: { fontSize: 8 } }, CAT_LABELS[d.category] || d.category)
+                  )
+                ))
+              ),
+          // Governance info for existing
+          governanceRequired && selectedExistingUri && React.createElement('div', { className: 'cf-gov-notice' },
+            React.createElement(I, { n: 'shieldCheck', s: 12 }),
+            isInTeamContext
+              ? `This will ${teamSchemaRule.mode === 'lead_decides' && isTeamLead ? 'be added to' : 'create a proposal for'} the team schema`
+              : 'Governance is required \u2014 this will create a proposal for review'
+          )
+        ),
+        mode === 'new' && React.createElement(React.Fragment, null,
+          // Label & Key
+          React.createElement('div', { className: 'cf-row-pair' },
+            React.createElement('div', { className: 'cf-row' },
+              React.createElement('label', { className: 'cf-label' }, 'Column Name', React.createElement('span', { className: 'required' }, '*')),
+              React.createElement('input', { value: label, onChange: e => { setLabel(e.target.value); if (!keyEdited) setKey(fieldLabelToKey(e.target.value)); },
+                placeholder: 'e.g. Housing Status', style: { fontSize: 13 } })
+            ),
+            React.createElement('div', { className: 'cf-row' },
+              React.createElement('label', { className: 'cf-label' }, 'Key'),
+              React.createElement('input', { value: key || fieldLabelToKey(label), onChange: e => { setKey(e.target.value); setKeyEdited(true); },
+                style: { fontSize: 12, fontFamily: 'var(--mono)' } })
+            )
+          ),
+          // Category & Type
+          React.createElement('div', { className: 'cf-row-pair' },
+            React.createElement('div', { className: 'cf-row' },
+              React.createElement('label', { className: 'cf-label' }, 'Category', React.createElement('span', { className: 'required' }, '*')),
+              React.createElement('select', { value: category, onChange: e => setCategory(e.target.value), style: { fontSize: 13 } },
+                ['identity', 'contact', 'details', 'case', 'sensitive'].map(c =>
+                  React.createElement('option', { key: c, value: c }, CAT_LABELS[c] || c)
+                )
+              )
+            ),
+            React.createElement('div', { className: 'cf-row' },
+              React.createElement('label', { className: 'cf-label' }, 'Data Type', React.createElement('span', { className: 'required' }, '*')),
+              React.createElement('select', { value: dataType, onChange: e => setDataType(e.target.value), style: { fontSize: 13 } },
+                FIELD_DATA_TYPES.map(t => React.createElement('option', { key: t.v, value: t.v }, t.l))
+              )
+            )
+          ),
+          // Definition (required)
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('label', { className: 'cf-label' }, 'Definition', React.createElement('span', { className: 'required' }, '*'),
+              React.createElement('span', { style: { fontSize: 9, color: 'var(--tx-3)', marginLeft: 6, fontWeight: 400 } }, 'Every column must have a clear definition')),
+            React.createElement('textarea', { value: definition, onChange: e => setDefinition(e.target.value),
+              placeholder: 'Describe what this column means, how it should be interpreted, and what values are expected (min 20 characters)...',
+              style: { fontSize: 13, minHeight: 72 } }),
+            React.createElement('div', { className: `cf-char-count ${defLen < 20 ? 'warn' : 'ok'}` }, defLen, '/20 min')
+          ),
+          // Scope
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('label', { className: 'cf-label' }, 'Scope',
+              React.createElement('span', { style: { fontSize: 9, color: 'var(--tx-3)', marginLeft: 4 } }, 'recommended')),
+            React.createElement('textarea', { value: scope, onChange: e => setScope(e.target.value),
+              placeholder: "What's included vs excluded...", style: { fontSize: 13, minHeight: 48 } })
+          ),
+          // Sensitive
+          React.createElement('div', { className: 'cf-row' },
+            React.createElement('div', { className: 'cf-toggle', onClick: () => setSensitive(!sensitive) },
+              React.createElement('div', { className: `cf-toggle-track${sensitive ? ' on' : ''}` },
+                React.createElement('div', { className: 'cf-toggle-knob' })
+              ),
+              React.createElement('span', { style: { fontSize: 12, color: sensitive ? 'var(--red)' : 'var(--tx-2)' } },
+                sensitive ? 'Sensitive \u2014 requires elevated access' : 'Not sensitive')
+            )
+          ),
+          // Duplicate warning
+          duplicateWarning && React.createElement('div', { style: { fontSize: 11, color: 'var(--orange)', padding: '6px 10px', background: 'var(--orange-dim)', borderRadius: 'var(--r)', border: '1px solid rgba(224,148,56,.2)' } },
+            '\u26A0 ', duplicateWarning),
+          // Governance notice
+          governanceRequired && React.createElement('div', { className: 'cf-gov-notice' },
+            React.createElement(I, { n: 'shieldCheck', s: 12 }),
+            isInTeamContext
+              ? `Team governance (${consentMode.label.toLowerCase()}) \u2014 ${teamSchemaRule.mode === 'lead_decides' && isTeamLead ? 'will be applied directly' : 'this will create a proposal for team review'}`
+              : 'Governance is required \u2014 this will create a proposal for review'
+          ),
+          // Preview
+          React.createElement('div', { className: 'cf-preview' },
+            React.createElement('span', { style: { fontWeight: 600, fontSize: 12 } }, 'Preview'),
+            React.createElement('div', { className: 'cf-preview-uri' }, uri),
+            React.createElement('div', { style: { marginTop: 6, fontSize: 11, color: 'var(--tx-1)', lineHeight: 1.5 } },
+              label.trim() || 'Column Name', ' \u2014 ', definition.trim().slice(0, 80) || 'definition...', definition.length > 80 ? '...' : '')
+          )
+        )
+      ),
+      React.createElement('div', { className: 'cf-footer' },
+        React.createElement('button', { className: 'b-gho', onClick: () => { handleReset(); onClose(); } }, 'Cancel'),
+        mode === 'existing'
+          ? React.createElement('button', { className: 'b-pri', disabled: !isValidExisting || saving, onClick: handleSelectExisting },
+              saving ? 'Adding...' : governanceRequired && !(teamSchemaRule.mode === 'lead_decides' && isTeamLead) ? 'Submit Proposal' : 'Add Column')
+          : React.createElement('button', { className: 'b-pri', disabled: !isValidNew || !!duplicateWarning || saving, onClick: handleSaveNew },
+              saving ? 'Saving...' : governanceRequired && !(teamSchemaRule.mode === 'lead_decides' && isTeamLead) ? 'Submit Proposal' : 'Create Column')
       )
     )
   );
@@ -35818,7 +36269,9 @@ const ProviderApp = ({
       setFieldCrosswalks(updated);
     },
     fieldGovernanceConfig: fieldGovernanceConfig,
-    onPropose: async (proposal, room) => { if (svc) await svc.setState(room, EVT.GOV_PROPOSAL, proposal, proposal.id); }
+    onPropose: async (proposal, room) => { if (svc) await svc.setState(room, EVT.GOV_PROPOSAL, proposal, proposal.id); },
+    teamMode: teamMode,
+    activeTeamObj: activeTeamObj
   }), /*#__PURE__*/React.createElement(NoteCreateModal, {
     open: newNoteModal,
     onClose: () => setNewNoteModal(false),
