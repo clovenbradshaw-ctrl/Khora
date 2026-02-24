@@ -27127,6 +27127,7 @@ const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSave
   const [xwNotes, setXwNotes] = useState('');
   const [editingAuthority, setEditingAuthority] = useState(false);
   const [authDraft, setAuthDraft] = useState({ org: '', name: '', provision: '', uri: '' });
+  const [authUriBrowserOpen, setAuthUriBrowserOpen] = useState(false);
   const d = fieldDef;
   if (!d) return null;
 
@@ -27293,9 +27294,29 @@ const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSave
             React.createElement('input', { placeholder: 'Provision (e.g. Element 3.01)', value: authDraft.provision,
               onChange: e => setAuthDraft({...authDraft, provision: e.target.value}),
               style: { fontSize: 12, padding: '4px 8px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-2)', color: 'var(--tx-0)' } }),
-            React.createElement('input', { placeholder: 'Reference URI', value: authDraft.uri,
-              onChange: e => setAuthDraft({...authDraft, uri: e.target.value}),
-              style: { fontSize: 12, padding: '4px 8px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-2)', color: 'var(--tx-0)' } }),
+            React.createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center' } },
+              React.createElement('input', { placeholder: 'Reference URI', value: authDraft.uri,
+                onChange: e => setAuthDraft({...authDraft, uri: e.target.value}),
+                style: { flex: 1, fontSize: 12, padding: '4px 8px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-2)', color: 'var(--tx-0)' } }),
+              React.createElement('button', { className: 'b-gho b-xs', onClick: () => setAuthUriBrowserOpen(true),
+                title: 'Search URI libraries',
+                style: { display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap', flexShrink: 0 } },
+                React.createElement(I, { n: 'search', s: 10 }), 'Search')
+            ),
+            React.createElement(UriLibraryBrowser, {
+              open: authUriBrowserOpen,
+              onClose: () => setAuthUriBrowserOpen(false),
+              mode: 'select',
+              onSelect: entry => {
+                setAuthDraft(prev => ({
+                  ...prev,
+                  uri: entry.uri || prev.uri,
+                  org: prev.org || entry.source_library || '',
+                  name: prev.name || entry.label || ''
+                }));
+                setAuthUriBrowserOpen(false);
+              }
+            }),
             ((teams || []).filter(t => t.schema?.fields?.some(f => f.uri === d.uri)).length > 0) &&
               React.createElement('div', { style: { fontSize: 10, color: 'var(--orange)', padding: '6px 8px', background: 'var(--bg-1)', borderRadius: 'var(--r)', border: '1px solid var(--orange)', opacity: 0.9 } },
                 '\u26A0 This field is used by ', (teams || []).filter(t => t.schema?.fields?.some(f => f.uri === d.uri)).length, ' team(s). Saving will create a governance proposal instead of applying directly.'
@@ -27782,6 +27803,7 @@ const CreateFieldModal = ({ open, onClose, onSave, onPropose, fieldDefs, categor
   const [authProvision, setAuthProvision] = useState('');
   const [authUri, setAuthUri] = useState('');
   const [showAuth, setShowAuth] = useState(false);
+  const [authUriBrowserOpen, setAuthUriBrowserOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
 
@@ -27922,7 +27944,24 @@ const CreateFieldModal = ({ open, onClose, onSave, onPropose, fieldDefs, categor
           React.createElement('input', { value: authOrg, onChange: e => setAuthOrg(e.target.value), placeholder: 'Organization (e.g. HUD)', style: { fontSize: 12, padding: '6px 10px' } }),
           React.createElement('input', { value: authName, onChange: e => setAuthName(e.target.value), placeholder: 'Standard name', style: { fontSize: 12, padding: '6px 10px' } }),
           React.createElement('input', { value: authProvision, onChange: e => setAuthProvision(e.target.value), placeholder: 'Provision (e.g. Element 3.01)', style: { fontSize: 12, padding: '6px 10px' } }),
-          React.createElement('input', { value: authUri, onChange: e => setAuthUri(e.target.value), placeholder: 'Reference URI', style: { fontSize: 12, padding: '6px 10px' } })
+          React.createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center' } },
+            React.createElement('input', { value: authUri, onChange: e => setAuthUri(e.target.value), placeholder: 'Reference URI', style: { flex: 1, fontSize: 12, padding: '6px 10px' } }),
+            React.createElement('button', { className: 'b-gho b-xs', onClick: () => setAuthUriBrowserOpen(true),
+              title: 'Search URI libraries',
+              style: { display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap', flexShrink: 0 } },
+              React.createElement(I, { n: 'search', s: 10 }), 'Search')
+          ),
+          React.createElement(UriLibraryBrowser, {
+            open: authUriBrowserOpen,
+            onClose: () => setAuthUriBrowserOpen(false),
+            mode: 'select',
+            onSelect: entry => {
+              setAuthUri(entry.uri || '');
+              if (!authOrg) setAuthOrg(entry.source_library || '');
+              if (!authName) setAuthName(entry.label || '');
+              setAuthUriBrowserOpen(false);
+            }
+          })
         ),
         // Duplicate warning
         duplicateWarning && React.createElement('div', { style: { fontSize: 11, color: 'var(--orange)', padding: '6px 10px', background: 'var(--orange-dim)', borderRadius: 'var(--r)', border: '1px solid rgba(224,148,58,.2)' } },
