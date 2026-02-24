@@ -99,10 +99,6 @@ html.light .beta-banner{background:rgba(138,109,30,0.12);color:var(--gold);borde
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .anim-up{animation:fadeUp .3s ease both}.anim-in{animation:fadeIn .25s ease both}.anim-sl{animation:slideR .28s ease both}
-.dodeca-orb{position:fixed;top:38px;right:14px;z-index:50;width:36px;height:36px;border-radius:50%;background:rgba(20,23,32,0.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(176,144,212,0.15);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(167,139,250,0.08);cursor:default;transition:box-shadow .3s ease,border-color .3s ease;}
-.dodeca-orb:hover{box-shadow:0 2px 20px rgba(167,139,250,0.22);border-color:rgba(176,144,212,0.35);}
-html.light .dodeca-orb{background:rgba(245,245,247,0.65);border-color:rgba(105,56,192,0.18);box-shadow:0 2px 12px rgba(105,56,192,0.08);}
-html.light .dodeca-orb:hover{box-shadow:0 2px 20px rgba(105,56,192,0.18);border-color:rgba(105,56,192,0.32);}
 input,textarea,select{font-family:var(--sans);background:var(--bg-1);border:1px solid var(--border-1);color:var(--tx-0);padding:11px 15px;border-radius:var(--r);font-size:14.5px;outline:none;transition:border .2s,box-shadow .2s;width:100%;}
 input:focus,textarea:focus,select:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim)}
 input::placeholder,textarea::placeholder{color:var(--tx-3)}textarea{resize:vertical;min-height:72px;line-height:1.55}
@@ -18419,16 +18415,11 @@ const ClientApp = ({
       width: 28,
       height: 28,
       borderRadius: 'var(--r)',
-      background: 'var(--purple-dim)',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--purple)'
+      justifyContent: 'center'
     }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "dodeca",
-    s: 15
-  })), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 28 })), /*#__PURE__*/React.createElement("span", {
     style: {
       fontFamily: 'var(--serif)',
       fontWeight: 700,
@@ -31265,16 +31256,11 @@ const ProviderApp = ({
       width: 28,
       height: 28,
       borderRadius: 'var(--r)',
-      background: 'var(--purple-dim)',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--purple)'
+      justifyContent: 'center'
     }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "dodeca",
-    s: 15
-  })), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 28 })), /*#__PURE__*/React.createElement("span", {
     style: {
       fontFamily: 'var(--serif)',
       fontWeight: 700,
@@ -40250,10 +40236,7 @@ const App = () => {
     session: session,
     onLogout: handleLogout,
     showToast: showToast
-  }), /*#__PURE__*/React.createElement("div", {
-    className: 'dodeca-orb',
-    title: 'Khora'
-  }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 28 })), availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", {
+  }), availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
       bottom: 14,
