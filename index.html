@@ -24062,167 +24062,111 @@ const ClientApp = ({
     onClick: () => setNewTeamDMModal(true),
     className: "b-gho b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 6 }
-  }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "New DM"))), myTeams.length > 0 && /*#__PURE__*/React.createElement("div", {
-    className: "tabs",
-    style: { marginBottom: 0 }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: `tab${inboxTab === 'providers' ? ' active' : ''}`,
-    onClick: () => { setInboxTab('providers'); setInboxConvo(null); setInboxMessages([]); }
-  }, "Providers (", providers.length, ")"), /*#__PURE__*/React.createElement("div", {
-    className: `tab${inboxTab === 'team' ? ' active' : ''}`,
-    onClick: () => { setInboxTab('team'); setInboxConvo(null); setInboxMessages([]); }
-  }, "Team DMs (", clientTeamDMs.length, ")")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "New DM"))), /*#__PURE__*/React.createElement("div", {
     className: "inbox-panel"
   }, /*#__PURE__*/React.createElement("div", {
     className: "inbox-list"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: '14px 14px 10px',
-      borderBottom: '1px solid var(--border-0)'
+      padding: '8px 14px 8px',
+      borderBottom: '1px solid var(--border-0)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label",
     style: {
-      marginBottom: 0
+      marginBottom: 0,
+      flex: 1
     }
-  }, inboxTab === 'providers' ? `PROVIDERS (${providers.length})` : `TEAM DMs (${clientTeamDMs.length})`)), /*#__PURE__*/React.createElement("div", {
+  }, `CONVERSATIONS (${providers.length + clientTeamDMs.length})`)), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       overflow: 'auto'
     }
-  }, inboxTab === 'providers' || !myTeams.length ? (providers.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: '40px 16px',
-      textAlign: 'center'
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "msg",
-    s: 28,
-    c: "var(--tx-3)"
-  }), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: 'var(--tx-3)',
-      fontSize: 11.5,
-      marginTop: 10
-    }
-  }, "No conversations yet"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: 'var(--tx-3)',
-      fontSize: 10.5,
-      marginTop: 4
-    }
-  }, "Add a provider to start chatting")) : providers.map((p, i) => /*#__PURE__*/React.createElement("div", {
-    key: p.bridgeRoomId,
-    onClick: () => openInboxConvo(i),
-    style: {
-      padding: '12px 14px',
-      cursor: 'pointer',
-      borderBottom: '1px solid var(--border-0)',
-      background: inboxConvo === i ? 'var(--bg-4)' : 'transparent',
-      borderLeft: inboxConvo === i ? '3px solid var(--teal)' : '3px solid transparent',
-      transition: 'all .15s'
-    },
-    onMouseEnter: e => {
-      if (inboxConvo !== i) e.currentTarget.style.background = 'var(--bg-3)';
-    },
-    onMouseLeave: e => {
-      if (inboxConvo !== i) e.currentTarget.style.background = inboxConvo === i ? 'var(--bg-4)' : 'transparent';
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 36,
-      height: 36,
-      borderRadius: '50%',
-      background: 'var(--gold-dim)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--gold)',
-      border: '2px solid var(--gold)',
-      flexShrink: 0
-    }
-  }, p.providerProfile?.org_membership?.verified ? /*#__PURE__*/React.createElement(I, {
-    n: "shieldCheck",
-    s: 16
-  }) : /*#__PURE__*/React.createElement(I, {
-    n: "user",
-    s: 16
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      minWidth: 0
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 13,
-      fontWeight: inboxConvo === i ? 700 : 500,
-      display: 'block',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap'
-    }
-  }, p.providerName || p.providerUserId), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 4,
-      marginTop: 2,
-      flexWrap: 'wrap'
-    }
-  }, /*#__PURE__*/React.createElement(ConnectionBadges, {
-    userType: "provider",
-    orgName: p.providerProfile?.org_membership?.verified ? p.providerProfile.org_membership.org_name : null,
-    orgType: p.providerProfile?.org_membership?.org_type,
-    teamName: (() => { const t = myTeams.find(t => (t.members || []).some(m => m.userId === p.providerUserId)); return t?.name || null; })(),
-    verified: p.providerProfile?.org_membership?.verified,
-    role: p.providerProfile?.org_membership?.role,
-    size: "xs"
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9.5,
-      color: 'var(--tx-3)',
-      fontFamily: 'var(--mono)'
-    }
-  }, Object.values(p.sharedFields || {}).filter(Boolean).length, " shared"))))))) : /*#__PURE__*/React.createElement(React.Fragment, null, clientTeamDMs.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: { padding: '40px 16px', textAlign: 'center' }
-  }, /*#__PURE__*/React.createElement(I, { n: "users", s: 28, c: "var(--tx-3)" }),
-  /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 11.5, marginTop: 10 } }, "No team DMs yet"),
-  /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 10.5, marginTop: 4 } }, "Start a conversation with a team member"),
-  clientTeamMemberContacts.length > 0 && /*#__PURE__*/React.createElement("button", {
-    onClick: () => setNewTeamDMModal(true),
-    className: "b-pri b-sm",
-    style: { marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }
-  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "New DM")) : clientTeamDMs.map(dm => /*#__PURE__*/React.createElement("div", {
-    key: dm.roomId,
-    onClick: () => openInboxConvo(dm.roomId),
-    style: {
-      padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-0)',
-      background: inboxConvo === dm.roomId ? 'var(--bg-4)' : 'transparent',
-      borderLeft: inboxConvo === dm.roomId ? '3px solid var(--purple)' : '3px solid transparent',
-      transition: 'all .15s'
-    },
-    onMouseEnter: e => { if (inboxConvo !== dm.roomId) e.currentTarget.style.background = 'var(--bg-3)'; },
-    onMouseLeave: e => { if (inboxConvo !== dm.roomId) e.currentTarget.style.background = inboxConvo === dm.roomId ? 'var(--bg-4)' : 'transparent'; }
-  }, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-    /*#__PURE__*/React.createElement("div", {
-      style: { width: 36, height: 36, borderRadius: '50%', background: 'var(--purple-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--purple)', border: '2px solid var(--purple)', flexShrink: 0 }
-    }, /*#__PURE__*/React.createElement(I, { n: "user", s: 16 })),
-    /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-      /*#__PURE__*/React.createElement("span", {
-        style: { fontSize: 13, fontWeight: inboxConvo === dm.roomId ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-      }, dm.peerName || dm.peerId),
-      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' } },
-        /*#__PURE__*/React.createElement(ConnectionBadges, {
-          userType: dm.peerType || 'provider',
-          teamName: dm.teamName,
-          size: "xs"
-        }))))))))), /*#__PURE__*/React.createElement("div", {
+  }, (() => {
+    const total = providers.length + clientTeamDMs.length;
+    if (total === 0) return /*#__PURE__*/React.createElement("div", { style: { padding: '40px 16px', textAlign: 'center' } }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 28, c: "var(--tx-3)" }), /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 11.5, marginTop: 10 } }, "No conversations yet"), /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 10.5, marginTop: 4 } }, "Start a new conversation to get started."));
+    const renderSectionHdr = (label, count, iconName, color) => /*#__PURE__*/React.createElement("div", {
+      style: { padding: '6px 14px 4px', display: 'flex', alignItems: 'center', gap: 6, position: 'sticky', top: 0, background: 'var(--bg-1)', zIndex: 1, borderBottom: '1px solid var(--border-0)' }
+    }, iconName && /*#__PURE__*/React.createElement(I, { n: iconName, s: 11, c: color }), /*#__PURE__*/React.createElement("span", { style: { fontSize: 9.5, fontWeight: 700, color: color || 'var(--tx-2)', textTransform: 'uppercase', letterSpacing: '.5px' } }, label, " (", count, ")"));
+    const teamNames = [...new Set(clientTeamDMs.map(d => d.teamName).filter(Boolean))];
+    const ungroupedDMs = clientTeamDMs.filter(d => !d.teamName);
+    return /*#__PURE__*/React.createElement(React.Fragment, null,
+      providers.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null,
+        (clientTeamDMs.length > 0) && renderSectionHdr("Providers", providers.length, "user", "var(--teal)"),
+        ...providers.map((p, i) => {
+          const isActive = inboxConvo === i;
+          const name = p.providerName || p.providerProfile?.display_name || p.providerUserId || 'Provider';
+          return /*#__PURE__*/React.createElement("div", {
+            key: p.bridgeRoomId || i,
+            onClick: () => openInboxConvo(i),
+            style: { padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-0)', background: isActive ? 'var(--bg-4)' : 'transparent', borderLeft: isActive ? '3px solid var(--teal)' : '3px solid transparent', transition: 'all .15s' },
+            onMouseEnter: e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-3)'; },
+            onMouseLeave: e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }
+          }, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+            /*#__PURE__*/React.createElement("div", { style: { width: 32, height: 32, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal)', border: '2px solid var(--teal)', flexShrink: 0 } }, /*#__PURE__*/React.createElement(I, { n: "user", s: 14 })),
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: isActive ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
+              /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, flexWrap: 'wrap' } },
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, padding: '1px 5px', borderRadius: 10, background: 'var(--teal-dim)', color: 'var(--teal)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' } }, "Provider"),
+                /*#__PURE__*/React.createElement("span", { className: "tag tag-green", style: { fontSize: 7 } }, /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), "E2EE")
+              )
+            )
+          ));
+        })
+      ),
+      clientTeamDMs.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null,
+        ...teamNames.map(teamName => {
+          const tDMs = clientTeamDMs.filter(d => d.teamName === teamName);
+          return /*#__PURE__*/React.createElement(React.Fragment, { key: teamName },
+            renderSectionHdr(teamName, tDMs.length, "users", "var(--purple)"),
+            ...tDMs.map(dm => {
+              const isActive = inboxConvo === dm.roomId;
+              return /*#__PURE__*/React.createElement("div", {
+                key: dm.roomId,
+                onClick: () => openInboxConvo(dm.roomId),
+                style: { padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-0)', background: isActive ? 'var(--bg-4)' : 'transparent', borderLeft: isActive ? '3px solid var(--purple)' : '3px solid transparent', transition: 'all .15s' },
+                onMouseEnter: e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-3)'; },
+                onMouseLeave: e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }
+              }, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                /*#__PURE__*/React.createElement("div", { style: { width: 32, height: 32, borderRadius: '50%', background: 'var(--purple-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--purple)', border: '2px solid var(--purple)', flexShrink: 0 } }, /*#__PURE__*/React.createElement(I, { n: "user", s: 14 })),
+                /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: isActive ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, dm.peerName || dm.peerId),
+                  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 } },
+                    /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, padding: '1px 5px', borderRadius: 10, background: 'var(--purple-dim)', color: 'var(--purple)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' } }, "DM"),
+                    /*#__PURE__*/React.createElement(ConnectionBadges, { userType: dm.peerType || 'provider', teamName: dm.teamName, teamColors: teamColorsList, size: "xs" })
+                  )
+                )
+              ));
+            })
+          );
+        }),
+        ungroupedDMs.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null,
+          teamNames.length > 0 && renderSectionHdr("Other DMs", ungroupedDMs.length, "users", "var(--purple)"),
+          ...ungroupedDMs.map(dm => {
+            const isActive = inboxConvo === dm.roomId;
+            return /*#__PURE__*/React.createElement("div", {
+              key: dm.roomId,
+              onClick: () => openInboxConvo(dm.roomId),
+              style: { padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-0)', background: isActive ? 'var(--bg-4)' : 'transparent', borderLeft: isActive ? '3px solid var(--purple)' : '3px solid transparent', transition: 'all .15s' },
+              onMouseEnter: e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-3)'; },
+              onMouseLeave: e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }
+            }, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              /*#__PURE__*/React.createElement("div", { style: { width: 32, height: 32, borderRadius: '50%', background: 'var(--purple-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--purple)', border: '2px solid var(--purple)', flexShrink: 0 } }, /*#__PURE__*/React.createElement(I, { n: "user", s: 14 })),
+              /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: isActive ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, dm.peerName || dm.peerId),
+                /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 } },
+                  /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, padding: '1px 5px', borderRadius: 10, background: 'var(--purple-dim)', color: 'var(--purple)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' } }, "DM")
+                )
+              )
+            ));
+          })
+        )
+      )
+    );
+  })())), /*#__PURE__*/React.createElement("div", {
     className: "inbox-chat"
   }, inboxConvo !== null && (typeof inboxConvo === 'string' || providers[inboxConvo]) ? (() => {
     const isTeamDM = typeof inboxConvo === 'string';
@@ -34014,7 +33958,11 @@ const ProviderApp = ({
   const [inboxConvo, setInboxConvo] = useState(null); // room ID of active inbox conversation
   const [inboxMessages, setInboxMessages] = useState([]);
   const [inboxMsgText, setInboxMsgText] = useState('');
-  const [inboxTab, setInboxTab] = useState('direct'); // 'direct' | 'channels' | 'team'
+  const [inboxTab, setInboxTab] = useState('direct'); // kept for compat
+  const [msgBuckets, setMsgBuckets] = useState(() => { try { return JSON.parse(localStorage.getItem('khora_msg_buckets') || '[]'); } catch { return []; } }); // [{id,label,roomIds:[]}]
+  const [newBucketModal, setNewBucketModal] = useState(false);
+  const [newBucketDraft, setNewBucketDraft] = useState('');
+  const [assignBucketTarget, setAssignBucketTarget] = useState(null); // roomId being assigned to a group
   // ─── Team member DM state ───
   const [teamDMs, setTeamDMs] = useState([]); // [{roomId, peerId, peerName, teamName, teamRoomId}]
   const [teamDMMessages, setTeamDMMessages] = useState([]);
@@ -34025,6 +33973,19 @@ const ProviderApp = ({
     () => activeTeamObj ? teamDMs.filter(dm => activeTeamMemberIds.includes(dm.peerId)) : teamDMs,
     [activeTeamObj, teamDMs, activeTeamMemberIds]
   );
+  // ─── Unified inbox grouping (by team, then custom buckets) ───
+  const inboxGrouped = useMemo(() => {
+    const bucketIds = new Set(msgBuckets.flatMap(b => b.roomIds));
+    const allCases = activeTeamObj ? cases.filter(c => { const a = caseAssignments[c.bridgeRoomId]; return activeTeamMemberIds.includes(a?.primary || c.meta?.provider); }) : cases;
+    const allDMs = activeTeamObj ? teamDMs.filter(dm => activeTeamMemberIds.includes(dm.peerId)) : teamDMs;
+    const allCh = orgChannels;
+    const toC = (type, id, data) => ({ type, id, data });
+    const bucketSections = msgBuckets.map(b => ({ id: b.id, label: b.label, isCustom: true, convos: b.roomIds.map(rid => { const c = allCases.find(x => x.bridgeRoomId === rid); if (c) return toC('case', rid, c); const ch = allCh.find(x => x.roomId === rid); if (ch) return toC('channel', rid, ch); const dm = allDMs.find(x => x.roomId === rid); if (dm) return toC('team_dm', rid, dm); return null; }).filter(Boolean) })).filter(s => s.convos.length > 0);
+    const teamSections = teams.map(team => { const mids = new Set((team.members || []).map(m => m.userId)); const convos = [...allCases.filter(c => { if (bucketIds.has(c.bridgeRoomId)) return false; const a = caseAssignments[c.bridgeRoomId]; return mids.has(a?.primary) || mids.has(c.meta?.provider); }).map(c => toC('case', c.bridgeRoomId, c)), ...allDMs.filter(dm => !bucketIds.has(dm.roomId) && dm.teamRoomId === team.roomId).map(dm => toC('team_dm', dm.roomId, dm))]; return { id: team.roomId, label: team.name, team, convos }; }).filter(s => s.convos.length > 0);
+    const assignedIds = new Set([...bucketSections, ...teamSections].flatMap(s => s.convos.map(c => c.id)));
+    const otherConvos = [...allCases.filter(c => !assignedIds.has(c.bridgeRoomId) && !bucketIds.has(c.bridgeRoomId)).map(c => toC('case', c.bridgeRoomId, c)), ...allCh.filter(ch => !assignedIds.has(ch.roomId) && !bucketIds.has(ch.roomId)).map(ch => toC('channel', ch.roomId, ch)), ...allDMs.filter(dm => !assignedIds.has(dm.roomId) && !bucketIds.has(dm.roomId)).map(dm => toC('team_dm', dm.roomId, dm))];
+    return { bucketSections, teamSections, otherConvos };
+  }, [cases, orgChannels, teamDMs, teams, caseAssignments, activeTeamObj, activeTeamMemberIds, msgBuckets]);
   // ─── Notifications state ───
   const [notifications, setNotifications] = useState([]);
   // ─── Resource tracking state ───
@@ -37177,6 +37138,12 @@ const ProviderApp = ({
     setInboxMsgText('');
     setTimeout(() => loadInboxMessages(inboxConvo), 500);
   };
+  // ─── Message group (bucket) functions ───
+  const saveMsgBuckets = nb => { setMsgBuckets(nb); try { localStorage.setItem('khora_msg_buckets', JSON.stringify(nb)); } catch {} };
+  const createMsgBucket = label => { const b = { id: Date.now().toString(36), label: label.trim(), roomIds: [] }; saveMsgBuckets([...msgBuckets, b]); };
+  const assignToBucket = (roomId, bucketId) => { saveMsgBuckets(msgBuckets.map(b => b.id === bucketId ? { ...b, roomIds: [...new Set([...b.roomIds, roomId])] } : { ...b, roomIds: b.roomIds.filter(r => r !== roomId) })); setAssignBucketTarget(null); };
+  const removeFromBuckets = roomId => { saveMsgBuckets(msgBuckets.map(b => ({ ...b, roomIds: b.roomIds.filter(r => r !== roomId) }))); setAssignBucketTarget(null); };
+  const deleteMsgBucket = id => saveMsgBuckets(msgBuckets.filter(b => b.id !== id));
   // ─── Team member DM functions ───
   const startTeamDM = async (peerId, peerName, teamName, teamRoomId) => {
     // Check if DM room already exists
@@ -38442,284 +38409,92 @@ const ProviderApp = ({
     onClick: () => setNewTeamDMModal(true),
     className: "b-gho b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 6 }
-  }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "New DM"))), (orgRoom && hasOrgMsgPermission('read') || teams.length > 0) && /*#__PURE__*/React.createElement("div", {
-    className: "tabs",
-    style: {
-      marginBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: `tab${inboxTab === 'direct' ? ' active' : ''}`,
-    onClick: () => {
-      setInboxTab('direct');
-      setInboxConvo(null);
-      setInboxMessages([]);
-    }
-  }, "Direct (", teamFilteredCases.length, ")"), /*#__PURE__*/React.createElement("div", {
-    className: `tab${inboxTab === 'channels' ? ' active' : ''}`,
-    onClick: () => {
-      setInboxTab('channels');
-      setInboxConvo(null);
-      setInboxMessages([]);
-    }
-  }, "Org Channels (", orgChannels.length, ")"), /*#__PURE__*/React.createElement("div", {
-    className: `tab${inboxTab === 'team' ? ' active' : ''}`,
-    onClick: () => {
-      setInboxTab('team');
-      setInboxConvo(null);
-      setInboxMessages([]);
-    }
-  }, "Team DMs (", teamFilteredTeamDMs.length, ")")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "New DM"))), /*#__PURE__*/React.createElement("div", {
     className: "inbox-panel"
   }, /*#__PURE__*/React.createElement("div", {
     className: "inbox-list"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: '14px 14px 10px',
-      borderBottom: '1px solid var(--border-0)'
+      padding: '8px 14px 8px',
+      borderBottom: '1px solid var(--border-0)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label",
     style: {
-      marginBottom: 0
+      marginBottom: 0,
+      flex: 1
     }
-  }, inboxTab === 'direct' ? `DIRECT (${teamFilteredCases.length})` : inboxTab === 'channels' ? `CHANNELS (${orgChannels.length})` : `TEAM DMs (${teamFilteredTeamDMs.length})`)), /*#__PURE__*/React.createElement("div", {
+  }, `CONVERSATIONS (${teamFilteredCases.length + (orgRoom && hasOrgMsgPermission('read') ? orgChannels.length : 0) + teamFilteredTeamDMs.length})`), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setNewBucketModal(true),
+    className: "b-gho",
+    style: { display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 10.5 }
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 10 }), "New Group")), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       overflow: 'auto'
     }
-  }, inboxTab === 'direct' ? /*#__PURE__*/React.createElement(React.Fragment, null, teamFilteredCases.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: '40px 16px',
-      textAlign: 'center'
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "briefcase",
-    s: 28,
-    c: "var(--tx-3)"
-  }), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: 'var(--tx-3)',
-      fontSize: 11.5,
-      marginTop: 10
-    }
-  }, "No conversations yet"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: 'var(--tx-3)',
-      fontSize: 10.5,
-      marginTop: 4
-    }
-  }, "Clients must share a bridge with you first")) : teamFilteredCases.map(c => /*#__PURE__*/React.createElement("div", {
-    key: c.bridgeRoomId,
-    onClick: () => openInboxConvo(c.bridgeRoomId),
-    style: {
-      padding: '12px 14px',
-      cursor: 'pointer',
-      borderBottom: '1px solid var(--border-0)',
-      background: inboxConvo === c.bridgeRoomId ? 'var(--bg-4)' : 'transparent',
-      borderLeft: inboxConvo === c.bridgeRoomId ? '3px solid var(--gold)' : '3px solid transparent',
-      transition: 'all .15s'
-    },
-    onMouseEnter: e => {
-      if (inboxConvo !== c.bridgeRoomId) e.currentTarget.style.background = 'var(--bg-3)';
-    },
-    onMouseLeave: e => {
-      if (inboxConvo !== c.bridgeRoomId) e.currentTarget.style.background = inboxConvo === c.bridgeRoomId ? 'var(--bg-4)' : 'transparent';
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 36,
-      height: 36,
-      borderRadius: '50%',
-      background: 'var(--teal-dim)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--teal)',
-      border: '2px solid var(--teal)',
-      flexShrink: 0
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "user",
-    s: 16
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      minWidth: 0
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 13,
-      fontWeight: inboxConvo === c.bridgeRoomId ? 700 : 500,
-      display: 'block',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap'
-    }
-  }, c.sharedData.full_name || c.clientUserId), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 4,
-      marginTop: 2,
-      flexWrap: 'wrap'
-    }
-  }, /*#__PURE__*/React.createElement(ConnectionBadges, {
-    userType: "client",
-    teamName: (() => { const t = teams.find(t => (t.members || []).some(m => m.userId === c.clientUserId)); return t?.name || null; })(),
-    teamColors: teamColorsList,
-    size: "xs"
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "tag tag-green",
-    style: {
-      fontSize: 8
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "lock",
-    s: 7
-  }), "E2EE"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 9.5,
-      color: 'var(--tx-3)',
-      fontFamily: 'var(--mono)'
-    }
-  }, Object.keys(c.sharedData).length, " fields"))))))) : inboxTab === 'channels' ? /*#__PURE__*/React.createElement(React.Fragment, null, orgChannels.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: '40px 16px',
-      textAlign: 'center'
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "msg",
-    s: 28,
-    c: "var(--tx-3)"
-  }), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: 'var(--tx-3)',
-      fontSize: 11.5,
-      marginTop: 10
-    }
-  }, "No channels yet"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: 'var(--tx-3)',
-      fontSize: 10.5,
-      marginTop: 4
-    }
-  }, "Create a channel to message another org")) : orgChannels.map(ch => {
-    const peerOrgId = ch.orgs?.find(o => o !== orgRoom);
-    const peerName = ch.org_names?.[peerOrgId] || peerOrgId?.slice(0, 20) || 'Unknown Org';
-    return /*#__PURE__*/React.createElement("div", {
-      key: ch.roomId,
-      onClick: () => openInboxConvo(ch.roomId),
-      style: {
-        padding: '12px 14px',
-        cursor: 'pointer',
-        borderBottom: '1px solid var(--border-0)',
-        background: inboxConvo === ch.roomId ? 'var(--bg-4)' : 'transparent',
-        borderLeft: inboxConvo === ch.roomId ? '3px solid var(--blue)' : '3px solid transparent',
-        transition: 'all .15s'
+  }, (() => {
+    const { bucketSections, teamSections, otherConvos } = inboxGrouped;
+    const totalCount = teamFilteredCases.length + (orgRoom && hasOrgMsgPermission('read') ? orgChannels.length : 0) + teamFilteredTeamDMs.length;
+    if (totalCount === 0) return /*#__PURE__*/React.createElement("div", { style: { padding: '40px 16px', textAlign: 'center' } }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 28, c: "var(--tx-3)" }), /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 11.5, marginTop: 10 } }, "No conversations yet"), /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 10.5, marginTop: 4 } }, T.client_term_plural, " must share a bridge, or create an org channel."));
+    const convoTypeColor = t => t === 'case' ? 'teal' : t === 'channel' ? 'blue' : 'purple';
+    const convoTypeLabel = t => t === 'case' ? 'Direct' : t === 'channel' ? 'Channel' : 'DM';
+    const convoName = (type, data) => type === 'case' ? (data.sharedData.full_name || data.clientUserId) : type === 'channel' ? (() => { const pid = data.orgs?.find(o => o !== orgRoom); return data.org_names?.[pid] || pid?.slice(0, 20) || 'Organization'; })() : (data.peerName || data.peerId);
+    const renderItem = convo => {
+      const { type, id, data } = convo;
+      const isActive = inboxConvo === id;
+      const tc = convoTypeColor(type);
+      const name = convoName(type, data);
+      const inBucket = msgBuckets.some(b => b.roomIds.includes(id));
+      return /*#__PURE__*/React.createElement("div", {
+        key: id,
+        onClick: () => openInboxConvo(id),
+        style: { padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-0)', background: isActive ? 'var(--bg-4)' : 'transparent', borderLeft: isActive ? `3px solid var(--${tc})` : '3px solid transparent', transition: 'all .15s' },
+        onMouseEnter: e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-3)'; },
+        onMouseLeave: e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }
+      }, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        /*#__PURE__*/React.createElement("div", {
+          style: { width: 32, height: 32, borderRadius: '50%', background: `var(--${tc}-dim)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: `var(--${tc})`, border: `2px solid var(--${tc})`, flexShrink: 0 }
+        }, /*#__PURE__*/React.createElement(I, { n: type === 'channel' ? 'users' : 'user', s: 14 })),
+        /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: isActive ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
+          /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, flexWrap: 'wrap' } },
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, padding: '1px 5px', borderRadius: 10, background: `var(--${tc}-dim)`, color: `var(--${tc})`, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' } }, convoTypeLabel(type)),
+            type === 'case' && /*#__PURE__*/React.createElement("span", { className: "tag tag-green", style: { fontSize: 7 } }, /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), "E2EE"),
+            type === 'channel' && /*#__PURE__*/React.createElement("span", { className: `tag ${orgOpacity === 'opaque' ? 'tag-red' : orgOpacity === 'translucent' ? 'tag-gold' : 'tag-green'}`, style: { fontSize: 7 } }, orgOpacity),
+            type === 'team_dm' && data.teamName && /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: 'var(--tx-3)' } }, data.teamName)
+          )
+        ),
+        msgBuckets.length > 0 && /*#__PURE__*/React.createElement("button", {
+          onClick: e => { e.stopPropagation(); setAssignBucketTarget(assignBucketTarget === id ? null : id); },
+          className: "b-gho", style: { padding: '2px 4px', opacity: .6, flexShrink: 0 }, title: "Move to group"
+        }, /*#__PURE__*/React.createElement(I, { n: "more-horizontal", s: 11 }))
+      ), assignBucketTarget === id && /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 4, paddingLeft: 40, paddingBottom: 4, display: 'flex', flexDirection: 'column', gap: 2 }
       },
-      onMouseEnter: e => {
-        if (inboxConvo !== ch.roomId) e.currentTarget.style.background = 'var(--bg-3)';
-      },
-      onMouseLeave: e => {
-        if (inboxConvo !== ch.roomId) e.currentTarget.style.background = inboxConvo === ch.roomId ? 'var(--bg-4)' : 'transparent';
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 36,
-        height: 36,
-        borderRadius: '50%',
-        background: 'var(--blue-dim)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--blue)',
-        border: '2px solid var(--blue)',
-        flexShrink: 0
-      }
-    }, /*#__PURE__*/React.createElement(I, {
-      n: "users",
-      s: 16
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        minWidth: 0
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 13,
-        fontWeight: inboxConvo === ch.roomId ? 700 : 500,
-        display: 'block',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap'
-      }
-    }, peerName), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        marginTop: 2
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: `tag ${orgOpacity === 'opaque' ? 'tag-red' : orgOpacity === 'translucent' ? 'tag-gold' : 'tag-green'}`,
-      style: {
-        fontSize: 8
-      }
-    }, orgOpacity), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 9.5,
-        color: 'var(--tx-3)',
-        fontFamily: 'var(--mono)'
-      }
-    }, "org channel")))));
-  })) : /*#__PURE__*/React.createElement(React.Fragment, null, teamFilteredTeamDMs.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: { padding: '40px 16px', textAlign: 'center' }
-  }, /*#__PURE__*/React.createElement(I, { n: "users", s: 28, c: "var(--tx-3)" }),
-  /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 11.5, marginTop: 10 } }, "No team DMs yet"),
-  /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 10.5, marginTop: 4 } }, "Start a conversation with a team member"),
-  teamMemberContacts.length > 0 && /*#__PURE__*/React.createElement("button", {
-    onClick: () => setNewTeamDMModal(true),
-    className: "b-pri b-sm",
-    style: { marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }
-  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "New DM")) : teamFilteredTeamDMs.map(dm => /*#__PURE__*/React.createElement("div", {
-    key: dm.roomId,
-    onClick: () => openInboxConvo(dm.roomId),
-    style: {
-      padding: '12px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-0)',
-      background: inboxConvo === dm.roomId ? 'var(--bg-4)' : 'transparent',
-      borderLeft: inboxConvo === dm.roomId ? '3px solid var(--purple)' : '3px solid transparent',
-      transition: 'all .15s'
-    },
-    onMouseEnter: e => { if (inboxConvo !== dm.roomId) e.currentTarget.style.background = 'var(--bg-3)'; },
-    onMouseLeave: e => { if (inboxConvo !== dm.roomId) e.currentTarget.style.background = inboxConvo === dm.roomId ? 'var(--bg-4)' : 'transparent'; }
-  }, /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10 } },
-    /*#__PURE__*/React.createElement("div", {
-      style: { width: 36, height: 36, borderRadius: '50%', background: 'var(--purple-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--purple)', border: '2px solid var(--purple)', flexShrink: 0 }
-    }, /*#__PURE__*/React.createElement(I, { n: "user", s: 16 })),
-    /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-      /*#__PURE__*/React.createElement("span", {
-        style: { fontSize: 13, fontWeight: inboxConvo === dm.roomId ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-      }, dm.peerName || dm.peerId),
-      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' } },
-        /*#__PURE__*/React.createElement(ConnectionBadges, {
-          userType: dm.peerType || 'provider',
-          orgName: dm.orgName,
-          teamName: dm.teamName,
-          teamColors: teamColorsList,
-          size: "xs"
-        }))))))))), /*#__PURE__*/React.createElement("div", {
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, color: 'var(--tx-3)', textTransform: 'uppercase', letterSpacing: '.5px', padding: '2px 0' } }, "Move to group:"),
+        ...msgBuckets.map(b => /*#__PURE__*/React.createElement("button", { key: b.id, onClick: e => { e.stopPropagation(); assignToBucket(id, b.id); }, className: "b-gho", style: { textAlign: 'left', fontSize: 10.5, padding: '2px 6px' } }, b.label)),
+        inBucket && /*#__PURE__*/React.createElement("button", { onClick: e => { e.stopPropagation(); removeFromBuckets(id); }, className: "b-gho", style: { textAlign: 'left', fontSize: 10, padding: '2px 6px', color: 'var(--tx-3)' } }, "Remove from group")
+      ));
+    };
+    const renderSection = (key, label, convos, iconName, iconColor, isCustom, bucketId) => convos.length === 0 ? null : /*#__PURE__*/React.createElement(React.Fragment, { key },
+      /*#__PURE__*/React.createElement("div", { style: { padding: '6px 14px 4px', display: 'flex', alignItems: 'center', gap: 6, position: 'sticky', top: 0, background: 'var(--bg-1)', zIndex: 1, borderBottom: '1px solid var(--border-0)' } },
+        iconName && /*#__PURE__*/React.createElement(I, { n: iconName, s: 11, c: iconColor }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 9.5, fontWeight: 700, color: iconColor || 'var(--tx-2)', textTransform: 'uppercase', letterSpacing: '.5px', flex: 1 } }, label, " (", convos.length, ")"),
+        isCustom && /*#__PURE__*/React.createElement("button", { onClick: e => { e.stopPropagation(); deleteMsgBucket(bucketId); }, className: "b-gho", style: { padding: '1px 4px', opacity: .5 }, title: "Delete group" }, /*#__PURE__*/React.createElement(I, { n: "x", s: 9 }))
+      ),
+      convos.map(renderItem)
+    );
+    const allSections = [
+      ...bucketSections.map(s => renderSection(s.id, s.label, s.convos, "folder", "var(--gold)", true, s.id)),
+      ...teamSections.map(s => renderSection(s.id, s.label, s.convos, "users", `hsl(${s.team?.color_hue || 260},55%,55%)`)),
+      otherConvos.length > 0 ? renderSection('__other__', teamSections.length > 0 || bucketSections.length > 0 ? 'Other' : 'All', otherConvos, null, 'var(--tx-2)') : null
+    ].filter(Boolean);
+    return /*#__PURE__*/React.createElement(React.Fragment, null, ...allSections);
+  })())), /*#__PURE__*/React.createElement("div", {
     className: "inbox-chat"
   }, inboxConvo ? (() => {
     const convoType = getInboxConvoType(inboxConvo);
@@ -45737,6 +45512,34 @@ const ProviderApp = ({
     className: "b-pri",
     style: { width: '100%', padding: 12, fontSize: 14 }
   }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 16 }), " Start Conversation with ", newDMTarget.displayName)), /*#__PURE__*/React.createElement(Modal, {
+    open: newBucketModal,
+    onClose: () => { setNewBucketModal(false); setNewBucketDraft(''); },
+    title: "New Group",
+    w: 400
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', flexDirection: 'column', gap: 14 }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 12, color: 'var(--tx-1)', lineHeight: 1.5 }
+  }, "Create a named group to organize your conversations. You can move any conversation into a group from the messages sidebar."), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("label", {
+    style: { fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 6 }
+  }, "Group Name"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    value: newBucketDraft,
+    onChange: e => setNewBucketDraft(e.target.value),
+    placeholder: "e.g. Priority, Intake, Follow-up...",
+    onKeyDown: e => { if (e.key === 'Enter' && newBucketDraft.trim()) { createMsgBucket(newBucketDraft); setNewBucketModal(false); setNewBucketDraft(''); } },
+    style: { width: '100%' },
+    autoFocus: true
+  })), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', justifyContent: 'flex-end', gap: 8 }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => { setNewBucketModal(false); setNewBucketDraft(''); },
+    className: "b-gho"
+  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => { if (newBucketDraft.trim()) { createMsgBucket(newBucketDraft); setNewBucketModal(false); setNewBucketDraft(''); } },
+    className: "b-pri",
+    disabled: !newBucketDraft.trim()
+  }, "Create Group")))), /*#__PURE__*/React.createElement(Modal, {
     open: msgAccessModal,
     onClose: () => setMsgAccessModal(false),
     title: "Configure Message Access",
