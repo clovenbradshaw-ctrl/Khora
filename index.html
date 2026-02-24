@@ -15561,7 +15561,6 @@ const ActionLog = ({
     const opC = OP_COLORS[ev.op] || 'blue';
     const rmC = ROOM_COLORS[ev.roomInfo.type] || 'orange';
     const username = (ev.sender || '').split(':')[0]?.replace('@', '') || '';
-    const verb = OP_DESCRIPTIONS[ev.op]?.verb || ev.op;
     return /*#__PURE__*/React.createElement("div", {
       key: ev.id || idx,
       style: {
@@ -15578,9 +15577,6 @@ const ActionLog = ({
     /*#__PURE__*/React.createElement("span", {
       className: `tag tag-${opC}`, style: { fontSize: 9, fontFamily: 'var(--mono)', minWidth: 28, textAlign: 'center', flexShrink: 0 }
     }, ev.op),
-    /*#__PURE__*/React.createElement("span", {
-      style: { fontWeight: 600, flexShrink: 0 }
-    }, verb),
     ev.label && /*#__PURE__*/React.createElement("span", {
       style: { color: 'var(--tx-1)' }
     }, "\u2014 ", ev.label),
