@@ -27016,11 +27016,11 @@ const TeamDetailView = ({
     }
   }), /*#__PURE__*/React.createElement("input", {
     type: "range", min: 0, max: 360, value: team.color_hue != null ? team.color_hue : 260,
-    onChange: async (e) => {
+    onChange: (e) => {
       const hue = parseInt(e.target.value);
-      const updatedMeta = { name: team.name, description: team.description, color_hue: hue, created: team.created, created_by: team.created_by, org_id: team.org_id, org_name: team.org_name };
-      await svc.setState(team.roomId, EVT.TEAM_META, updatedMeta);
       onUpdateTeam({ ...team, color_hue: hue });
+      const updatedMeta = { name: team.name, description: team.description, color_hue: hue, created: team.created, created_by: team.created_by, org_id: team.org_id, org_name: team.org_name };
+      svc.setState(team.roomId, EVT.TEAM_META, updatedMeta);
     },
     style: { flex: 1, accentColor: `hsl(${team.color_hue != null ? team.color_hue : 260}, 65%, 55%)` }
   }), /*#__PURE__*/React.createElement("span", {
@@ -35662,6 +35662,7 @@ const ProviderApp = ({
     onUpdateTeam: updated => {
       setTeams(prev => prev.map(t => t.roomId === updated.roomId ? updated : t));
       setActiveTeamDetail(updated);
+      setTeamMode(prev => prev && prev.roomId === updated.roomId ? { ...prev, name: updated.name, color_hue: updated.color_hue } : prev);
     },
     onSaveFieldDef: async def => {
       const schemaRoom = svc.client ? svc.client.getRooms().find(r => {
