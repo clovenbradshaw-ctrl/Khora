@@ -20520,7 +20520,7 @@ const ClientApp = ({
     s: 14
   }), "New Conversation"), clientTeamMemberContacts.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setNewTeamDMModal(true),
-    className: "b-gho",
+    className: "b-gho b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 6 }
   }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "New DM"))), myTeams.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "tabs",
@@ -31840,7 +31840,9 @@ const ProviderApp = ({
   }, orgRoom && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '8px 20px',
-      background: 'var(--blue-dim)',
+      background: 'linear-gradient(var(--bg-1), var(--bg-1)), linear-gradient(var(--blue-dim), var(--blue-dim))',
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
       borderBottom: '1px solid rgba(91,156,245,.15)',
       display: 'flex',
       alignItems: 'center',
@@ -32178,7 +32180,7 @@ const ProviderApp = ({
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setDiscoverModal(true),
-    className: "b-gho",
+    className: "b-gho b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -32189,7 +32191,7 @@ const ProviderApp = ({
     s: 14
   }), "Find Client"), orgRoom && hasOrgMsgPermission('read') && /*#__PURE__*/React.createElement("button", {
     onClick: () => setComposeOrgModal(true),
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -32200,7 +32202,7 @@ const ProviderApp = ({
     s: 14
   }), "New Channel"), teamMemberContacts.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setNewTeamDMModal(true),
-    className: "b-gho",
+    className: "b-gho b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 6 }
   }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "New DM"))), (orgRoom && hasOrgMsgPermission('read') || teams.length > 0) && /*#__PURE__*/React.createElement("div", {
     className: "tabs",
@@ -32787,7 +32789,7 @@ const ProviderApp = ({
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setImportModal(true),
-    className: "b-gho",
+    className: "b-gho b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -32803,7 +32805,7 @@ const ProviderApp = ({
       setNewClientMatrixId('');
       setNewClientNotes('');
     },
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -33090,7 +33092,7 @@ const ProviderApp = ({
       setNewTeamName('');
       setNewTeamDesc('');
     },
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -35352,7 +35354,7 @@ const ProviderApp = ({
     extra: [{ label: 'Storage', value: 'Staff roster is stored as a state event in the shared organization room. All org members can read the roster; only admins can modify it.' }]
   })), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setInviteModal(true),
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -36231,7 +36233,7 @@ const ProviderApp = ({
     }
   }, " \u2014 change in Org Settings"))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setComposeOrgModal(true),
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
