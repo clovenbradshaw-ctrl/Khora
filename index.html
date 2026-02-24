@@ -18891,14 +18891,41 @@ const LoginScreen = ({
       overflowY: 'auto',
       position: 'relative'
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  },
+
+  /* ── Top navbar ── */
+  /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
-      top: 16,
-      right: 16,
-      zIndex: 10
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 100,
+      background: 'var(--bg-0)',
+      borderBottom: '1px solid var(--border-0)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 24px',
+      height: 56
     }
-  }, /*#__PURE__*/React.createElement(ThemeToggle, null)),
+  },
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+    /*#__PURE__*/React.createElement("div", {
+      style: { width: 32, height: 32, borderRadius: 'var(--r)', background: 'var(--gold-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gold)' }
+    }, /*#__PURE__*/React.createElement(I, { n: "shield", s: 18 })),
+    /*#__PURE__*/React.createElement("span", {
+      style: { fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }
+    }, "Khora")
+  ),
+  /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 12 } },
+    /*#__PURE__*/React.createElement(ThemeToggle, null),
+    /*#__PURE__*/React.createElement("button", {
+      className: "b-gho",
+      onClick: () => { setMode('login'); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+      style: { padding: '8px 16px', fontSize: 13, fontWeight: 600 }
+    }, "Login")
+  )),
 
   /* ── Hero section: dodecahedron + login card ── */
   /*#__PURE__*/React.createElement("div", {
@@ -18908,7 +18935,7 @@ const LoginScreen = ({
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '40px 20px 20px'
+      padding: '96px 20px 20px'
     }
   },
 
@@ -46402,14 +46429,6 @@ const App = () => {
     n: "lock",
     s: 14
   }), " Sign in"))));
-  if (!welcomed && !session && !localStorage.getItem('khora_session')) return /*#__PURE__*/React.createElement(WelcomeScreen, {
-    onContinue: () => {
-      setWelcomed(true);
-      try {
-        localStorage.setItem('khora_welcomed', '1');
-      } catch {}
-    }
-  });
   if (!session) return /*#__PURE__*/React.createElement(LoginScreen, {
     onLogin: handleLogin
   });
