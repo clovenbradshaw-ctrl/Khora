@@ -6105,6 +6105,9 @@ const ResourceService = {
       fungible: typeData.fungible !== false,
       perishable: typeData.perishable || false,
       ttl_days: typeData.ttl_days || null,
+      infinite: typeData.infinite || false,
+      replenishes: typeData.replenishes || false,
+      replenish_cycle: typeData.replenish_cycle || null,
       tags: typeData.tags || [],
       source: typeData.source || buildResourceSource(level, typeData.propagation),
       maturity: typeData.maturity || 'draft',
@@ -27870,6 +27873,9 @@ const ResourcesTableView = ({
       orgRoom: rt._sourceRoom || orgRoom,
       provisioningEvents: inv?.events || [],
       unit: rt.unit,
+      infinite: rt.infinite || false,
+      replenishes: rt.replenishes || false,
+      replenish_cycle: rt.replenish_cycle || null,
       _rt: rt,
       _relation: relation,
       _inv: inv
@@ -27882,6 +27888,9 @@ const ResourcesTableView = ({
   }, {
     key: 'category',
     label: 'Category'
+  }, {
+    key: 'supply',
+    label: 'Supply'
   }, {
     key: 'holder',
     label: 'Source'
@@ -27917,10 +27926,11 @@ const ResourcesTableView = ({
     k: 'opacityLevel',
     l: 'Opacity'
   }];
-  const defaultVisCols = ['name', 'category', 'holder', 'relation', 'capacity', 'utilization', 'opacityLevel'];
+  const defaultVisCols = ['name', 'category', 'supply', 'holder', 'capacity', 'utilization', 'opacityLevel'];
   const getResVal = (row, key) => {
-    if (key === 'capacity') return row.available;
+    if (key === 'capacity') return row.infinite ? 999999 : row.available;
     if (key === 'utilization') return row.utilizationPct;
+    if (key === 'supply') return row.infinite ? 'infinite' : row.replenishes ? 'replenishes' : 'finite';
     return row[key] || '';
   };
   const renderResCell = (row, col) => {
@@ -27965,7 +27975,20 @@ const ResourcesTableView = ({
         color: 'var(--tx-1)'
       }
     }, row.network);
-    if (k === 'capacity') return /*#__PURE__*/React.createElement("div", {
+    if (k === 'supply') {
+      const badges = [];
+      if (row.infinite) badges.push(/*#__PURE__*/React.createElement("span", { key: "inf", className: "tag tag-teal", style: { fontSize: 10 } }, "\u221E Infinite"));
+      if (row.replenishes) badges.push(/*#__PURE__*/React.createElement("span", { key: "rep", className: "tag tag-blue", style: { fontSize: 10 } }, "\u21BB ", row.replenish_cycle || 'auto'));
+      if (!row.infinite && !row.replenishes) badges.push(/*#__PURE__*/React.createElement("span", { key: "fin", style: { fontSize: 11, color: 'var(--tx-2)' } }, "Finite"));
+      return /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4, flexWrap: 'wrap' } }, badges);
+    }
+    if (k === 'capacity') return row.infinite ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600,
+        fontSize: 13,
+        color: 'var(--teal)'
+      }
+    }, "Unlimited") : /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 13
       }
@@ -28082,7 +28105,7 @@ const ResourcesTableView = ({
     c: 'teal'
   }, {
     l: 'With Inventory',
-    v: resources.filter(r => r.totalCapacity > 0).length,
+    v: resources.filter(r => r.totalCapacity > 0 || r.infinite).length,
     c: 'green'
   }, {
     l: 'Relations',
@@ -28319,6 +28342,10 @@ const ProviderApp = ({
     perishable: false,
     ttl_days: '',
     tags: '',
+    infinite: false,
+    initial_quantity: '',
+    replenishes: false,
+    replenish_cycle: '',
     permissions: buildDefaultResourcePermissions()
   });
   // ─── Resource permission management state ───
@@ -28481,6 +28508,8 @@ const ProviderApp = ({
           title: 'Bridge updated',
           description: `Status: ${d.content?.status || 'unknown'}`
         });
+      } else if (type === EVT.RESOURCE_TYPE || type === EVT.RESOURCE_RELATION || type === EVT.RESOURCE_INVENTORY) {
+        loadResources(orgRoom, networkRoom, rosterRoom);
       }
     };
     window.addEventListener('khora:timeline', handleTimelineNotif);
@@ -30042,10 +30071,27 @@ const ProviderApp = ({
         fungible: resourceDraft.fungible,
         perishable: resourceDraft.perishable,
         ttl_days: resourceDraft.perishable && resourceDraft.ttl_days ? parseInt(resourceDraft.ttl_days) : null,
+        infinite: resourceDraft.infinite,
+        replenishes: resourceDraft.replenishes,
+        replenish_cycle: resourceDraft.replenishes ? resourceDraft.replenish_cycle : null,
         tags: resourceDraft.tags ? resourceDraft.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         permissions: resourceDraft.permissions || buildDefaultResourcePermissions()
       };
       const created = await ResourceService.createResourceType(targetRoom, typeData, level);
+      // Auto-establish relation + inventory if initial quantity or infinite
+      const initQty = parseInt(resourceDraft.initial_quantity) || 0;
+      if (created && created.id && (initQty > 0 || resourceDraft.infinite)) {
+        const relationRoom = orgRoom || rosterRoom;
+        if (relationRoom) {
+          const cap = resourceDraft.infinite ? 999999 : initQty;
+          await ResourceService.establishRelation(relationRoom, {
+            resource_type_id: created.id,
+            relation_type: 'operates',
+            capacity: cap,
+            available: cap
+          });
+        }
+      }
       setCreateResourceModal(false);
       setResourceDraft({
         name: '',
@@ -30055,23 +30101,40 @@ const ProviderApp = ({
         perishable: false,
         ttl_days: '',
         tags: '',
+        infinite: false,
+        initial_quantity: '',
+        replenishes: false,
+        replenish_cycle: '',
         permissions: buildDefaultResourcePermissions()
       });
       showToast(`Resource type "${typeData.name}" created`, 'success');
       // Optimistically add the new resource type to local state immediately,
       // since room.currentState won't reflect the new state event until the
       // next /sync response from the server.
-      if (created && created.id) {
+      const optimisticType = created && created.id ? {
+        ...created,
+        _source: level === 'individual' ? 'personal' : level === 'network' ? 'network' : 'org'
+      } : null;
+      if (optimisticType) {
         setResourceTypes(prev => {
-          if (prev.some(t => t.id === created.id)) return prev;
-          return [...prev, {
-            ...created,
-            _source: level === 'individual' ? 'personal' : level === 'network' ? 'network' : 'org'
-          }];
+          if (prev.some(t => t.id === optimisticType.id)) return prev;
+          return [...prev, optimisticType];
         });
       }
-      // Delayed reload to reconcile with server state after sync
-      setTimeout(() => loadResources(orgRoom, networkRoom, rosterRoom), 800);
+      // Delayed reload to reconcile with server state after sync.
+      // Use longer delay + preserve optimistic type if sync hasn't delivered it yet.
+      setTimeout(() => {
+        loadResources(orgRoom, networkRoom, rosterRoom);
+        // Re-add optimistic type if sync hasn't delivered it yet
+        if (optimisticType) {
+          setTimeout(() => {
+            setResourceTypes(prev => {
+              if (prev.some(t => t.id === optimisticType.id)) return prev;
+              return [...prev, optimisticType];
+            });
+          }, 100);
+        }
+      }, 2500);
     } catch (e) {
       showToast('Error creating resource: ' + e.message, 'error');
     }
@@ -31957,6 +32020,10 @@ const ProviderApp = ({
         perishable: false,
         ttl_days: '',
         tags: '',
+        infinite: false,
+        initial_quantity: '',
+        replenishes: false,
+        replenish_cycle: '',
         permissions: buildDefaultResourcePermissions()
       });
       setCreateResourceModal(true);
@@ -36624,6 +36691,10 @@ const ProviderApp = ({
         perishable: false,
         ttl_days: '',
         tags: '',
+        infinite: false,
+        initial_quantity: '',
+        replenishes: false,
+        replenish_cycle: '',
         permissions: buildDefaultResourcePermissions()
       });
       setCreateResourceModal(true);
@@ -36777,6 +36848,113 @@ const ProviderApp = ({
     }),
     placeholder: "e.g. 30, 90"
   })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: '1px solid var(--border-0)',
+      paddingTop: 14,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "layers",
+    s: 14,
+    c: "var(--teal)"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 600
+    }
+  }, "Supply & Replenishment")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: 'var(--tx-2)',
+      marginBottom: 12,
+      lineHeight: 1.5
+    }
+  }, "Configure the initial stock level and whether this resource automatically replenishes."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 10,
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      fontSize: 12,
+      color: 'var(--tx-1)',
+      cursor: 'pointer'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: resourceDraft.infinite,
+    onChange: e => setResourceDraft({
+      ...resourceDraft,
+      infinite: e.target.checked
+    })
+  }), "Infinite (unlimited supply)"), /*#__PURE__*/React.createElement("label", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      fontSize: 12,
+      color: 'var(--tx-1)',
+      cursor: 'pointer'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: resourceDraft.replenishes,
+    onChange: e => setResourceDraft({
+      ...resourceDraft,
+      replenishes: e.target.checked
+    })
+  }), "Replenishes (auto-refills)")), !resourceDraft.infinite && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "INITIAL QUANTITY"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "0",
+    value: resourceDraft.initial_quantity,
+    onChange: e => setResourceDraft({
+      ...resourceDraft,
+      initial_quantity: e.target.value
+    }),
+    placeholder: "e.g. 100, 500"
+  })), resourceDraft.replenishes && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "REPLENISH CYCLE"), /*#__PURE__*/React.createElement("select", {
+    value: resourceDraft.replenish_cycle,
+    onChange: e => setResourceDraft({
+      ...resourceDraft,
+      replenish_cycle: e.target.value
+    })
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select cycle..."), /*#__PURE__*/React.createElement("option", {
+    value: "daily"
+  }, "Daily"), /*#__PURE__*/React.createElement("option", {
+    value: "weekly"
+  }, "Weekly"), /*#__PURE__*/React.createElement("option", {
+    value: "monthly"
+  }, "Monthly"), /*#__PURE__*/React.createElement("option", {
+    value: "quarterly"
+  }, "Quarterly"), /*#__PURE__*/React.createElement("option", {
+    value: "annually"
+  }, "Annually")))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 20
     }
