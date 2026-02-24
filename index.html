@@ -117,6 +117,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .card-h{background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r-lg);padding:20px;transition:border-color .2s,transform .2s;cursor:pointer}
 .card-h:hover{border-color:var(--gold);transform:translateY(-2px)}
 .section-label{font-size:12px;font-family:var(--mono);color:var(--tx-1);letter-spacing:.07em;font-weight:500;margin-bottom:12px;display:block}
+.app-sidebar .section-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toggle-track{width:38px;height:20px;border-radius:10px;position:relative;cursor:pointer;transition:background .2s}
 .toggle-track.on{background:var(--green)}.toggle-track.off{background:var(--border-1)}
 .toggle-knob{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
@@ -184,6 +185,14 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .note-sheet-expand-toggle{display:flex;align-items:center;gap:6px;padding:12px 0;color:var(--tx-2);font-size:13px;cursor:pointer;border:none;background:none;font-family:var(--sans);-webkit-tap-highlight-color:transparent}
 .note-sheet-expand{padding:12px 0;border-top:1px solid var(--border-0);margin-top:4px}
 
+/* ═══ Responsive: tablet sidebar + EO vocab grid ═══ */
+@media(max-width:1100px){
+  .app-sidebar{width:220px!important;min-width:220px!important}
+}
+@media(max-width:900px){
+  .app-sidebar{width:200px!important;min-width:200px!important}
+  .eo-vocab-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))!important}
+}
 @media(max-width:700px){
   .app-sidebar{display:none!important}
   .app-main{padding:14px!important;padding-bottom:calc(70px + var(--safe-b))!important}
@@ -237,6 +246,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
   .pd-grid{grid-template-columns:1fr}
   .inbox-header h2{font-size:18px}
   .note-sheet-body textarea{min-height:50vh}
+  .eo-vocab-grid{grid-template-columns:1fr!important}
 }
 
 /* ═══ GIVEN/MEANT Divide Visualization ═══ */
@@ -18656,7 +18666,8 @@ const ClientApp = ({
     style: {
       flex: 1,
       overflow: 'auto',
-      padding: 24
+      padding: 24,
+      minWidth: 0
     }
   }, view === 'dashboard' && !activeBridge && /*#__PURE__*/React.createElement(PersonalDashboard, {
     session: session,
@@ -31835,7 +31846,8 @@ const ProviderApp = ({
     style: {
       flex: 1,
       overflow: 'auto',
-      padding: 0
+      padding: 0,
+      minWidth: 0
     }
   }, orgRoom && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -39997,7 +40009,7 @@ const TransparencyPage = ({ onBack }) => {
         React.createElement('p', null,
           'The source code of this application is fully visible on this page. Nothing is hidden. You can inspect exactly what the software does, verify the privacy claims, and audit the EO operation logic yourself.'))),
 
-    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 16 } },
+    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 } },
       [
         { icon: 'lock', color: 'green', title: 'End-to-End Encrypted', desc: 'All data in Matrix rooms is encrypted. Only participants with session keys can decrypt.' },
         { icon: 'shield', color: 'teal', title: 'You Own Your Rooms', desc: 'When you claim a room, you become superadmin (power level 100). You can kick anyone — including providers.' },
@@ -40015,7 +40027,7 @@ const TransparencyPage = ({ onBack }) => {
       React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 } },
         React.createElement('span', { className: 'section-label', style: { marginBottom: 0 } }, 'EO OPERATION VOCABULARY'),
         React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)' } }, '9 canonical operators × 3 triads')),
-      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 } },
+      React.createElement('div', { className: 'eo-vocab-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 } },
         eoExplainer.map(op => React.createElement('div', {
           key: op.op,
           style: { padding: '10px 12px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-1)' }
