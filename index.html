@@ -1111,6 +1111,14 @@ table.dt td.dt-drag-handle:active{cursor:grabbing}
 .note-tags{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
 .note-tag-chip{font-size:10px;padding:2px 8px;border-radius:10px;background:var(--purple-dim);color:var(--purple);font-weight:600;display:flex;align-items:center;gap:3px}
 .note-attached-to{font-size:10px;padding:2px 8px;border-radius:10px;background:var(--green-dim);color:var(--green);font-weight:600}
+/* ═══ Note Edit & Diff ═══ */
+.note-diff{margin:6px 0;font-size:12.5px;line-height:1.7;white-space:pre-wrap}
+.note-diff-del{text-decoration:line-through;color:var(--red);background:var(--red-dim);padding:1px 4px;border-radius:3px}
+.note-diff-ins{color:var(--green);background:var(--green-dim);padding:1px 4px;border-radius:3px}
+.note-edit-history{margin-top:16px;border-top:1px solid var(--border-0);padding-top:12px}
+.note-edit-entry{margin-bottom:10px;padding:10px 14px;border-radius:var(--r);background:var(--bg-2);border:1px solid var(--border-0)}
+.note-edit-entry-meta{font-size:10px;color:var(--tx-2);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.note-edit-entry-field{font-size:10px;font-weight:600;color:var(--tx-3);margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
 /* ═══ Profile pages ═══ */
 .profile-page{max-width:1000px;margin:0 auto}
 .profile-header{display:flex;align-items:flex-start;gap:16px;margin-bottom:24px}
@@ -1779,7 +1787,8 @@ const I = ({
       d: "M12 1L22.46 8.6L18.47 20.9L5.53 20.9L1.54 8.6Z M14.94 7.95L16.76 13.55L12 17L7.24 13.55L9.06 7.95Z M12 1L14.94 7.95 M22.46 8.6L16.76 13.55 M18.47 20.9L12 17 M5.53 20.9L7.24 13.55 M1.54 8.6L9.06 7.95"
     })),
     graphNodes: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "5", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "5", cy: "19", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "19", cy: "19", r: "3" }), /*#__PURE__*/React.createElement("line", { x1: "12", y1: "8", x2: "5", y2: "16" }), /*#__PURE__*/React.createElement("line", { x1: "12", y1: "8", x2: "19", y2: "16" }), /*#__PURE__*/React.createElement("line", { x1: "8", y1: "19", x2: "16", y2: "19" })),
-    'git-merge': /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", { cx: "18", cy: "18", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "6", cy: "6", r: "3" }), /*#__PURE__*/React.createElement("path", { d: "M6 21V9a9 9 0 0 0 9 9" }))
+    'git-merge': /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", { cx: "18", cy: "18", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "6", cy: "6", r: "3" }), /*#__PURE__*/React.createElement("path", { d: "M6 21V9a9 9 0 0 0 9 9" })),
+    edit: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }), /*#__PURE__*/React.createElement("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" }))
   };
   return /*#__PURE__*/React.createElement("span", {
     style: {
@@ -2579,6 +2588,8 @@ const EVT = {
   NOTE: `${NS}.note`,
   NOTE_REF: `${NS}.note.ref`,
   // org-side reference pointing to bridge note
+  NOTE_EDIT: `${NS}.note.edit`,
+  // auditable note edit (ALT operation)
   // Client records (provider-created rooms representing clients)
   CLIENT_RECORD: `${NS}.client.record`,
   // Import
@@ -17577,6 +17588,12 @@ const classifyEvent = (ev, roomInfo) => {
     label: 'Note Created',
     desc: content.title?.slice(0, 50) || 'Untitled'
   };
+  if (type === EVT.NOTE_EDIT) return {
+    op: 'ALT',
+    epistemic: 'MEANT',
+    label: 'Note Edited',
+    desc: (content.title?.slice(0, 50) || 'Untitled') + ' (edited by ' + ((content.edited_by || '').split(':')[0]?.replace('@', '') || 'unknown') + ')'
+  };
   if (type === EVT.NOTE_REF) return {
     op: 'SEG',
     epistemic: 'MEANT',
@@ -19392,6 +19409,24 @@ const PersonalDashboard = ({
               tags: [{
                 label: 'NOTE',
                 cls: 'tag-purple'
+              }]
+            });
+          } else if (type === EVT.NOTE_EDIT) {
+            allEvents.push({
+              id: ev.getId(),
+              category: 'notes',
+              ts,
+              provName,
+              orgName,
+              sender,
+              icon: 'edit',
+              iconBg: 'var(--gold-dim)',
+              iconColor: 'var(--gold)',
+              title: isOwnEvent ? 'You edited a note' : `${provName} edited a note`,
+              desc: content.title || 'Note updated',
+              tags: [{
+                label: 'EDIT',
+                cls: 'tag-gold'
               }]
             });
           } else if (type === EVT.RESOURCE_ALLOC) {
@@ -25982,6 +26017,253 @@ const NoteCreateModal = ({
     }, "Save Note"));
 };
 
+/* ─── NoteDetailModal — view/edit a note with auditable edit history ─── */
+/* Edits require an explicit "Save" click (no character-level spam).
+   Each save emits a NOTE_EDIT timeline event and an ALT EO operation,
+   recording who, when, and what changed. Edit history renders inline
+   diffs with crossed-through old text and highlighted new text. */
+const NoteDetailModal = ({ note, open, onClose, onSave, svc, staff, rosterRoom, showToast, T }) => {
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (open && note) {
+      setEditing(false);
+      setEditTitle(note.title || '');
+      setEditContent(note.content || note.text || '');
+    }
+  }, [open, note?.id]);
+
+  if (!open || !note) return null;
+
+  const authorName = (() => {
+    const uid = note.author || '';
+    const s = (staff || []).find(st => st.userId === uid);
+    if (s) return s.display_name || uid.split(':')[0]?.replace('@', '') || 'Unknown';
+    return uid.split(':')[0]?.replace('@', '') || 'Unknown';
+  })();
+
+  const getDisplayName = uid => {
+    const s = (staff || []).find(st => st.userId === uid);
+    if (s) return s.display_name || uid.split(':')[0]?.replace('@', '') || 'Unknown';
+    return (uid || '').split(':')[0]?.replace('@', '') || 'Unknown';
+  };
+
+  const titleChanged = editTitle.trim() !== (note.title || '').trim();
+  const contentChanged = editContent.trim() !== (note.content || note.text || '').trim();
+  const hasChanges = titleChanged || contentChanged;
+
+  const handleSave = async () => {
+    if (!hasChanges || saving) return;
+    setSaving(true);
+    try {
+      const editData = {
+        note_id: note.id,
+        title: editTitle.trim(),
+        content: editContent.trim(),
+        prev_title: note.title || '',
+        prev_content: note.content || note.text || '',
+        edited_by: svc.userId,
+        edited_at: Date.now()
+      };
+      const targetRoom = note._sourceRoom || note.attached_to || rosterRoom;
+      if (targetRoom) {
+        await svc.sendEvent(targetRoom, EVT.NOTE_EDIT, editData);
+        // Emit ALT EO operation for audit trail
+        try {
+          const changes = {};
+          if (titleChanged) changes.title = { from: editData.prev_title, to: editData.title };
+          if (contentChanged) changes.content = { from: editData.prev_content, to: editData.content };
+          await emitOp(targetRoom, 'ALT', dot(note.attached_to ? 'bridge' : 'roster', 'notes', note.id), {
+            note_id: note.id,
+            changes: changes,
+            edited_by: svc.userId
+          }, {
+            type: note.attached_to ? 'bridge' : 'roster',
+            room: targetRoom,
+            role: 'provider',
+            epistemic: 'MEANT'
+          });
+        } catch (oe) {
+          console.warn('Note edit EO event failed:', oe.message);
+        }
+      }
+      onSave && onSave(editData);
+      showToast && showToast('Note updated', 'success');
+      setEditing(false);
+    } catch (e) {
+      showToast && showToast('Failed to save edit: ' + e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ── Inline word-level diff renderer ── */
+  const renderDiff = (oldText, newText) => {
+    if (!oldText && !newText) return null;
+    if (oldText === newText) return null;
+    const oldWords = (oldText || '').split(/(\s+)/);
+    const newWords = (newText || '').split(/(\s+)/);
+    // Simple LCS-based word diff
+    const m = oldWords.length, n = newWords.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] = oldWords[i - 1] === newWords[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+    const parts = [];
+    let i = m, j = n;
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && oldWords[i - 1] === newWords[j - 1]) {
+        parts.unshift({ type: 'same', text: oldWords[i - 1] });
+        i--; j--;
+      } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+        parts.unshift({ type: 'ins', text: newWords[j - 1] });
+        j--;
+      } else {
+        parts.unshift({ type: 'del', text: oldWords[i - 1] });
+        i--;
+      }
+    }
+    return /*#__PURE__*/React.createElement("div", { className: "note-diff" },
+      parts.map((p, idx) =>
+        p.type === 'del' ? /*#__PURE__*/React.createElement("span", { key: idx, className: "note-diff-del" }, p.text) :
+        p.type === 'ins' ? /*#__PURE__*/React.createElement("span", { key: idx, className: "note-diff-ins" }, p.text) :
+        p.text
+      )
+    );
+  };
+
+  /* ── Edit history section ── */
+  const editHistory = note.edit_history || [];
+  const renderEditHistory = () => {
+    if (editHistory.length === 0) return null;
+    return /*#__PURE__*/React.createElement("div", { className: "note-edit-history" },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "EDIT HISTORY"),
+      editHistory.slice().reverse().map((entry, idx) =>
+        /*#__PURE__*/React.createElement("div", { key: idx, className: "note-edit-entry" },
+          /*#__PURE__*/React.createElement("div", { className: "note-edit-entry-meta" },
+            /*#__PURE__*/React.createElement("span", {
+              style: { width: 18, height: 18, borderRadius: '50%', background: 'var(--purple-dim)', color: 'var(--purple)',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, flexShrink: 0 }
+            }, (getDisplayName(entry.edited_by))[0].toUpperCase()),
+            /*#__PURE__*/React.createElement("strong", null, getDisplayName(entry.edited_by)),
+            " edited \u00b7 ",
+            dtFmtDate(entry.edited_at)
+          ),
+          entry.prev_title !== undefined && entry.title !== undefined && entry.prev_title !== entry.title && /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { className: "note-edit-entry-field" }, "Title"),
+            renderDiff(entry.prev_title, entry.title)
+          ),
+          entry.prev_content !== undefined && entry.content !== undefined && entry.prev_content !== entry.content && /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { className: "note-edit-entry-field" }, "Content"),
+            renderDiff(entry.prev_content, entry.content)
+          )
+        )
+      )
+    );
+  };
+
+  /* ── Render ── */
+  const isOwnNote = note.author === svc.userId;
+
+  return /*#__PURE__*/React.createElement(Modal, {
+    open: open, onClose: () => { setEditing(false); onClose(); },
+    title: editing ? 'Edit Note' : (note.title || 'Note'),
+    w: 600
+  },
+    /* ── Content section ── */
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 } },
+        /*#__PURE__*/React.createElement("span", { className: "section-label" }, editing ? "TITLE" : "CONTENT"),
+        !editing && !note.tombstoned && /*#__PURE__*/React.createElement("button", {
+          onClick: () => setEditing(true),
+          className: "b-gho b-xs",
+          style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }
+        }, /*#__PURE__*/React.createElement(I, { n: "edit", s: 11 }), "Edit")
+      ),
+      editing ? /*#__PURE__*/React.createElement(React.Fragment, null,
+        /*#__PURE__*/React.createElement("input", {
+          value: editTitle,
+          onChange: e => setEditTitle(e.target.value),
+          placeholder: "Note title...",
+          style: { marginBottom: 10, fontWeight: 600 }
+        }),
+        /*#__PURE__*/React.createElement("span", { className: "section-label" }, "CONTENT"),
+        /*#__PURE__*/React.createElement("textarea", {
+          value: editContent,
+          onChange: e => setEditContent(e.target.value),
+          placeholder: "Note content...",
+          style: { minHeight: 120, marginTop: 4 }
+        }),
+        /* ── Live preview of changes ── */
+        hasChanges && /*#__PURE__*/React.createElement("div", { style: { marginTop: 10 } },
+          /*#__PURE__*/React.createElement("span", { className: "section-label", style: { color: 'var(--gold)' } }, "CHANGES PREVIEW"),
+          titleChanged && /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { className: "note-edit-entry-field" }, "Title"),
+            renderDiff(note.title || '', editTitle.trim())
+          ),
+          contentChanged && /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { className: "note-edit-entry-field" }, "Content"),
+            renderDiff(note.content || note.text || '', editContent.trim())
+          )
+        ),
+        /* ── Save / Cancel buttons ── */
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8, marginTop: 14 } },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: handleSave,
+            className: "b-pri",
+            disabled: !hasChanges || saving,
+            style: { flex: 1, padding: 10, fontSize: 13 }
+          }, saving ? "Saving..." : "Save Changes"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => {
+              setEditing(false);
+              setEditTitle(note.title || '');
+              setEditContent(note.content || note.text || '');
+            },
+            className: "b-gho",
+            style: { padding: 10, fontSize: 13 }
+          }, "Cancel")
+        )
+      ) : /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 13, color: 'var(--tx-0)', lineHeight: 1.7, whiteSpace: 'pre-wrap',
+          background: 'var(--bg-2)', padding: 14, borderRadius: 'var(--r)',
+          border: '1px solid var(--border-0)', marginTop: 6 }
+      }, note.content || note.text || '(empty)')
+    ),
+    /* ── Attached To ── */
+    note.attached_to && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "ATTACHED TO"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: 'var(--tx-1)', marginTop: 4 } },
+        note.attached_to_name || note.attached_to)
+    ),
+    /* ── Tags ── */
+    note.tags?.length > 0 && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "TAGGED"),
+      /*#__PURE__*/React.createElement("div", { className: "note-tags", style: { marginTop: 4 } },
+        note.tags.map(t => /*#__PURE__*/React.createElement("span", { key: t.userId, className: "note-tag-chip" }, t.displayName))
+      )
+    ),
+    /* ── Footer: created / last edited ── */
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 11, color: 'var(--tx-3)', borderTop: '1px solid var(--border-0)', paddingTop: 10 }
+    },
+      "Created ", dtFmtDate(note.created), " by ", authorName,
+      note.updated && note.updated !== note.created && /*#__PURE__*/React.createElement("span", null,
+        " \u00b7 Last edited ", dtFmtDate(note.updated),
+        note.last_edited_by ? (" by " + getDisplayName(note.last_edited_by)) : ''
+      )
+    ),
+    /* ── Edit History ── */
+    renderEditHistory()
+  );
+};
+
 /* ─── NotesTable — table of all notes ─── */
 /* On mobile, renders as card list instead of DataTable */
 const NotesTable = ({
@@ -32386,6 +32668,12 @@ const ProviderApp = ({
           title: 'New note created',
           description: d.content?.title || 'Untitled note'
         });
+      } else if (type === EVT.NOTE_EDIT) {
+        addNotification({
+          type: 'data_change',
+          title: 'Note edited',
+          description: (d.content?.title || 'Untitled') + ' edited by ' + (d.sender?.split(':')[0]?.slice(1) || 'someone')
+        });
       }
     };
     const handleStateNotif = e => {
@@ -32997,12 +33285,48 @@ const ProviderApp = ({
         });
       }
     }
-    // Sort by created desc, deduplicate by id
+    // ─── Collect NOTE_EDIT events and apply to notes ───
+    const allEdits = [];
+    for (const c of currentCases) {
+      const room = svc.client.getRoom(c.bridgeRoomId);
+      if (!room) continue;
+      room.getLiveTimeline().getEvents().filter(e => e.getType() === EVT.NOTE_EDIT).forEach(e => {
+        allEdits.push(e.getContent());
+      });
+    }
+    if (rosterRoom) {
+      const rRoom = svc.client.getRoom(rosterRoom);
+      if (rRoom) {
+        rRoom.getLiveTimeline().getEvents().filter(e => e.getType() === EVT.NOTE_EDIT).forEach(e => {
+          allEdits.push(e.getContent());
+        });
+      }
+    }
+    // Group edits by note_id, sorted chronologically
+    const editsByNote = {};
+    allEdits.sort((a, b) => (a.edited_at || 0) - (b.edited_at || 0)).forEach(ed => {
+      if (!ed.note_id) return;
+      if (!editsByNote[ed.note_id]) editsByNote[ed.note_id] = [];
+      editsByNote[ed.note_id].push(ed);
+    });
+    // Sort by created desc, deduplicate by id, apply edits
     const seenNoteIds = new Set();
     const dedupedNotes = allNotes.filter(n => {
       if (seenNoteIds.has(n.id)) return false;
       seenNoteIds.add(n.id);
       return true;
+    }).map(n => {
+      const edits = editsByNote[n.id];
+      if (!edits || edits.length === 0) return { ...n, edit_history: [] };
+      // Apply edits sequentially to get current state
+      let current = { ...n, edit_history: edits };
+      for (const ed of edits) {
+        if (ed.title !== undefined) current.title = ed.title;
+        if (ed.content !== undefined) current.content = ed.content;
+        current.updated = ed.edited_at;
+        current.last_edited_by = ed.edited_by;
+      }
+      return current;
     }).sort((a, b) => (b.created || 0) - (a.created || 0));
     setDbNotes(dedupedNotes);
   };
@@ -33095,6 +33419,49 @@ const ProviderApp = ({
   // ─── Note save handler ───
   const handleNoteSave = noteData => {
     setDbNotes(prev => [noteData, ...prev]);
+  };
+
+  // ─── Note edit handler (ALT operation) ───
+  const handleNoteEdit = editData => {
+    setDbNotes(prev => prev.map(n => {
+      if (n.id !== editData.note_id) return n;
+      const editEntry = {
+        title: editData.title,
+        content: editData.content,
+        prev_title: editData.prev_title,
+        prev_content: editData.prev_content,
+        edited_by: editData.edited_by,
+        edited_at: editData.edited_at
+      };
+      return {
+        ...n,
+        title: editData.title,
+        content: editData.content,
+        updated: editData.edited_at,
+        last_edited_by: editData.edited_by,
+        edit_history: [...(n.edit_history || []), editEntry]
+      };
+    }));
+    // Update the detail modal if it's showing this note
+    setNoteDetailModal(prev => {
+      if (!prev || prev.id !== editData.note_id) return prev;
+      const editEntry = {
+        title: editData.title,
+        content: editData.content,
+        prev_title: editData.prev_title,
+        prev_content: editData.prev_content,
+        edited_by: editData.edited_by,
+        edited_at: editData.edited_at
+      };
+      return {
+        ...prev,
+        title: editData.title,
+        content: editData.content,
+        updated: editData.edited_at,
+        last_edited_by: editData.edited_by,
+        edit_history: [...(prev.edit_history || []), editEntry]
+      };
+    });
   };
 
   // ─── Bulk action handler for database table ───
@@ -36287,63 +36654,17 @@ const ProviderApp = ({
     T: T,
     initialAttachTo: newNoteAttachTo,
     teamContext: teamMode
-  }), /*#__PURE__*/React.createElement(Modal, {
+  }), /*#__PURE__*/React.createElement(NoteDetailModal, {
+    note: noteDetailModal,
     open: !!noteDetailModal,
     onClose: () => setNoteDetailModal(null),
-    title: noteDetailModal?.title || 'Note',
-    w: 560
-  }, noteDetailModal && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 14
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "section-label"
-  }, "CONTENT"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: 'var(--tx-0)',
-      lineHeight: 1.7,
-      whiteSpace: 'pre-wrap',
-      background: 'var(--bg-2)',
-      padding: 14,
-      borderRadius: 'var(--r)',
-      border: '1px solid var(--border-0)',
-      marginTop: 6
-    }
-  }, noteDetailModal.content || noteDetailModal.text || '(empty)')), noteDetailModal.attached_to && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 14
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "section-label"
-  }, "ATTACHED TO"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: 'var(--tx-1)',
-      marginTop: 4
-    }
-  }, noteDetailModal.attached_to_name || noteDetailModal.attached_to)), noteDetailModal.tags?.length > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 14
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "section-label"
-  }, "TAGGED"), /*#__PURE__*/React.createElement("div", {
-    className: "note-tags",
-    style: {
-      marginTop: 4
-    }
-  }, noteDetailModal.tags.map(t => /*#__PURE__*/React.createElement("span", {
-    key: t.userId,
-    className: "note-tag-chip"
-  }, t.displayName)))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: 'var(--tx-3)',
-      borderTop: '1px solid var(--border-0)',
-      paddingTop: 10
-    }
-  }, "Created ", dtFmtDate(noteDetailModal.created), " by ", (noteDetailModal.author || '').split(':')[0]?.replace('@', '') || 'unknown')))), view === 'individual-profile' && activeIndividual && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(IndividualProfilePage, {
+    onSave: handleNoteEdit,
+    svc: svc,
+    staff: staff,
+    rosterRoom: rosterRoom,
+    showToast: showToast,
+    T: T
+  })), view === 'individual-profile' && activeIndividual && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(IndividualProfilePage, {
     individual: activeIndividual,
     notes: dbNotes,
     allocations: allAllocations,
