@@ -563,6 +563,24 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .cf-migrate-badge{font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;display:inline-flex;align-items:center;gap:3px}
 .cf-migrate-badge.outdated{background:var(--orange-dim);color:var(--orange)}
 .cf-migrate-badge.current{background:var(--green-dim);color:var(--green)}
+/* ── Database Merge (auditable SYN) ── */
+.db-merge-sources{display:flex;gap:12px;margin:10px 0}
+.db-merge-source{flex:1;padding:12px;border:1px solid var(--border-0);border-radius:var(--r);background:var(--bg-2);cursor:pointer;transition:all .15s}
+.db-merge-source:hover{border-color:var(--border-2)}
+.db-merge-source.primary{border-color:var(--purple);background:rgba(167,139,250,0.08)}
+.db-merge-field-row{display:flex;align-items:stretch;gap:0;margin:2px 0;border:1px solid var(--border-0);border-radius:var(--r);overflow:hidden;transition:border-color .15s}
+.db-merge-field-row:hover{border-color:var(--border-2)}
+.db-merge-field-label{width:120px;min-width:120px;padding:8px 10px;background:var(--bg-3);font-size:11px;font-weight:600;color:var(--tx-2);display:flex;align-items:center;border-right:1px solid var(--border-0)}
+.db-merge-field-val{flex:1;padding:8px 10px;font-size:12px;color:var(--tx-0);cursor:pointer;transition:background .12s;display:flex;align-items:center;gap:6px;border-right:1px solid var(--border-0)}
+.db-merge-field-val:last-child{border-right:none}
+.db-merge-field-val:hover{background:var(--bg-3)}
+.db-merge-field-val.selected{background:rgba(167,139,250,0.12);color:var(--purple)}
+.db-merge-field-val.conflict{background:rgba(232,93,93,0.06)}
+.db-merge-syn-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;font-family:var(--mono);background:rgba(167,139,250,0.12);color:var(--purple)}
+.db-merge-audit-row{padding:8px 12px;border-left:2px solid var(--purple);margin:4px 0;background:var(--bg-2);border-radius:0 var(--r) var(--r) 0;font-size:11px;display:flex;flex-direction:column;gap:2px}
+.db-merge-date-pick{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r);margin:8px 0}
+.db-merge-date-pick input[type="date"]{max-width:180px;font-family:var(--mono);font-size:12px}
+.db-merge-summary{padding:12px 14px;background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r);font-size:11px;color:var(--tx-2);line-height:1.6}
 
 /* ═══ Schema Workbench (Redesigned) ═══ */
 .sw-wrap{display:flex;flex-direction:column;height:calc(100vh - 104px);margin:-24px;border-radius:var(--r-lg);border:1px solid var(--border-0);overflow:hidden;background:var(--bg-1)}
@@ -1692,7 +1710,8 @@ const I = ({
     dodeca: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
       d: "M12 1L22.46 8.6L18.47 20.9L5.53 20.9L1.54 8.6Z M14.94 7.95L16.76 13.55L12 17L7.24 13.55L9.06 7.95Z M12 1L14.94 7.95 M22.46 8.6L16.76 13.55 M18.47 20.9L12 17 M5.53 20.9L7.24 13.55 M1.54 8.6L9.06 7.95"
     })),
-    graphNodes: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "5", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "5", cy: "19", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "19", cy: "19", r: "3" }), /*#__PURE__*/React.createElement("line", { x1: "12", y1: "8", x2: "5", y2: "16" }), /*#__PURE__*/React.createElement("line", { x1: "12", y1: "8", x2: "19", y2: "16" }), /*#__PURE__*/React.createElement("line", { x1: "8", y1: "19", x2: "16", y2: "19" }))
+    graphNodes: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "5", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "5", cy: "19", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "19", cy: "19", r: "3" }), /*#__PURE__*/React.createElement("line", { x1: "12", y1: "8", x2: "5", y2: "16" }), /*#__PURE__*/React.createElement("line", { x1: "12", y1: "8", x2: "19", y2: "16" }), /*#__PURE__*/React.createElement("line", { x1: "8", y1: "19", x2: "16", y2: "19" })),
+    'git-merge': /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", { cx: "18", cy: "18", r: "3" }), /*#__PURE__*/React.createElement("circle", { cx: "6", cy: "6", r: "3" }), /*#__PURE__*/React.createElement("path", { d: "M6 21V9a9 9 0 0 0 9 9" }))
   };
   return /*#__PURE__*/React.createElement("span", {
     style: {
@@ -2523,7 +2542,10 @@ const EVT = {
   // client vault shadow record
   RESOURCE_PERM: `${NS}.resource.permissions`, // per-type permission grants
   // Direct messaging between connected users
-  DM_META: `${NS}.dm.meta`
+  DM_META: `${NS}.dm.meta`,
+  // Database merge (auditable SYN-based record merging)
+  MERGE_RECORD: `${NS}.merge.record`,
+  MERGE_AUDIT: `${NS}.merge.audit`
 };
 
 /* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */
@@ -8738,6 +8760,467 @@ const ImportDataModal = ({
     n: "check",
     s: 15
   }), " Done \u2014 View Clients")));
+};
+
+/* ═══════════════════ DATABASE MERGE SERVICE (Auditable SYN) ═══════════════════
+ * Operator Manifest:
+ *   SYN(merge.fields.{key}, {source_a, source_b, resolved_value, effective_date}) — field_synchronization
+ *   DES(merge.record, {sources, strategy, effective_date}) — merge_designation
+ *   CON(merge.audit, {merge_id, sources, field_resolutions}) — audit_linkage
+ *   ALT(merge.target.{key}, {from, to, merge_id}) — target_record_update
+ *   NUL(merge.source, {reason: merged_into, target}) — source_deprecation
+ *
+ * Triad Summary:
+ *   Existence:       DES (merge record creation), NUL (source deprecation)
+ *   Structure:       SYN (field synchronization), CON (audit linkage)
+ *   Interpretation:  ALT (target value updates)
+ *
+ * The merge act is a SYN operation that takes place at a specific effective date.
+ * Every field resolution is individually traced through the EO operation chain,
+ * producing a complete audit trail of what was merged, from where, and why.
+ * ═══════════════════════════════════════════════════════════════════════════════ */
+
+const MERGE_STRATEGIES = {
+  manual: { id: 'manual', label: 'Manual Selection', desc: 'Pick the canonical value for each field' },
+  newest: { id: 'newest', label: 'Newest Wins', desc: 'Use the most recently updated value for each field' },
+  source_a: { id: 'source_a', label: 'Primary Source', desc: 'Prefer all values from the primary record' },
+  source_b: { id: 'source_b', label: 'Secondary Source', desc: 'Prefer all values from the secondary record' }
+};
+
+const DatabaseMergeService = {
+  /**
+   * Compare two records and identify field-level conflicts.
+   * Returns { fields: [{key, label, value_a, value_b, conflict, ts_a, ts_b}], summary }
+   */
+  compareRecords(recordA, recordB, fieldDefs) {
+    const allKeys = new Set([
+      ...Object.keys(recordA.fields || {}),
+      ...Object.keys(recordB.fields || {})
+    ]);
+    const fields = [];
+    let conflicts = 0;
+    let matches = 0;
+    let onlyA = 0;
+    let onlyB = 0;
+
+    for (const key of allKeys) {
+      const valA = recordA.fields?.[key] ?? null;
+      const valB = recordB.fields?.[key] ?? null;
+      const tsA = recordA.timestamps?.[key] ?? recordA.ts ?? 0;
+      const tsB = recordB.timestamps?.[key] ?? recordB.ts ?? 0;
+      const vfDef = (fieldDefs || VAULT_FIELDS).find(f => f.key === key);
+      const label = vfDef?.label || key;
+      const hasA = valA !== null && valA !== '';
+      const hasB = valB !== null && valB !== '';
+      const conflict = hasA && hasB && valA !== valB;
+
+      if (conflict) conflicts++;
+      else if (hasA && hasB && valA === valB) matches++;
+      else if (hasA && !hasB) onlyA++;
+      else if (!hasA && hasB) onlyB++;
+
+      fields.push({ key, label, value_a: valA, value_b: valB, conflict, ts_a: tsA, ts_b: tsB });
+    }
+
+    return {
+      fields: fields.sort((a, b) => (b.conflict ? 1 : 0) - (a.conflict ? 1 : 0) || a.label.localeCompare(b.label)),
+      summary: { total: allKeys.size, conflicts, matches, onlyA, onlyB }
+    };
+  },
+
+  /**
+   * Auto-resolve field values based on strategy.
+   * Returns { [key]: { value, source } } — source is 'a', 'b', or 'manual'
+   */
+  autoResolve(comparison, strategy) {
+    const resolutions = {};
+    for (const field of comparison.fields) {
+      const hasA = field.value_a !== null && field.value_a !== '';
+      const hasB = field.value_b !== null && field.value_b !== '';
+
+      if (!hasA && !hasB) {
+        resolutions[field.key] = { value: null, source: 'none' };
+      } else if (hasA && !hasB) {
+        resolutions[field.key] = { value: field.value_a, source: 'a' };
+      } else if (!hasA && hasB) {
+        resolutions[field.key] = { value: field.value_b, source: 'b' };
+      } else if (field.value_a === field.value_b) {
+        resolutions[field.key] = { value: field.value_a, source: 'both' };
+      } else {
+        // Conflict — apply strategy
+        switch (strategy) {
+          case 'newest':
+            resolutions[field.key] = field.ts_a >= field.ts_b
+              ? { value: field.value_a, source: 'a' }
+              : { value: field.value_b, source: 'b' };
+            break;
+          case 'source_a':
+            resolutions[field.key] = { value: field.value_a, source: 'a' };
+            break;
+          case 'source_b':
+            resolutions[field.key] = { value: field.value_b, source: 'b' };
+            break;
+          default: // manual — leave unresolved
+            resolutions[field.key] = { value: null, source: 'unresolved' };
+        }
+      }
+    }
+    return resolutions;
+  },
+
+  /**
+   * Execute the merge: emits SYN operations for each field, creates an audit
+   * record, and updates the target record. The merge is anchored to an
+   * effective_date — the date the synchronization is considered to have occurred.
+   *
+   * @param {string} targetRoomId  — room to write merged data into
+   * @param {object} recordA       — { roomId, fields, name, ts }
+   * @param {object} recordB       — { roomId, fields, name, ts }
+   * @param {object} resolutions   — { [key]: { value, source } }
+   * @param {string} effectiveDate — ISO date string (YYYY-MM-DD)
+   * @param {string} strategy      — merge strategy used
+   * @param {string} [frameType]   — 'org' or 'vault'
+   * @returns {object} — { merge_id, ops_emitted, merged_fields }
+   */
+  async executeMerge(targetRoomId, recordA, recordB, resolutions, effectiveDate, strategy, frameType) {
+    const mergeId = 'merge_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const effective_ts = new Date(effectiveDate + 'T00:00:00Z').getTime();
+    const ops = [];
+    const mergedFields = {};
+    const fieldResolutions = [];
+    const frame = { type: frameType || 'org', room: targetRoomId, epistemic: 'MEANT' };
+
+    // DES(merge.record, {sources, strategy, effective_date}) — merge_designation
+    const desOp = await emitOp(targetRoomId, 'DES', dot('merge', 'record', mergeId), {
+      designation: 'database_merge',
+      merge_id: mergeId,
+      source_a: { roomId: recordA.roomId, name: recordA.name },
+      source_b: { roomId: recordB.roomId, name: recordB.name },
+      strategy,
+      effective_date: effectiveDate,
+      effective_ts,
+      field_count: Object.keys(resolutions).length
+    }, frame);
+    if (desOp) ops.push(desOp);
+
+    // SYN each field resolution — the core auditable synchronization act
+    for (const [key, resolution] of Object.entries(resolutions)) {
+      if (resolution.source === 'none') continue;
+      const valA = recordA.fields?.[key] ?? null;
+      const valB = recordB.fields?.[key] ?? null;
+
+      // SYN(merge.fields.{key}, {source_a, source_b, resolved, effective_date})
+      const synOp = await emitOp(targetRoomId, 'SYN', dot('merge', 'fields', key), {
+        merge_id: mergeId,
+        source_a_value: valA,
+        source_b_value: valB,
+        resolved_value: resolution.value,
+        resolved_source: resolution.source,
+        effective_date: effectiveDate,
+        effective_ts
+      }, frame);
+      if (synOp) ops.push(synOp);
+
+      mergedFields[key] = resolution.value;
+      fieldResolutions.push({
+        key,
+        from_a: valA,
+        from_b: valB,
+        resolved: resolution.value,
+        source: resolution.source
+      });
+    }
+
+    // ALT target record fields with merged values
+    for (const [key, value] of Object.entries(mergedFields)) {
+      if (value === null) continue;
+      const currentVal = recordA.fields?.[key];
+      if (currentVal !== value) {
+        const altOp = await emitOp(targetRoomId, 'ALT', dot('merge', 'target', key), {
+          from: currentVal ?? null,
+          to: value,
+          merge_id: mergeId,
+          effective_date: effectiveDate
+        }, frame);
+        if (altOp) ops.push(altOp);
+      }
+    }
+
+    // CON(merge.audit, {merge_id, full_resolution_chain}) — audit linkage
+    const conOp = await emitOp(targetRoomId, 'CON', dot('merge', 'audit', mergeId), {
+      merge_id: mergeId,
+      sources: [recordA.roomId, recordB.roomId],
+      target: targetRoomId,
+      strategy,
+      effective_date: effectiveDate,
+      effective_ts,
+      field_resolutions: fieldResolutions,
+      ops_count: ops.length,
+      completed_at: Date.now(),
+      completed_by: svc.userId
+    }, frame);
+    if (conOp) ops.push(conOp);
+
+    // Persist the merge audit record as state in the target room
+    try {
+      await svc.setState(targetRoomId, EVT.MERGE_AUDIT, {
+        merge_id: mergeId,
+        source_a: { roomId: recordA.roomId, name: recordA.name },
+        source_b: { roomId: recordB.roomId, name: recordB.name },
+        strategy,
+        effective_date: effectiveDate,
+        effective_ts,
+        field_resolutions: fieldResolutions,
+        completed_at: Date.now(),
+        completed_by: svc.userId
+      }, mergeId);
+    } catch (e) {
+      console.error('[DatabaseMerge] Failed to persist audit state:', e.message);
+    }
+
+    return { merge_id: mergeId, ops_emitted: ops.length, merged_fields: mergedFields, field_resolutions: fieldResolutions };
+  },
+
+  /**
+   * Retrieve merge audit records from a room.
+   */
+  async getMergeHistory(roomId) {
+    try {
+      if (!svc.client) return [];
+      const room = svc.client.getRoom(roomId);
+      if (!room) return [];
+      const events = room.currentState.getStateEvents(EVT.MERGE_AUDIT);
+      if (!events) return [];
+      const evts = Array.isArray(events) ? events : [events];
+      return evts.map(e => e.getContent ? e.getContent() : e).filter(e => e.merge_id).sort((a, b) => (b.completed_at || 0) - (a.completed_at || 0));
+    } catch (e) {
+      console.error('[DatabaseMerge] getMergeHistory error:', e.message);
+      return [];
+    }
+  }
+};
+
+/* ─── DatabaseMergeModal — auditable SYN-based record merge UI ─── */
+const DatabaseMergeModal = ({ open, onClose, recordA, recordB, allRecords, targetRoomId, showToast, onComplete }) => {
+  const [step, setStep] = useState('select');    // select | compare | resolve | confirm | done
+  const [sourceA, setSourceA] = useState(null);
+  const [sourceB, setSourceB] = useState(null);
+  const [strategy, setStrategy] = useState('manual');
+  const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [comparison, setComparison] = useState(null);
+  const [resolutions, setResolutions] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState(null);
+
+  // Reset on open
+  React.useEffect(() => {
+    if (open) {
+      if (recordA && recordB) {
+        setSourceA(recordA);
+        setSourceB(recordB);
+        setStep('compare');
+      } else if (recordA) {
+        setSourceA(recordA);
+        setSourceB(null);
+        setStep('select');
+      } else {
+        setSourceA(null);
+        setSourceB(null);
+        setStep('select');
+      }
+      setStrategy('manual');
+      setEffectiveDate(new Date().toISOString().slice(0, 10));
+      setComparison(null);
+      setResolutions({});
+      setResult(null);
+    }
+  }, [open, recordA, recordB]);
+
+  // Run comparison when both sources are set
+  React.useEffect(() => {
+    if (sourceA && sourceB && step === 'compare') {
+      const comp = DatabaseMergeService.compareRecords(sourceA, sourceB);
+      setComparison(comp);
+      setResolutions(DatabaseMergeService.autoResolve(comp, strategy));
+    }
+  }, [sourceA, sourceB, step, strategy]);
+
+  const hasUnresolved = Object.values(resolutions).some(r => r.source === 'unresolved');
+
+  const handleExecuteMerge = async () => {
+    if (hasUnresolved) return;
+    setSaving(true);
+    try {
+      const target = targetRoomId || sourceA.roomId;
+      const res = await DatabaseMergeService.executeMerge(
+        target, sourceA, sourceB, resolutions, effectiveDate, strategy
+      );
+      setResult(res);
+      setStep('done');
+      if (showToast) showToast(`Merge complete: ${res.ops_emitted} EO operations recorded`);
+      if (onComplete) onComplete(res);
+    } catch (e) {
+      console.error('[DatabaseMerge] executeMerge failed:', e);
+      if (showToast) showToast('Merge failed: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  if (!open) return null;
+
+  const renderSelect = () => React.createElement('div', { className: 'cf-body' },
+    React.createElement('div', { style: { fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.6, marginBottom: 8 } },
+      'Select two records to merge. The merge will synchronize their data fields and produce a full EO audit trail.'),
+    React.createElement('div', { className: 'db-merge-sources' },
+      // Source A
+      React.createElement('div', { className: 'db-merge-source' + (sourceA ? ' primary' : '') },
+        React.createElement('div', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginBottom: 4 } }, 'PRIMARY RECORD'),
+        sourceA
+          ? React.createElement('div', null,
+              React.createElement('div', { style: { fontWeight: 600, fontSize: 13 } }, sourceA.name || 'Record A'),
+              React.createElement('div', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 2 } },
+                Object.keys(sourceA.fields || {}).length, ' fields'))
+          : React.createElement('div', { style: { color: 'var(--tx-3)', fontSize: 12 } }, 'Select from list below')),
+      // Source B
+      React.createElement('div', { className: 'db-merge-source' },
+        React.createElement('div', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginBottom: 4 } }, 'SECONDARY RECORD'),
+        sourceB
+          ? React.createElement('div', null,
+              React.createElement('div', { style: { fontWeight: 600, fontSize: 13 } }, sourceB.name || 'Record B'),
+              React.createElement('div', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 2 } },
+                Object.keys(sourceB.fields || {}).length, ' fields'))
+          : React.createElement('div', { style: { color: 'var(--tx-3)', fontSize: 12 } }, 'Select from list below'))
+    ),
+    (allRecords || []).length > 0 && React.createElement('div', { style: { maxHeight: 200, overflowY: 'auto', margin: '8px 0' } },
+      (allRecords || []).filter(r => r.roomId !== sourceA?.roomId).map(r =>
+        React.createElement('div', {
+          key: r.roomId,
+          onClick: () => !sourceA ? setSourceA(r) : setSourceB(r),
+          className: 'cf-merge-card' + (r.roomId === sourceB?.roomId ? ' canonical' : ''),
+          style: { marginBottom: 4 }
+        },
+          React.createElement('input', { type: 'radio', checked: r.roomId === sourceB?.roomId, readOnly: true, style: { accentColor: 'var(--purple)' } }),
+          React.createElement('div', { style: { flex: 1 } },
+            React.createElement('div', { style: { fontWeight: 600, fontSize: 13 } }, r.name || r.client_name || 'Record'),
+            React.createElement('div', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 2 } },
+              Object.keys(r.fields || {}).length, ' fields')))))
+  );
+
+  const renderCompare = () => {
+    if (!comparison) return React.createElement(Spin, null);
+    return React.createElement('div', { className: 'cf-body' },
+      // Summary badges
+      React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 } },
+        React.createElement('span', { className: 'tag tag-purple' }, comparison.summary.total, ' fields'),
+        comparison.summary.conflicts > 0 && React.createElement('span', { className: 'tag tag-red' }, comparison.summary.conflicts, ' conflicts'),
+        React.createElement('span', { className: 'tag tag-green' }, comparison.summary.matches, ' matching'),
+        comparison.summary.onlyA > 0 && React.createElement('span', { className: 'tag tag-blue' }, comparison.summary.onlyA, ' only in A'),
+        comparison.summary.onlyB > 0 && React.createElement('span', { className: 'tag tag-orange' }, comparison.summary.onlyB, ' only in B')),
+      // Strategy selector
+      React.createElement('div', { style: { marginBottom: 10 } },
+        React.createElement('span', { className: 'cf-label' }, 'MERGE STRATEGY'),
+        React.createElement('div', { style: { display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' } },
+          Object.values(MERGE_STRATEGIES).map(s =>
+            React.createElement('button', {
+              key: s.id,
+              className: strategy === s.id ? 'b-pri b-xs' : 'b-gho b-xs',
+              onClick: () => setStrategy(s.id),
+              title: s.desc
+            }, s.label)))),
+      // Effective date
+      React.createElement('div', { className: 'db-merge-date-pick' },
+        React.createElement('span', { style: { fontSize: 11, fontWeight: 600, color: 'var(--tx-2)' } }, 'EFFECTIVE DATE'),
+        React.createElement('input', {
+          type: 'date',
+          value: effectiveDate,
+          onChange: e => setEffectiveDate(e.target.value)
+        }),
+        React.createElement('span', { className: 'db-merge-syn-badge' }, 'SYN @ ', effectiveDate)),
+      // Field comparison table
+      React.createElement('div', { style: { maxHeight: 340, overflowY: 'auto' } },
+        React.createElement('div', { style: { display: 'flex', gap: 0, marginBottom: 4, padding: '0 0 4px' } },
+          React.createElement('div', { style: { width: 120, minWidth: 120, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)' } }, 'FIELD'),
+          React.createElement('div', { style: { flex: 1, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--purple)' } }, sourceA?.name || 'Source A'),
+          React.createElement('div', { style: { flex: 1, fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--teal)' } }, sourceB?.name || 'Source B')),
+        comparison.fields.map(f => {
+          const res = resolutions[f.key];
+          return React.createElement('div', { key: f.key, className: 'db-merge-field-row' },
+            React.createElement('div', { className: 'db-merge-field-label' },
+              f.label,
+              f.conflict && React.createElement('span', { style: { color: 'var(--red)', fontSize: 9, marginLeft: 4 } }, '\u26A0')),
+            React.createElement('div', {
+              className: 'db-merge-field-val' + (res?.source === 'a' || res?.source === 'both' ? ' selected' : '') + (f.conflict ? ' conflict' : ''),
+              onClick: () => f.conflict && setResolutions(prev => ({ ...prev, [f.key]: { value: f.value_a, source: 'a' } }))
+            },
+              f.value_a !== null && f.value_a !== '' ? String(f.value_a) : React.createElement('span', { style: { color: 'var(--tx-3)', fontStyle: 'italic' } }, '\u2014'),
+              res?.source === 'a' && React.createElement('span', { className: 'db-merge-syn-badge', style: { fontSize: 8, padding: '1px 5px' } }, '\u2713')),
+            React.createElement('div', {
+              className: 'db-merge-field-val' + (res?.source === 'b' ? ' selected' : '') + (f.conflict ? ' conflict' : ''),
+              onClick: () => f.conflict && setResolutions(prev => ({ ...prev, [f.key]: { value: f.value_b, source: 'b' } }))
+            },
+              f.value_b !== null && f.value_b !== '' ? String(f.value_b) : React.createElement('span', { style: { color: 'var(--tx-3)', fontStyle: 'italic' } }, '\u2014'),
+              res?.source === 'b' && React.createElement('span', { className: 'db-merge-syn-badge', style: { fontSize: 8, padding: '1px 5px' } }, '\u2713')));
+        })));
+  };
+
+  const renderConfirm = () => {
+    const resolved = Object.entries(resolutions).filter(([, r]) => r.source !== 'none');
+    return React.createElement('div', { className: 'cf-body' },
+      React.createElement('div', { className: 'db-merge-summary' },
+        React.createElement('strong', null, 'Merge Summary'), React.createElement('br', null),
+        '\u2022 Merging "', sourceA?.name, '" + "', sourceB?.name, '"', React.createElement('br', null),
+        '\u2022 Strategy: ', MERGE_STRATEGIES[strategy]?.label, React.createElement('br', null),
+        '\u2022 Effective Date: ', effectiveDate, React.createElement('br', null),
+        '\u2022 Fields to synchronize: ', resolved.length, React.createElement('br', null),
+        '\u2022 EO operations that will be emitted: ~', resolved.length + 2, ' (DES + SYN\u00D7', resolved.length, ' + CON)'),
+      React.createElement('div', { style: { marginTop: 12, padding: '10px 14px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 'var(--r)', fontSize: 11, display: 'flex', alignItems: 'center', gap: 8 } },
+        React.createElement('span', { className: 'db-merge-syn-badge' }, 'SYN'),
+        React.createElement('span', { style: { color: 'var(--tx-1)' } },
+          'Each field merge is recorded as an auditable SYN operation anchored to ', effectiveDate, '. The full provenance chain is traceable in the Activity Stream.')),
+      React.createElement('div', { style: { marginTop: 12, maxHeight: 200, overflowY: 'auto' } },
+        resolved.map(([key, res]) =>
+          React.createElement('div', { key, className: 'db-merge-audit-row' },
+            React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+              React.createElement('span', { style: { fontWeight: 600 } }, key),
+              React.createElement('span', { className: 'db-merge-syn-badge', style: { fontSize: 8 } }, 'SYN \u2190 ', res.source)),
+            React.createElement('div', { style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--tx-1)', marginTop: 2 } },
+              '\u2192 ', res.value !== null ? String(res.value) : '(null)')))));
+  };
+
+  const renderDone = () => React.createElement('div', { className: 'cf-body', style: { textAlign: 'center', padding: '30px 20px' } },
+    React.createElement('div', { style: { fontSize: 36, marginBottom: 12 } }, '\u2713'),
+    React.createElement('div', { style: { fontSize: 16, fontWeight: 700, fontFamily: 'var(--serif)', marginBottom: 8 } }, 'Merge Complete'),
+    React.createElement('div', { style: { fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.6, marginBottom: 16 } },
+      result?.ops_emitted, ' EO operations emitted. ', result?.field_resolutions?.length, ' fields synchronized.',
+      React.createElement('br', null), 'Merge ID: ', React.createElement('span', { style: { fontFamily: 'var(--mono)', fontSize: 10 } }, result?.merge_id)),
+    React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'center' } },
+      React.createElement('button', { className: 'b-pri', onClick: onClose }, 'Done')));
+
+  const stepTitles = { select: 'Select Records', compare: 'Compare & Resolve', confirm: 'Confirm Merge', done: 'Complete' };
+
+  return React.createElement('div', { className: 'cf-overlay', onClick: e => { if (e.target === e.currentTarget) onClose(); } },
+    React.createElement('div', { className: 'cf-modal', style: { width: 680 } },
+      React.createElement('div', { className: 'cf-header' },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          React.createElement('h3', null, 'Database Merge'),
+          React.createElement('span', { className: 'db-merge-syn-badge' }, 'SYN'),
+          React.createElement('span', { style: { fontSize: 11, color: 'var(--tx-2)' } }, '\u2014 ', stepTitles[step])),
+        React.createElement('button', { className: 'b-gho b-xs', onClick: onClose, style: { fontSize: 16, lineHeight: 1, padding: '2px 8px' } }, '\u2715')),
+      step === 'select' && renderSelect(),
+      step === 'compare' && renderCompare(),
+      step === 'confirm' && renderConfirm(),
+      step === 'done' && renderDone(),
+      step !== 'done' && React.createElement('div', { className: 'cf-footer' },
+        React.createElement('button', { className: 'b-gho', onClick: () => {
+          if (step === 'confirm') setStep('compare');
+          else if (step === 'compare') setStep('select');
+          else onClose();
+        } }, step === 'select' ? 'Cancel' : 'Back'),
+        step === 'select' && sourceA && sourceB && React.createElement('button', { className: 'b-pri', onClick: () => setStep('compare') }, 'Compare Records'),
+        step === 'compare' && React.createElement('button', { className: 'b-pri', disabled: hasUnresolved, onClick: () => setStep('confirm'), title: hasUnresolved ? 'Resolve all conflicts first' : '' },
+          hasUnresolved ? 'Resolve Conflicts First' : 'Review & Confirm'),
+        step === 'confirm' && React.createElement('button', { className: 'b-pri', disabled: saving, onClick: handleExecuteMerge },
+          saving ? 'Executing SYN...' : 'Execute Merge'))));
 };
 
 /* ═══════════════════ SMALL COMPONENTS ═══════════════════ */
@@ -30351,6 +30834,10 @@ const ProviderApp = ({
   const [sharingConsentModal, setSharingConsentModal] = useState(null); // {team, member} or null — prompts team member to choose sharing preference
   // Client data import
   const [importModal, setImportModal] = useState(false);
+  // Database merge (auditable SYN)
+  const [dbMergeModal, setDbMergeModal] = useState(false);
+  const [dbMergeRecordA, setDbMergeRecordA] = useState(null);
+  const [dbMergeRecordB, setDbMergeRecordB] = useState(null);
   // ─── Database / Notes / Profile state ───
   const [dbNotes, setDbNotes] = useState([]); // all notes across roster + bridges
   const [newNoteModal, setNewNoteModal] = useState(false);
@@ -35280,7 +35767,22 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "upload",
     s: 14
-  }), "Import Data"), /*#__PURE__*/React.createElement("button", {
+  }), "Import Data"), clientRecords.length >= 2 && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setDbMergeRecordA(null);
+      setDbMergeRecordB(null);
+      setDbMergeModal(true);
+    },
+    className: "b-gho b-sm",
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "git-merge",
+    s: 14
+  }), "Merge Records"), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setCreateClientModal(true);
       setNewClientName('');
@@ -41747,6 +42249,23 @@ const ProviderApp = ({
     showToast: showToast,
     metricsRoom: metricsRoom,
     onComplete: handleImportComplete
+  }), /*#__PURE__*/React.createElement(DatabaseMergeModal, {
+    open: dbMergeModal,
+    onClose: () => { setDbMergeModal(false); setDbMergeRecordA(null); setDbMergeRecordB(null); },
+    recordA: dbMergeRecordA,
+    recordB: dbMergeRecordB,
+    allRecords: clientRecords.map(cr => ({
+      roomId: cr.roomId,
+      name: cr.client_name || cr.name || 'Record',
+      fields: cr.fields || {},
+      timestamps: cr.timestamps || {},
+      ts: cr.created_at || cr.ts || 0
+    })),
+    targetRoomId: dbMergeRecordA?.roomId || (clientRecords[0] && clientRecords[0].roomId),
+    showToast: showToast,
+    onComplete: (res) => {
+      if (showToast) showToast('Database merge completed: ' + res.ops_emitted + ' auditable EO operations');
+    }
   }), /*#__PURE__*/React.createElement(Modal, {
     open: composeOrgModal,
     onClose: () => setComposeOrgModal(false),
