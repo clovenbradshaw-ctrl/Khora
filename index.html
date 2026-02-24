@@ -1189,6 +1189,27 @@ table.dt td.dt-drag-handle:active{cursor:grabbing}
 .pd-res-card{padding:12px 16px;border-radius:var(--r);border:1px solid var(--border-0);background:var(--bg-2);display:flex;align-items:center;justify-content:space-between;transition:border-color .15s}
 .pd-res-card:hover{border-color:var(--green)}
 .pd-empty{text-align:center;padding:30px 20px;border:1px dashed var(--border-1);border-radius:var(--r);color:var(--tx-3)}
+/* ═══ Personal Dashboard — enhanced ═══ */
+.pd-two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
+.pd-vault-snap{padding:16px 18px;border-radius:var(--r);border:1px solid var(--border-0);background:var(--bg-2)}
+.pd-vault-snap .vault-progress-bar{height:5px;border-radius:3px;background:var(--bg-4);margin:10px 0 14px}
+.pd-vault-snap .vault-progress-fill{height:100%;border-radius:3px;background:var(--teal);transition:width .4s ease}
+.pd-vault-field-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border-0)}
+.pd-vault-field-row:last-child{border-bottom:none}
+.pd-vault-field-key{font-size:11px;color:var(--tx-2);font-family:var(--mono);min-width:90px}
+.pd-vault-field-val{font-size:12px;font-weight:500;color:var(--tx-0);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.pd-vault-field-empty{font-size:11px;color:var(--tx-3);font-style:italic;text-align:right}
+.pd-team-card{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--r);border:1px solid var(--border-0);background:var(--bg-2);cursor:pointer;transition:border-color .15s,background .15s;margin-bottom:6px}
+.pd-team-card:hover{border-color:var(--purple);background:var(--bg-3)}
+.pd-team-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.pd-team-name{font-size:12.5px;font-weight:600;flex:1}
+.pd-team-meta{font-size:10px;color:var(--tx-3);font-family:var(--mono)}
+.pd-msg-row{display:flex;gap:10px;padding:10px 14px;border-radius:var(--r);border:1px solid var(--border-0);background:var(--bg-2);cursor:pointer;transition:border-color .15s;margin-bottom:6px}
+.pd-msg-row:hover{border-color:var(--blue)}
+.pd-msg-sender{font-size:12px;font-weight:600;margin-bottom:2px}
+.pd-msg-preview{font-size:11px;color:var(--tx-2);overflow:hidden;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical}
+.pd-msg-time{font-size:9px;color:var(--tx-3);font-family:var(--mono);margin-top:2px}
+@media(max-width:700px){.pd-two-col{grid-template-columns:1fr}}
 /* ═══ EO Graph View ═══ */
 .eo-graph-wrap{height:100%;display:flex;flex-direction:column;overflow:hidden}
 .eo-graph-header{padding:14px 20px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;gap:12px;flex-shrink:0}
@@ -19746,6 +19767,7 @@ const PersonalDashboard = ({
   vaultData,
   allFields,
   vaultRoom,
+  myTeams,
   onNavigate
 }) => {
   const [loading, setLoading] = useState(true);
@@ -20095,11 +20117,27 @@ const PersonalDashboard = ({
     return bridgeEvents.filter(e => e.category === eventFilter);
   }, [bridgeEvents, eventFilter]);
 
+  // Recent messages derived from bridge events
+  const recentMessages = useMemo(() =>
+    bridgeEvents.filter(e => e.category === 'messages').slice(0, 5),
+    [bridgeEvents]
+  );
+
+  // Vault snapshot key fields
+  const vaultKeyFields = [
+    { key: 'full_name', label: 'Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'dob', label: 'Date of Birth' },
+    { key: 'address', label: 'Address' },
+  ];
+
   // Stats
   const activeResources = myResources.filter(r => r.status === 'active').length;
   const totalNotes = providerNotes.length;
   const totalObs = observations.length;
   const filledFields = allFields.filter(f => vaultData[f.key]).length;
+  const vaultCompletionPct = allFields.length > 0 ? Math.round(filledFields / allFields.length * 100) : 0;
   const providerEventCount = bridgeEvents.filter(e => e.sender !== svc.userId).length;
   if (loading) return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -20127,13 +20165,13 @@ const PersonalDashboard = ({
       fontSize: 22,
       fontWeight: 700
     }
-  }, "My Dashboard"), /*#__PURE__*/React.createElement("p", {
+  }, vaultData.full_name ? `Welcome, ${vaultData.full_name.split(' ')[0]}` : "My Dashboard"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Everything about you in one place \u2014 content, resources, and updates from your providers.")), /*#__PURE__*/React.createElement("div", {
+  }, "Your vault, teams, messages, and activity \u2014 all in one place.")), /*#__PURE__*/React.createElement("div", {
     className: "pd-grid"
   }, [{
     l: 'Providers',
@@ -20165,10 +20203,17 @@ const PersonalDashboard = ({
     i: 'folder',
     nav: 'vault'
   }, {
-    l: 'Provider Updates',
-    v: providerEventCount,
-    c: 'orange',
-    i: 'bell'
+    l: 'Teams',
+    v: (myTeams || []).length,
+    c: 'purple',
+    i: 'users',
+    nav: 'providers'
+  }, {
+    l: 'Messages',
+    v: recentMessages.length,
+    c: 'blue',
+    i: 'msg',
+    nav: 'inbox'
   }].map((s, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     className: "card pd-stat",
@@ -20200,7 +20245,98 @@ const PersonalDashboard = ({
     style: {
       color: `var(--${s.c})`
     }
-  }, s.v)))), /*#__PURE__*/React.createElement("div", {
+  }, s.v)))),
+  /* ── Vault Snapshot + My Teams (two-column) ── */
+  /*#__PURE__*/React.createElement("div", { className: "pd-two-col" },
+    /* Vault Snapshot */
+    /*#__PURE__*/React.createElement("div", { className: "pd-section", style: { marginBottom: 0 } },
+      /*#__PURE__*/React.createElement("div", { className: "pd-section-hdr" },
+        /*#__PURE__*/React.createElement("h3", null, /*#__PURE__*/React.createElement(I, { n: "folder", s: 16, c: "var(--teal)" }), " My Vault"),
+        /*#__PURE__*/React.createElement("button", { onClick: () => onNavigate('vault'), className: "b-gho b-xs" }, "Edit Vault")
+      ),
+      /*#__PURE__*/React.createElement("div", { className: "pd-vault-snap" },
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-2)', fontFamily: 'var(--mono)' } }, filledFields, "/", allFields.length, " fields filled"),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 600, color: 'var(--teal)' } }, vaultCompletionPct, "% complete")
+        ),
+        /*#__PURE__*/React.createElement("div", { className: "vault-progress-bar" },
+          /*#__PURE__*/React.createElement("div", { className: "vault-progress-fill", style: { width: vaultCompletionPct + '%' } })
+        ),
+        vaultKeyFields.map(f => /*#__PURE__*/React.createElement("div", { key: f.key, className: "pd-vault-field-row" },
+          /*#__PURE__*/React.createElement("span", { className: "pd-vault-field-key" }, f.label),
+          vaultData[f.key]
+            ? /*#__PURE__*/React.createElement("span", { className: "pd-vault-field-val" }, vaultData[f.key])
+            : /*#__PURE__*/React.createElement("span", { className: "pd-vault-field-empty" }, "Not set")
+        ))
+      )
+    ),
+    /* My Teams */
+    /*#__PURE__*/React.createElement("div", { className: "pd-section", style: { marginBottom: 0 } },
+      /*#__PURE__*/React.createElement("div", { className: "pd-section-hdr" },
+        /*#__PURE__*/React.createElement("h3", null, /*#__PURE__*/React.createElement(I, { n: "users", s: 16, c: "var(--purple)" }), " My Teams"),
+        (myTeams || []).length > 0 && /*#__PURE__*/React.createElement("button", { onClick: () => onNavigate('providers'), className: "b-gho b-xs" }, "View All")
+      ),
+      (myTeams || []).length === 0
+        ? /*#__PURE__*/React.createElement("div", { className: "pd-empty" },
+            /*#__PURE__*/React.createElement(I, { n: "users", s: 28, c: "var(--tx-3)" }),
+            /*#__PURE__*/React.createElement("p", { style: { marginTop: 8, fontSize: 12 } }, "No teams yet."),
+            /*#__PURE__*/React.createElement("p", { style: { fontSize: 11, marginTop: 4 } }, "Teams you join will appear here.")
+          )
+        : (myTeams || []).slice(0, 5).map(team =>
+            /*#__PURE__*/React.createElement("div", {
+              key: team.roomId,
+              className: "pd-team-card",
+              onClick: () => onNavigate('providers')
+            },
+              /*#__PURE__*/React.createElement("div", { className: "pd-team-dot", style: { background: `hsl(${team.color_hue || 260},60%,55%)` } }),
+              /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                /*#__PURE__*/React.createElement("div", { className: "pd-team-name" }, team.name || 'Unnamed Team'),
+                team.members && /*#__PURE__*/React.createElement("div", { className: "pd-team-meta" },
+                  team.members.length, " member", team.members.length !== 1 ? 's' : ''
+                )
+              ),
+              /*#__PURE__*/React.createElement("span", { style: { color: `hsl(${team.color_hue || 260},60%,55%)`, opacity: 0.6 } },
+                /*#__PURE__*/React.createElement(I, { n: "users", s: 12 })
+              )
+            )
+          )
+    )
+  ),
+  /* ── Recent Messages ── */
+  /*#__PURE__*/React.createElement("div", { className: "pd-section" },
+    /*#__PURE__*/React.createElement("div", { className: "pd-section-hdr" },
+      /*#__PURE__*/React.createElement("h3", null, /*#__PURE__*/React.createElement(I, { n: "msg", s: 16, c: "var(--blue)" }), " Recent Messages"),
+      /*#__PURE__*/React.createElement("button", { onClick: () => onNavigate('inbox'), className: "b-gho b-xs" }, "Open Messages")
+    ),
+    recentMessages.length === 0
+      ? /*#__PURE__*/React.createElement("div", { className: "pd-empty" },
+          /*#__PURE__*/React.createElement(I, { n: "msg", s: 28, c: "var(--tx-3)" }),
+          /*#__PURE__*/React.createElement("p", { style: { marginTop: 8, fontSize: 12 } }, "No messages yet."),
+          /*#__PURE__*/React.createElement("p", { style: { fontSize: 11, marginTop: 4 } }, "Messages from your providers will appear here.")
+        )
+      : /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+          recentMessages.map(evt =>
+            /*#__PURE__*/React.createElement("div", {
+              key: evt.id,
+              className: "pd-msg-row",
+              onClick: () => onNavigate('inbox')
+            },
+              /*#__PURE__*/React.createElement("div", { className: "pd-event-icon", style: { background: evt.iconBg, color: evt.iconColor } },
+                /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 })
+              ),
+              /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                /*#__PURE__*/React.createElement("div", { className: "pd-msg-sender" }, evt.provName || 'Provider'),
+                /*#__PURE__*/React.createElement("div", { className: "pd-msg-preview" }, evt.desc),
+                /*#__PURE__*/React.createElement("div", { className: "pd-msg-time" }, pdTimeAgo(evt.ts))
+              ),
+              evt.tags && evt.tags.map((t, ti) =>
+                /*#__PURE__*/React.createElement("span", { key: ti, className: `tag ${t.cls}`, style: { fontSize: 8, alignSelf: 'center' } }, t.label)
+              )
+            )
+          )
+        )
+  ),
+  /*#__PURE__*/React.createElement("div", {
     className: "pd-section"
   }, /*#__PURE__*/React.createElement("div", {
     className: "pd-section-hdr"
@@ -22054,6 +22190,7 @@ const ClientApp = ({
     vaultData: vaultData,
     allFields: allFields,
     vaultRoom: vaultRoom,
+    myTeams: myTeams,
     onNavigate: v => {
       setView(v);
       setActiveBridge(null);
