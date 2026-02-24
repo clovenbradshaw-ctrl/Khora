@@ -659,6 +659,40 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
   background:var(--bg-2);color:var(--tx-1);font-size:12px;font-family:var(--sans);outline:none;margin-bottom:16px;resize:none}
 .sw-forms-editor-desc:focus{border-color:var(--teal)}
 
+/* ── Form stats summary bar ── */
+.sw-f-stats{display:flex;gap:16px;padding:10px 16px;margin-bottom:16px;border:1px solid var(--border-0);
+  border-radius:var(--r-lg);background:var(--bg-2);flex-wrap:wrap;align-items:center}
+.sw-f-stat{font-size:11px;color:var(--tx-2);display:flex;align-items:center;gap:5px}
+.sw-f-stat strong{font-family:var(--mono);color:var(--tx-0);font-size:13px}
+.sw-f-stat-icon{opacity:.6}
+.sw-f-stats-divider{width:1px;height:18px;background:var(--border-0)}
+
+/* ── Expand/collapse all toggle ── */
+.sw-f-expand-all{font-size:10px;font-family:var(--mono);color:var(--tx-3);cursor:pointer;padding:3px 10px;
+  border-radius:4px;border:1px solid var(--border-0);background:var(--bg-2);transition:all .15s;
+  display:flex;align-items:center;gap:4px;white-space:nowrap}
+.sw-f-expand-all:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-dim)}
+
+/* ── Required toggle ── */
+.sw-f-q-required{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:600;
+  letter-spacing:.03em;text-transform:uppercase;padding:2px 7px;border-radius:3px;cursor:pointer;transition:all .15s;
+  border:1px solid transparent;user-select:none}
+.sw-f-q-required.on{color:var(--red);background:var(--red-dim);border-color:rgba(232,93,93,.15)}
+.sw-f-q-required.off{color:var(--tx-3);background:var(--bg-3);border-color:var(--border-0)}
+.sw-f-q-required:hover{opacity:.85}
+
+/* ── Reorder buttons ── */
+.sw-f-reorder{display:flex;flex-direction:column;gap:1px;margin-right:4px;flex-shrink:0}
+.sw-f-reorder-btn{background:none;border:1px solid var(--border-0);color:var(--tx-3);cursor:pointer;
+  padding:1px 4px;border-radius:3px;font-size:9px;line-height:1;transition:all .12s;display:flex;align-items:center;justify-content:center}
+.sw-f-reorder-btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-dim)}
+.sw-f-reorder-btn:disabled{opacity:.2;cursor:default;border-color:var(--border-0);color:var(--tx-3);background:none}
+.sw-f-sec-reorder{display:flex;gap:2px;align-items:center}
+.sw-f-sec-reorder-btn{background:none;border:1px solid var(--border-0);color:var(--tx-3);cursor:pointer;
+  padding:2px 5px;border-radius:3px;font-size:10px;line-height:1;transition:all .12s}
+.sw-f-sec-reorder-btn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-dim)}
+.sw-f-sec-reorder-btn:disabled{opacity:.2;cursor:default;border-color:var(--border-0);color:var(--tx-3);background:none}
+
 /* ── Form section & question (reuses some .fb-* patterns) ── */
 .sw-f-section{border:1px solid var(--border-0);border-radius:var(--r-lg);margin-bottom:14px;overflow:hidden;background:var(--bg-2)}
 .sw-f-section-header{padding:10px 18px;border-bottom:1px solid var(--border-0);display:flex;align-items:center;
@@ -15293,6 +15327,85 @@ const FormsTab = ({
     }));
   };
 
+  // Duplicate a question within a section
+  const duplicateQuestion = (secId, qId) => {
+    if (!setForm) return;
+    setForm(prev => ({
+      ...prev,
+      sections: (prev.sections || []).map(s => {
+        if (s.id !== secId) return s;
+        const srcIdx = s.questions.findIndex(q => q.id === qId);
+        if (srcIdx < 0) return s;
+        const src = s.questions[srcIdx];
+        const clone = {
+          ...src,
+          id: `q_${Date.now()}`,
+          key: `${src.key || 'field'}_copy_${Date.now()}`,
+          prompt: src.prompt + ' (copy)',
+          options: (src.options || []).map((o, i) => ({ ...o, id: `opt_${Date.now()}_${i}` }))
+        };
+        const qs = [...s.questions];
+        qs.splice(srcIdx + 1, 0, clone);
+        return { ...s, questions: qs };
+      })
+    }));
+  };
+
+  // Toggle required flag on a question
+  const toggleRequired = (secId, qId) => {
+    if (!setForm) return;
+    setForm(prev => ({
+      ...prev,
+      sections: (prev.sections || []).map(s => s.id === secId ? {
+        ...s,
+        questions: s.questions.map(q => q.id === qId ? { ...q, required: !q.required } : q)
+      } : s)
+    }));
+  };
+
+  // Move section up or down
+  const moveSection = (secId, dir) => {
+    if (!setForm) return;
+    setForm(prev => {
+      const secs = [...(prev.sections || [])];
+      const idx = secs.findIndex(s => s.id === secId);
+      if (idx < 0) return prev;
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= secs.length) return prev;
+      [secs[idx], secs[newIdx]] = [secs[newIdx], secs[idx]];
+      return { ...prev, sections: secs };
+    });
+  };
+
+  // Move question up or down within a section
+  const moveQuestion = (secId, qId, dir) => {
+    if (!setForm) return;
+    setForm(prev => ({
+      ...prev,
+      sections: (prev.sections || []).map(s => {
+        if (s.id !== secId) return s;
+        const qs = [...s.questions];
+        const idx = qs.findIndex(q => q.id === qId);
+        if (idx < 0) return s;
+        const newIdx = idx + dir;
+        if (newIdx < 0 || newIdx >= qs.length) return s;
+        [qs[idx], qs[newIdx]] = [qs[newIdx], qs[idx]];
+        return { ...s, questions: qs };
+      })
+    }));
+  };
+
+  // Expand all / Collapse all sections
+  const toggleAllSections = () => {
+    const allIds = sections.map(s => s.id);
+    const allCollapsed = allIds.every(id => expandedSections.has(id));
+    if (allCollapsed) {
+      setExpandedSections(new Set());
+    } else {
+      setExpandedSections(new Set(allIds));
+    }
+  };
+
   // Insert from dictionary
   const doInsertFromDictionary = (fieldDef, secId) => {
     const typeMap = { text: 'text', text_long: 'text', number: 'number', date: 'date', boolean: 'boolean', email: 'text', phone: 'text', address: 'text', document: 'text', select: 'single_select' };
@@ -15452,6 +15565,47 @@ const FormsTab = ({
               rows: 2
             }),
 
+            // Stats summary bar
+            !showPreview && sections.length > 0 && (() => {
+              const totalQ = sections.reduce((sum, s) => sum + (s.questions || []).length, 0);
+              const linkedQ = sections.reduce((sum, s) => sum + (s.questions || []).filter(q => q.field_uri).length, 0);
+              const reqQ = sections.reduce((sum, s) => sum + (s.questions || []).filter(q => q.required).length, 0);
+              const allCollapsed = sections.every(s => expandedSections.has(s.id));
+              return React.createElement('div', { className: 'sw-f-stats' },
+                React.createElement('div', { className: 'sw-f-stat' },
+                  React.createElement(I, { n: 'layers', s: 12, c: 'var(--teal)' }),
+                  React.createElement('strong', null, sections.length),
+                  sections.length === 1 ? 'section' : 'sections'
+                ),
+                React.createElement('div', { className: 'sw-f-stats-divider' }),
+                React.createElement('div', { className: 'sw-f-stat' },
+                  React.createElement(I, { n: 'messageSquare', s: 12, c: 'var(--blue)' }),
+                  React.createElement('strong', null, totalQ),
+                  totalQ === 1 ? 'question' : 'questions'
+                ),
+                React.createElement('div', { className: 'sw-f-stats-divider' }),
+                React.createElement('div', { className: 'sw-f-stat' },
+                  React.createElement(I, { n: 'link', s: 12, c: 'var(--purple)' }),
+                  React.createElement('strong', null, linkedQ),
+                  'linked'
+                ),
+                reqQ > 0 && React.createElement('div', { className: 'sw-f-stats-divider' }),
+                reqQ > 0 && React.createElement('div', { className: 'sw-f-stat' },
+                  React.createElement(I, { n: 'shieldCheck', s: 12, c: 'var(--red)' }),
+                  React.createElement('strong', null, reqQ),
+                  'required'
+                ),
+                React.createElement('div', { style: { marginLeft: 'auto' } }),
+                React.createElement('button', {
+                  className: 'sw-f-expand-all',
+                  onClick: toggleAllSections
+                },
+                  React.createElement(I, { n: allCollapsed ? 'chevronDown' : 'chevronRight', s: 10 }),
+                  allCollapsed ? 'Expand all' : 'Collapse all'
+                )
+              );
+            })(),
+
             // Preview overlay
             showPreview && React.createElement('div', { className: 'sw-f-preview-overlay' },
               React.createElement('div', { className: 'sw-f-preview-close' },
@@ -15464,7 +15618,10 @@ const FormsTab = ({
                 sections.map(sec => React.createElement('div', { key: sec.id, style: { marginBottom: 20 } },
                   React.createElement('div', { style: { fontSize: 15, fontWeight: 600, color: 'var(--tx-0)', marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid var(--border-0)' } }, sec.title),
                   sec.questions.map(q => React.createElement('div', { key: q.id, className: 'sw-f-preview-q' },
-                    React.createElement('div', { className: 'sw-f-preview-prompt' }, q.prompt),
+                    React.createElement('div', { className: 'sw-f-preview-prompt' },
+                      q.prompt,
+                      q.required && React.createElement('span', { style: { color: 'var(--red)', marginLeft: 4, fontSize: 14 } }, '*')
+                    ),
                     (q.type === 'single_select' || q.type === 'multi_select') && (q.options || []).map(opt => React.createElement('div', {
                       key: opt.id, className: 'sw-f-preview-opt'
                     },
@@ -15486,7 +15643,7 @@ const FormsTab = ({
             ),
 
             // Sections + Questions (compose view)
-            !showPreview && sections.map(sec => {
+            !showPreview && sections.map((sec, secIdx) => {
               const isSecOpen = !expandedSections.has(sec.id); // open by default
               return React.createElement('div', { key: sec.id, className: 'sw-f-section' },
                 React.createElement('div', {
@@ -15504,6 +15661,20 @@ const FormsTab = ({
                   ),
                   React.createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center' } },
                     React.createElement('span', { className: 'sw-f-section-count' }, `${sec.questions.length}q`),
+                    React.createElement('div', { className: 'sw-f-sec-reorder' },
+                      React.createElement('button', {
+                        className: 'sw-f-sec-reorder-btn',
+                        disabled: secIdx === 0,
+                        onClick: e => { e.stopPropagation(); moveSection(sec.id, -1); },
+                        title: 'Move section up'
+                      }, '\u25B2'),
+                      React.createElement('button', {
+                        className: 'sw-f-sec-reorder-btn',
+                        disabled: secIdx === sections.length - 1,
+                        onClick: e => { e.stopPropagation(); moveSection(sec.id, 1); },
+                        title: 'Move section down'
+                      }, '\u25BC')
+                    ),
                     React.createElement('button', {
                       className: 'b-gho b-xs',
                       onClick: e => { e.stopPropagation(); removeSection(sec.id); },
@@ -15512,13 +15683,35 @@ const FormsTab = ({
                   )
                 ),
                 isSecOpen && React.createElement('div', null,
-                  sec.questions.map((q, qi) => React.createElement('div', { key: q.id, className: 'sw-f-q' },
+                  sec.questions.map((q, qi) => React.createElement('div', { key: q.id, className: 'sw-f-q', style: { display: 'flex', gap: 0 } },
+                    // Reorder buttons (left gutter)
+                    React.createElement('div', { className: 'sw-f-reorder', style: { paddingTop: 14 } },
+                      React.createElement('button', {
+                        className: 'sw-f-reorder-btn',
+                        disabled: qi === 0,
+                        onClick: () => moveQuestion(sec.id, q.id, -1),
+                        title: 'Move up'
+                      }, '\u25B2'),
+                      React.createElement('button', {
+                        className: 'sw-f-reorder-btn',
+                        disabled: qi === sec.questions.length - 1,
+                        onClick: () => moveQuestion(sec.id, q.id, 1),
+                        title: 'Move down'
+                      }, '\u25BC')
+                    ),
+                    // Question content
+                    React.createElement('div', { style: { flex: 1, minWidth: 0 } },
                     // Meta line
                     React.createElement('div', { className: 'sw-f-q-meta' },
                       React.createElement('span', null, `Q${qi + 1}`),
                       React.createElement('span', {
                         style: { padding: '1px 6px', borderRadius: 3, background: 'var(--bg-3)', fontFamily: 'var(--mono)', fontSize: 10 }
                       }, q.type),
+                      React.createElement('span', {
+                        className: `sw-f-q-required ${q.required ? 'on' : 'off'}`,
+                        onClick: () => toggleRequired(sec.id, q.id),
+                        title: q.required ? 'Click to make optional' : 'Click to make required'
+                      }, q.required ? 'Required' : 'Optional'),
                       q.field_uri && React.createElement('span', {
                         className: 'sw-f-q-field-link',
                         title: q.field_uri
@@ -15549,12 +15742,20 @@ const FormsTab = ({
                       React.createElement('button', {
                         className: 'b-gho b-xs',
                         onClick: () => setEditingQuestion(q.id),
-                        style: { fontSize: 10, padding: '2px 6px' }
+                        style: { fontSize: 10, padding: '2px 6px' },
+                        title: 'Edit question'
                       }, React.createElement(I, { n: 'edit', s: 10 })),
                       React.createElement('button', {
                         className: 'b-gho b-xs',
+                        onClick: () => duplicateQuestion(sec.id, q.id),
+                        style: { fontSize: 10, padding: '2px 6px' },
+                        title: 'Duplicate question'
+                      }, React.createElement(I, { n: 'copy', s: 10 })),
+                      React.createElement('button', {
+                        className: 'b-gho b-xs',
                         onClick: () => removeQuestion(sec.id, q.id),
-                        style: { fontSize: 10, padding: '2px 6px', color: 'var(--red)' }
+                        style: { fontSize: 10, padding: '2px 6px', color: 'var(--red)' },
+                        title: 'Delete question'
                       }, React.createElement(I, { n: 'trash', s: 10 }))
                     ),
                     // Type selector
@@ -15603,6 +15804,7 @@ const FormsTab = ({
                     q.helpText && React.createElement('div', {
                       style: { fontSize: 11, color: 'var(--tx-3)', marginTop: 4, fontStyle: 'italic' }
                     }, q.helpText)
+                  ) /* close question content wrapper div */
                   )),
                   // Add question / insert from dictionary
                   React.createElement('div', { style: { display: 'flex', gap: 4 } },
