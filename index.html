@@ -2185,6 +2185,8 @@ const EVT = {
   ORG_VERIFY_CHALLENGE: `${NS}.org.verification_challenge`,
   // Organization terminology customization
   ORG_TERMINOLOGY: `${NS}.org.terminology`,
+  // Organization custom roles
+  ORG_ROLES: `${NS}.org.roles`,
   // Teams (flexible groups of people, not tied to a single org)
   TEAM_META: `${NS}.team.metadata`,
   TEAM_MEMBERS: `${NS}.team.members`,
@@ -4512,6 +4514,15 @@ const DOMAIN_CONFIG = {
     intake_coordinator: 'Intake Coordinator',
     read_only: 'Read Only'
   },
+  /* ── Default Org Roles (editable by admin, stored in org state) ── */
+  defaultOrgRoles: [
+    { key: 'admin', label: 'Admin', description: 'Full access. Manage team, see all cases, configure schema.', protected: true },
+    { key: 'provider', label: 'Provider (Team Member)', description: 'View aggregate dashboards only. No PII access.' },
+    { key: 'case_manager', label: 'Case Manager', description: 'Assigned cases only. Full read/write on assigned bridges.' },
+    { key: 'field_worker', label: 'Field Worker', description: 'Assigned cases. Record encounters. Limited to own observations.' },
+    { key: 'intake_coordinator', label: 'Intake Coordinator', description: 'Create new bridges. Run intake assessments. Route to case managers.' },
+    { key: 'read_only', label: 'Read Only', description: 'View aggregate dashboards only. No PII access.' }
+  ],
   /* ── Relationship Types ── */
   // Accounts can be connected through multiple relationship kinds.
   // client_provider is the default service relationship in MVP bridge flows.
@@ -4576,7 +4587,9 @@ const DOMAIN_CONFIG = {
     client_term: 'Individual',
     client_term_plural: 'Individuals',
     provider_term: 'Team Member',
-    provider_term_plural: 'Team Members'
+    provider_term_plural: 'Team Members',
+    staff_term: 'Team Member',
+    staff_term_plural: 'Team Members'
   }
 };
 
@@ -22491,7 +22504,7 @@ const IndividualPanel = ({
       op: "INS"
     }), " in the ", /*#__PURE__*/React.createElement("strong", null, "bridge room"), " \u2192 encrypted via Megolm + per-field AES-256-GCM \u2192 client + provider can read. Internal notes emit ", /*#__PURE__*/React.createElement(DtEo, {
       op: "INS"
-    }), " in the ", /*#__PURE__*/React.createElement("strong", null, "roster room"), " \u2192 only org staff can read."));
+    }), " in the ", /*#__PURE__*/React.createElement("strong", null, "roster room"), " \u2192 only org team members can read."));
   })()), panelTab === 'allocations' && /*#__PURE__*/React.createElement(React.Fragment, null, indAllocs.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '40px 0',
@@ -22909,7 +22922,7 @@ const NoteCreateModal = ({
   if (!open) return null;
   const allPeople = [...(staff || []).map(s => ({
     userId: s.userId,
-    displayName: s.display_name || s.userId?.split(':')[0]?.replace('@', '') || 'Staff'
+    displayName: s.display_name || s.userId?.split(':')[0]?.replace('@', '') || T.staff_term
   })), ...(individuals || []).map(ind => ({
     userId: ind._case?.clientUserId || ind.id,
     displayName: ind.name || 'Unknown'
@@ -23623,7 +23636,7 @@ const DatabaseView = ({
     v: allIndividuals.filter(i => i.status === 'active').length,
     c: 'green'
   }, {
-    l: 'Staff',
+    l: T.staff_term_plural,
     v: (staff || []).length || '—',
     c: 'blue'
   }, {
@@ -26881,7 +26894,7 @@ const IndividualProfilePage = ({
     members: [
       ...(individual._case?.meta?.client ? [{ userId: individual._case.meta.client, role: 'client (sovereign owner)' }] : []),
       ...(individual._case?.meta?.provider ? [{ userId: individual._case.meta.provider, role: 'provider' }] : []),
-      ...((individual._case?.meta?.assigned_staff || []).filter(s => s !== individual._case?.meta?.provider).map(s => ({ userId: s, role: 'assigned staff' })))
+      ...((individual._case?.meta?.assigned_staff || []).filter(s => s !== individual._case?.meta?.provider).map(s => ({ userId: s, role: 'assigned ' + T.staff_term.toLowerCase() })))
     ],
     extra: [
       { label: 'Record type', value: 'Individual profile stored in a shared bridge room' },
@@ -27443,7 +27456,7 @@ const DashboardOverview = ({
     c: 'teal',
     i: 'shield'
   }, {
-    l: 'Staff',
+    l: T.staff_term_plural,
     v: (staff || []).length || '—',
     c: 'blue',
     i: 'briefcase'
@@ -27867,7 +27880,7 @@ const IndividualsView = ({
     v: cases.length,
     c: 'gold'
   }, {
-    l: 'Staff',
+    l: T.staff_term_plural,
     v: staff.length || '—',
     c: 'blue'
   }, {
@@ -28405,7 +28418,16 @@ const ProviderApp = ({
   });
   const [terminologyModal, setTerminologyModal] = useState(false);
   // Convenience accessors for the active terminology
-  const T = orgTerminology; // T.client_term, T.client_term_plural, T.provider_term, T.provider_term_plural
+  const T = orgTerminology; // T.client_term, T.client_term_plural, T.provider_term, T.provider_term_plural, T.staff_term, T.staff_term_plural
+  // ─── Org custom roles ───
+  const [orgRolesConfig, setOrgRolesConfig] = useState(DOMAIN_CONFIG.defaultOrgRoles);
+  const [editingRole, setEditingRole] = useState(null); // {key, label, description} being edited
+  const [addRoleModal, setAddRoleModal] = useState(false);
+  const [newRoleDraft, setNewRoleDraft] = useState({ label: '', description: '' });
+  // Derived role accessors — used in place of static ORG_ROLES / ORG_ROLE_LABELS
+  const activeOrgRoles = orgRolesConfig.map(r => r.key);
+  const activeOrgRoleLabels = Object.fromEntries(orgRolesConfig.map(r => [r.key, r.label]));
+  const activeOrgRoleDescs = Object.fromEntries(orgRolesConfig.map(r => [r.key, r.description]));
   // ─── Inbox chat state ───
   const [inboxConvo, setInboxConvo] = useState(null); // room ID of active inbox conversation
   const [inboxMessages, setInboxMessages] = useState([]);
@@ -28632,7 +28654,7 @@ const ProviderApp = ({
     setInitError(null);
     try {
       // Single-pass scan: fetch all Khora state across rooms in one request
-      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK, EVT.DM_META]);
+      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.ORG_ROLES, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK, EVT.DM_META]);
       let roster = null,
         metricsR = null,
         schema = null,
@@ -28846,6 +28868,10 @@ const ProviderApp = ({
           };
           setOrgTerminology(t);
           setTerminologyDraft(t);
+        }
+        // Load org custom roles
+        if (orgState?.[EVT.ORG_ROLES]?.roles) {
+          setOrgRolesConfig(orgState[EVT.ORG_ROLES].roles);
         }
         // Load detected org messaging channels
         if (detectedOrgChannels.length > 0) setOrgChannels(detectedOrgChannels);
@@ -29115,7 +29141,7 @@ const ProviderApp = ({
           quantity: content.quantity || 1,
           unit: content.unit || 'unit',
           status: content.status || 'active',
-          allocatedBy: (content.allocated_by || '').split(':')[0]?.replace('@', '') || 'Staff',
+          allocatedBy: (content.allocated_by || '').split(':')[0]?.replace('@', '') || T.staff_term,
           org: 'Organization',
           at: content.allocated_at || e.getTs(),
           expiresAt: content.expires_at || null,
@@ -29300,7 +29326,7 @@ const ProviderApp = ({
       showToast(`${selectedRows.length} individual(s) removed`, 'success');
     } else if (actionId === 'assign') {
       const staffList = (staff || []).map(s => s.display_name || s.userId?.split(':')[0]?.replace('@', '') || s.userId);
-      const staffName = window.prompt('Assign to staff member' + (staffList.length > 0 ? ' (' + staffList.join(', ') + ')' : '') + ':');
+      const staffName = window.prompt('Assign to ' + T.staff_term.toLowerCase() + (staffList.length > 0 ? ' (' + staffList.join(', ') + ')' : '') + ':');
       if (!staffName) return;
       for (const rowId of selectedRows) {
         try {
@@ -30579,6 +30605,12 @@ const ProviderApp = ({
           }]
         }
       }, {
+        type: EVT.ORG_ROLES,
+        state_key: '',
+        content: {
+          roles: DOMAIN_CONFIG.defaultOrgRoles
+        }
+      }, {
         type: EVT.ROSTER_ASSIGN,
         state_key: '',
         content: {}
@@ -30745,7 +30777,7 @@ const ProviderApp = ({
       setStaff(newStaff);
       setInviteModal(false);
       setInviteUserId('');
-      showToast(`Invited ${inviteUserId} as ${ORG_ROLE_LABELS[inviteRole]}`, 'success');
+      showToast(`Invited ${inviteUserId} as ${activeOrgRoleLabels[inviteRole]}`, 'success');
     } catch (e) {
       showToast('Invite failed: ' + e.message, 'error');
     }
@@ -31077,6 +31109,7 @@ const ProviderApp = ({
       await emitOp(orgRoom, 'ALT', dot('org', 'terminology', 'terms'), {
         client_term: terminologyDraft.client_term,
         provider_term: terminologyDraft.provider_term,
+        staff_term: terminologyDraft.staff_term,
         changed_by: svc.userId
       }, orgFrame());
       showToast('Terminology updated', 'success');
@@ -31090,6 +31123,53 @@ const ProviderApp = ({
     setTerminologyDraft({
       ...TERMINOLOGY_DEFAULTS
     });
+  };
+
+  // Save org custom roles (admin only)
+  const handleSaveOrgRoles = async (roles) => {
+    if (!orgRoom || orgRole !== 'admin') return;
+    try {
+      await svc.setState(orgRoom, EVT.ORG_ROLES, { roles, updated: Date.now(), updated_by: svc.userId });
+      setOrgRolesConfig(roles);
+      await emitOp(orgRoom, 'ALT', dot('org', 'roles', 'config'), { role_count: roles.length, changed_by: svc.userId }, orgFrame());
+      showToast('Roles updated', 'success');
+    } catch (e) {
+      showToast('Failed to update roles: ' + e.message, 'error');
+    }
+  };
+
+  // Delete an org role (admin only, not the protected admin role)
+  const handleDeleteRole = async (roleKey) => {
+    if (!orgRoom || orgRole !== 'admin') return;
+    const role = orgRolesConfig.find(r => r.key === roleKey);
+    if (role?.protected) { showToast('Cannot delete the Admin role', 'warn'); return; }
+    const usersWithRole = staff.filter(s => s.role === roleKey);
+    if (usersWithRole.length > 0) {
+      showToast(`Cannot delete role — ${usersWithRole.length} ${usersWithRole.length === 1 ? 'member has' : 'members have'} this role. Reassign them first.`, 'warn');
+      return;
+    }
+    const updated = orgRolesConfig.filter(r => r.key !== roleKey);
+    await handleSaveOrgRoles(updated);
+  };
+
+  // Add a new custom org role
+  const handleAddRole = async () => {
+    if (!newRoleDraft.label.trim()) return;
+    let key = newRoleDraft.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    // Ensure uniqueness
+    while (orgRolesConfig.some(r => r.key === key)) { key += '_1'; }
+    const updated = [...orgRolesConfig, { key, label: newRoleDraft.label.trim(), description: newRoleDraft.description.trim() || 'Custom role.' }];
+    await handleSaveOrgRoles(updated);
+    setNewRoleDraft({ label: '', description: '' });
+    setAddRoleModal(false);
+  };
+
+  // Save edits to an existing role (label/description)
+  const handleSaveRoleEdit = async () => {
+    if (!editingRole) return;
+    const updated = orgRolesConfig.map(r => r.key === editingRole.key ? { ...r, label: editingRole.label.trim(), description: editingRole.description.trim() } : r);
+    await handleSaveOrgRoles(updated);
+    setEditingRole(null);
   };
 
   // Create org-to-org messaging channel
@@ -31640,7 +31720,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       fontFamily: 'var(--mono)'
     }
-  }, ORG_ROLE_LABELS[orgRole] || orgRole, " \xB7 ", ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type)), myVerification?.status === 'verified' ? /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[orgRole] || orgRole, " \xB7 ", ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type)), myVerification?.status === 'verified' ? /*#__PURE__*/React.createElement("span", {
     className: "tag tag-green",
     style: {
       fontSize: 7.5,
@@ -31865,7 +31945,7 @@ const ProviderApp = ({
   }, {
     id: 'staff',
     icon: 'users',
-    label: 'Staff'
+    label: T.staff_term_plural
   }, {
     id: 'network',
     icon: 'globe',
@@ -32110,7 +32190,7 @@ const ProviderApp = ({
     style: {
       fontSize: 8
     }
-  }, ORG_ROLE_LABELS[orgRole] || orgRole), /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoleLabels[orgRole] || orgRole), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1
     }
@@ -32177,7 +32257,7 @@ const ProviderApp = ({
     openEmailVerifyModal: openEmailVerifyModal,
     orgChannels: orgChannels,
     ORG_TYPE_LABELS: ORG_TYPE_LABELS,
-    ORG_ROLE_LABELS: ORG_ROLE_LABELS,
+    ORG_ROLE_LABELS: activeOrgRoleLabels,
     notes: dbNotes,
     onNewNote: () => {
       setNewNoteAttachTo(null);
@@ -33659,7 +33739,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.6
     }
-  }, /*#__PURE__*/React.createElement("strong", null, "Teams are flexible."), " They can include anyone \u2014 staff from your org, people from other orgs, or unaffiliated individuals. Teams are now governed by their own schema \u2014 click a team to view and manage its data definitions."))), view === 'teams' && !activeCase && activeTeamDetail && /*#__PURE__*/React.createElement(TeamDetailView, {
+  }, /*#__PURE__*/React.createElement("strong", null, "Teams are flexible."), " They can include anyone \u2014 ", T.staff_term_plural.toLowerCase(), " from your org, people from other orgs, or unaffiliated individuals. Teams are now governed by their own schema \u2014 click a team to view and manage its data definitions."))), view === 'teams' && !activeCase && activeTeamDetail && /*#__PURE__*/React.createElement(TeamDetailView, {
     team: activeTeamDetail,
     teams: teams,
     svc: svc,
@@ -33777,8 +33857,8 @@ const ProviderApp = ({
     encrypted: true,
     encLabel: "Megolm E2EE + AES-256-GCM at rest",
     label: "Case / Bridge Room",
-    members: [{ userId: activeCaseData.clientUserId, role: 'client (room owner)' }, { userId: activeCaseData.meta?.provider || svc.userId, role: 'provider' }, ...(activeCaseData.meta?.assigned_staff || []).filter(s => s !== activeCaseData.meta?.provider).map(s => ({ userId: s, role: 'assigned staff' }))],
-    extra: [{ label: 'Ownership', value: 'The client owns this bridge room (power level 100). Shared data is encrypted and only visible to room members.' }, { label: 'Transfer status', value: activeCaseData.transferable ? 'Transferable \u2014 case can be reassigned to another staff member' : 'Transfer locked \u2014 only the current provider can access' }]
+    members: [{ userId: activeCaseData.clientUserId, role: 'client (room owner)' }, { userId: activeCaseData.meta?.provider || svc.userId, role: 'provider' }, ...(activeCaseData.meta?.assigned_staff || []).filter(s => s !== activeCaseData.meta?.provider).map(s => ({ userId: s, role: 'assigned ' + T.staff_term.toLowerCase() }))],
+    extra: [{ label: 'Ownership', value: 'The client owns this bridge room (power level 100). Shared data is encrypted and only visible to room members.' }, { label: 'Transfer status', value: activeCaseData.transferable ? 'Transferable \u2014 case can be reassigned to another ' + T.staff_term.toLowerCase() : 'Transfer locked \u2014 only the current provider can access' }]
   })), orgRoom && (orgRole === 'admin' || orgRole === 'case_manager') && staff.length > 1 && /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setTransferModal(activeCaseData);
@@ -33826,7 +33906,7 @@ const ProviderApp = ({
         fontSize: 10,
         color: 'var(--tx-2)'
       }
-    }, "+", assignment.staff.length - 1, " additional staff with access"), assignment?.transferred_from && /*#__PURE__*/React.createElement("span", {
+    }, "+", assignment.staff.length - 1, " additional ", T.staff_term_plural.toLowerCase(), " with access"), assignment?.transferred_from && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 9.5,
         color: 'var(--tx-2)',
@@ -34884,7 +34964,7 @@ const ProviderApp = ({
     encLabel: "Megolm E2EE",
     label: "Org Settings",
     members: staff.map(s => ({ userId: s.userId, role: s.role })),
-    extra: [{ label: 'Org room', value: 'Organization metadata, roster, opacity settings, terminology, and email verification config are stored as state events in this shared org room.' }, { label: 'Access', value: 'All org staff members can read. Only admins can modify settings.' }]
+    extra: [{ label: 'Org room', value: 'Organization metadata, roster, opacity settings, terminology, and email verification config are stored as state events in this shared org room.' }, { label: 'Access', value: 'All org ' + T.staff_term_plural.toLowerCase() + ' can read. Only admins can modify settings.' }]
   }), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
@@ -34912,7 +34992,7 @@ const ProviderApp = ({
     l: 'Languages',
     v: (orgMeta.languages || []).join(', ') || '—'
   }, {
-    l: 'Staff',
+    l: T.staff_term_plural,
     v: `${staff.length} members`
   }, {
     l: 'Room',
@@ -34954,7 +35034,7 @@ const ProviderApp = ({
     style: {
       marginBottom: 0
     }
-  }, "TERMINOLOGY"), (T.client_term !== 'Client' || T.provider_term !== 'Provider') && /*#__PURE__*/React.createElement("span", {
+  }, "TERMINOLOGY"), (T.client_term !== 'Client' || T.provider_term !== 'Provider' || T.staff_term !== 'Team Member') && /*#__PURE__*/React.createElement("span", {
     className: "tag tag-gold",
     style: {
       fontSize: 8
@@ -34982,7 +35062,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Customize what your organization calls its service recipients and service providers. These terms appear throughout the interface for all staff in your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Customize what your organization calls its service recipients and service providers. These terms appear throughout the interface for all ", T.staff_term_plural.toLowerCase(), " in your organization."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -35038,7 +35118,7 @@ const ProviderApp = ({
       fontSize: 11,
       color: 'var(--tx-2)'
     }
-  }, "Plural: ", T.provider_term_plural))), (T.client_term !== 'Client' || T.provider_term !== 'Provider') && /*#__PURE__*/React.createElement("div", {
+  }, "Plural: ", T.provider_term_plural))), (T.client_term !== 'Client' || T.provider_term !== 'Provider' || T.staff_term !== 'Team Member') && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10,
       padding: '8px 12px',
@@ -35054,7 +35134,7 @@ const ProviderApp = ({
     n: "alert",
     s: 12,
     c: "var(--gold)"
-  }), "Custom terminology active \u2014 staff will see \"", T.client_term, "\" and \"", T.provider_term, "\" instead of the defaults.")), /*#__PURE__*/React.createElement("div", {
+  }), "Custom terminology active \u2014 ", T.staff_term_plural.toLowerCase(), " will see \"", T.client_term, "\" and \"", T.provider_term, "\" instead of the defaults.")), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
@@ -35154,7 +35234,7 @@ const ProviderApp = ({
       lineHeight: 1.5,
       marginLeft: 18
     }
-  }, OPACITY_DESCRIPTIONS[level]), /*#__PURE__*/React.createElement("div", {
+  }, (OPACITY_DESCRIPTIONS[level] || '').replace(/staff member/gi, T.staff_term.toLowerCase())), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8,
       marginLeft: 18,
@@ -35226,7 +35306,7 @@ const ProviderApp = ({
       marginBottom: 12,
       lineHeight: 1.6
     }
-  }, "Control which staff roles can read and respond to messages sent to your organization from other organizations."), /*#__PURE__*/React.createElement("div", {
+  }, "Control which ", T.staff_term_plural.toLowerCase(), " roles can read and respond to messages sent to your organization from other organizations."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -35258,7 +35338,7 @@ const ProviderApp = ({
     style: {
       fontSize: 9
     }
-  }, ORG_ROLE_LABELS[r] || r)), (!orgMsgAccess.read || orgMsgAccess.read.length === 0) && /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[r] || r)), (!orgMsgAccess.read || orgMsgAccess.read.length === 0) && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: 'var(--tx-3)',
@@ -35290,7 +35370,7 @@ const ProviderApp = ({
     style: {
       fontSize: 9
     }
-  }, ORG_ROLE_LABELS[r] || r)), (!orgMsgAccess.respond || orgMsgAccess.respond.length === 0) && /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[r] || r)), (!orgMsgAccess.respond || orgMsgAccess.respond.length === 0) && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: 'var(--tx-3)',
@@ -35499,7 +35579,7 @@ const ProviderApp = ({
       lineHeight: 1.6,
       marginBottom: 8
     }
-  }, "Staff members must verify their identity via email before accessing cases. Verification confirms they control an email address at an approved domain."), emailVerifyConfig.required_domains?.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, T.staff_term_plural, " must verify their identity via email before accessing cases. Verification confirms they control an email address at an approved domain."), emailVerifyConfig.required_domains?.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 8
     }
@@ -35545,7 +35625,7 @@ const ProviderApp = ({
     style: {
       fontSize: 9
     }
-  }, ORG_ROLE_LABELS[r] || r)))), /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoleLabels[r] || r)))), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       color: 'var(--tx-3)'
@@ -35556,7 +35636,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       lineHeight: 1.6
     }
-  }, "Email verification is disabled. Enable it to require staff members to confirm their identity with an organization email address before accessing cases."))), view === 'staff' && orgRoom && /*#__PURE__*/React.createElement("div", {
+  }, "Email verification is disabled. Enable it to require ", T.staff_term_plural.toLowerCase(), " to confirm their identity with an organization email address before accessing cases."))), view === 'staff' && orgRoom && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
     style: {
       maxWidth: 820,
@@ -35575,20 +35655,20 @@ const ProviderApp = ({
       fontSize: 22,
       fontWeight: 700
     }
-  }, "Staff Roster"), /*#__PURE__*/React.createElement("p", {
+  }, T.staff_term_plural, " Roster"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Manage staff membership and roles. Each role determines case access level."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, "Manage ", T.staff_term_plural.toLowerCase(), " membership and roles. Each role determines case access level."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     roomId: orgRoom,
     encrypted: true,
     encLabel: "Megolm E2EE",
-    label: "Staff Roster",
+    label: T.staff_term_plural + ' Roster',
     members: staff.map(s => ({ userId: s.userId, role: s.role })),
-    extra: [{ label: 'Storage', value: 'Staff roster is stored as a state event in the shared organization room. All org members can read the roster; only admins can modify it.' }]
+    extra: [{ label: 'Storage', value: T.staff_term_plural + ' roster is stored as a state event in the shared organization room. All org members can read the roster; only admins can modify it.' }]
   })), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setInviteModal(true),
     className: "b-pri b-sm",
@@ -35600,40 +35680,107 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "plus",
     s: 14
-  }), "Invite Staff")), /*#__PURE__*/React.createElement("div", {
+  }), "Invite ", T.staff_term)), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
     }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "ROLE DEFINITIONS"), /*#__PURE__*/React.createElement("div", {
+  }, "ROLE DEFINITIONS"), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAddRoleModal(true),
+    className: "b-gho b-xs",
+    style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 10 }), "Add Role")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
       gap: 8,
       marginTop: 6
     }
-  }, ORG_ROLES.map(r => /*#__PURE__*/React.createElement("div", {
-    key: r,
+  }, orgRolesConfig.map(rc => /*#__PURE__*/React.createElement("div", {
+    key: rc.key,
     style: {
       padding: '8px 12px',
       background: 'var(--bg-3)',
-      borderRadius: 'var(--r)'
+      borderRadius: 'var(--r)',
+      position: 'relative'
     }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "tag tag-blue",
-    style: {
-      fontSize: 9,
-      marginBottom: 4
-    }
-  }, ORG_ROLE_LABELS[r]), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 10.5,
-      color: 'var(--tx-2)',
-      marginTop: 2
-    }
-  }, r === 'admin' ? 'Full access. Manage staff, see all cases, configure schema.' : r === 'case_manager' ? 'Assigned cases only. Full read/write on assigned bridges.' : r === 'field_worker' ? 'Assigned cases. Record encounters. Limited to own observations.' : r === 'intake_coordinator' ? 'Create new bridges. Run intake assessments. Route to case managers.' : 'View aggregate dashboards only. No PII access.'))))), /*#__PURE__*/React.createElement("div", {
+  }, editingRole?.key === rc.key ? /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+    /*#__PURE__*/React.createElement("input", {
+      value: editingRole.label,
+      onChange: e => setEditingRole({ ...editingRole, label: e.target.value }),
+      style: { fontSize: 11, padding: '4px 6px' },
+      placeholder: "Role name"
+    }),
+    /*#__PURE__*/React.createElement("input", {
+      value: editingRole.description,
+      onChange: e => setEditingRole({ ...editingRole, description: e.target.value }),
+      style: { fontSize: 10, padding: '4px 6px' },
+      placeholder: "Description"
+    }),
+    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4 } },
+      /*#__PURE__*/React.createElement("button", {
+        onClick: handleSaveRoleEdit,
+        className: "b-pri b-xs",
+        style: { fontSize: 9 }
+      }, "Save"),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setEditingRole(null),
+        className: "b-gho b-xs",
+        style: { fontSize: 9 }
+      }, "Cancel"))
+  ) : /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+      /*#__PURE__*/React.createElement("span", {
+        className: `tag ${rc.protected ? 'tag-gold' : 'tag-blue'}`,
+        style: { fontSize: 9, marginBottom: 4 }
+      }, rc.label),
+      orgRole === 'admin' && /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 2 } },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => setEditingRole({ key: rc.key, label: rc.label, description: rc.description }),
+          className: "b-gho b-xs",
+          title: "Edit role",
+          style: { padding: 2, lineHeight: 1 }
+        }, /*#__PURE__*/React.createElement(I, { n: "edit", s: 10 })),
+        !rc.protected && /*#__PURE__*/React.createElement("button", {
+          onClick: () => handleDeleteRole(rc.key),
+          className: "b-gho b-xs",
+          title: "Delete role",
+          style: { padding: 2, lineHeight: 1, color: 'var(--red)' }
+        }, /*#__PURE__*/React.createElement(I, { n: "trash", s: 10 })))),
+    /*#__PURE__*/React.createElement("p", {
+      style: { fontSize: 10.5, color: 'var(--tx-2)', marginTop: 2 }
+    }, rc.description || 'Custom role.')))))), addRoleModal && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: { marginBottom: 16 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "ADD NEW ROLE"), /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 } },
+    /*#__PURE__*/React.createElement("input", {
+      value: newRoleDraft.label,
+      onChange: e => setNewRoleDraft({ ...newRoleDraft, label: e.target.value }),
+      placeholder: "Role name (e.g. Volunteer, Intern)",
+      style: { fontSize: 12 }
+    }),
+    /*#__PURE__*/React.createElement("input", {
+      value: newRoleDraft.description,
+      onChange: e => setNewRoleDraft({ ...newRoleDraft, description: e.target.value }),
+      placeholder: "Description (e.g. Limited access for volunteers)",
+      style: { fontSize: 12 }
+    }),
+    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
+      /*#__PURE__*/React.createElement("button", {
+        onClick: handleAddRole,
+        disabled: !newRoleDraft.label.trim(),
+        className: "b-pri b-xs",
+        style: { fontSize: 11 }
+      }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), " Create Role"),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => { setAddRoleModal(false); setNewRoleDraft({ label: '', description: '' }); },
+        className: "b-gho b-xs",
+        style: { fontSize: 11 }
+      }, "Cancel")))), /*#__PURE__*/React.createElement("div", {
     className: "card"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -35644,7 +35791,7 @@ const ProviderApp = ({
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "CURRENT STAFF (", staff.length, ")"), emailVerifyConfig.enabled && /*#__PURE__*/React.createElement("span", {
+  }, "CURRENT ", T.staff_term_plural.toUpperCase(), " (", staff.length, ")"), emailVerifyConfig.enabled && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: 'var(--tx-3)'
@@ -35717,7 +35864,7 @@ const ProviderApp = ({
       style: {
         fontSize: 9
       }
-    }, ORG_ROLE_LABELS[s.role]), isMe && needsVerify && ev?.status !== 'verified' && /*#__PURE__*/React.createElement("button", {
+    }, activeOrgRoleLabels[s.role]), isMe && needsVerify && ev?.status !== 'verified' && /*#__PURE__*/React.createElement("button", {
       onClick: openEmailVerifyModal,
       className: "b-pri b-xs",
       style: {
@@ -35775,7 +35922,7 @@ const ProviderApp = ({
       lineHeight: 1.6,
       marginBottom: 10
     }
-  }, "Your organization requires email verification for your role (", ORG_ROLE_LABELS[orgRole], "). Verify your identity with an approved email address", emailVerifyConfig.required_domains?.length > 0 ? ` (${emailVerifyConfig.required_domains.map(d => '@' + d).join(', ')})` : '', "."), /*#__PURE__*/React.createElement("button", {
+  }, "Your organization requires email verification for your role (", activeOrgRoleLabels[orgRole], "). Verify your identity with an approved email address", emailVerifyConfig.required_domains?.length > 0 ? ` (${emailVerifyConfig.required_domains.map(d => '@' + d).join(', ')})` : '', "."), /*#__PURE__*/React.createElement("button", {
     onClick: openEmailVerifyModal,
     className: "b-pri",
     style: {
@@ -36498,7 +36645,7 @@ const ProviderApp = ({
     i: 'eyeOff'
   }, {
     l: 'Your Role',
-    v: ORG_ROLE_LABELS[orgRole] || orgRole,
+    v: activeOrgRoleLabels[orgRole] || orgRole,
     c: 'blue',
     i: 'user'
   }].map((s, i) => /*#__PURE__*/React.createElement("div", {
@@ -36852,7 +36999,7 @@ const ProviderApp = ({
         fontSize: 11.5,
         color: 'var(--gold)'
       }
-    }, "Your role (", ORG_ROLE_LABELS[orgRole] || orgRole, ") does not have permission to respond to org messages. Contact your admin."))));
+    }, "Your role (", activeOrgRoleLabels[orgRole] || orgRole, ") does not have permission to respond to org messages. Contact your admin."))));
   })())), view === 'resources' && !activeCase && /*#__PURE__*/React.createElement(ResourcesTableView, {
     resourceTypes: resourceTypes,
     resourceRelations: resourceRelations,
@@ -37128,7 +37275,7 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement(I, {
       n: g.type === 'role' ? 'users' : 'user',
       s: 9
-    }), g.type === 'role' ? ORG_ROLE_LABELS[g.id] || g.id : g.id, /*#__PURE__*/React.createElement("span", {
+    }), g.type === 'role' ? activeOrgRoleLabels[g.id] || g.id : g.id, /*#__PURE__*/React.createElement("span", {
       onClick: () => {
         const updated = [...grants];
         updated.splice(gi, 1);
@@ -37193,10 +37340,10 @@ const ProviderApp = ({
       }
     }, /*#__PURE__*/React.createElement("option", {
       value: ""
-    }, "Add..."), ORG_ROLES.map(r => /*#__PURE__*/React.createElement("option", {
+    }, "Add..."), activeOrgRoles.map(r => /*#__PURE__*/React.createElement("option", {
       key: r,
       value: `role:${r}`
-    }, ORG_ROLE_LABELS[r])), staff.filter(s => !grants.some(g => g.type === 'user' && g.id === s.userId)).map(s => /*#__PURE__*/React.createElement("option", {
+    }, activeOrgRoleLabels[r])), staff.filter(s => !grants.some(g => g.type === 'user' && g.id === s.userId)).map(s => /*#__PURE__*/React.createElement("option", {
       key: s.userId,
       value: `user:${s.userId}`
     }, s.userId)))));
@@ -37490,7 +37637,7 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement(I, {
       n: g.type === 'role' ? 'users' : 'user',
       s: 10
-    }), g.type === 'role' ? ORG_ROLE_LABELS[g.id] || g.id : g.id, /*#__PURE__*/React.createElement("span", {
+    }), g.type === 'role' ? activeOrgRoleLabels[g.id] || g.id : g.id, /*#__PURE__*/React.createElement("span", {
       onClick: () => handleRemovePermGrant(ability, gi),
       style: {
         cursor: 'pointer',
@@ -37530,12 +37677,12 @@ const ProviderApp = ({
       value: ""
     }, "Add role or user..."), /*#__PURE__*/React.createElement("optgroup", {
       label: "Roles"
-    }, ORG_ROLES.map(r => /*#__PURE__*/React.createElement("option", {
+    }, activeOrgRoles.map(r => /*#__PURE__*/React.createElement("option", {
       key: r,
       value: `role:${r}`,
       disabled: grants.some(g => g.type === 'role' && g.id === r)
-    }, ORG_ROLE_LABELS[r]))), /*#__PURE__*/React.createElement("optgroup", {
-      label: "Staff Members"
+    }, activeOrgRoleLabels[r]))), /*#__PURE__*/React.createElement("optgroup", {
+      label: T.staff_term_plural
     }, staff.map(s => /*#__PURE__*/React.createElement("option", {
       key: s.userId,
       value: `user:${s.userId}`,
@@ -37567,7 +37714,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Create an organization to manage staff, cases across your team, and participate in networks. You'll be the admin."), /*#__PURE__*/React.createElement("div", {
+  }, "Create an organization to manage ", T.staff_term_plural.toLowerCase(), ", cases across your team, and participate in networks. You'll be the admin."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -37632,7 +37779,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.6
     }
-  }, "This creates an encrypted Matrix room for your organization. You'll be the admin. Staff can be invited with specific roles. Your provider account gains org context \u2014 you can manage staff, cases, and networks from your dashboard."), /*#__PURE__*/React.createElement("button", {
+  }, "This creates an encrypted Matrix room for your organization. You'll be the admin. ", T.staff_term_plural, " can be invited with specific roles. Your provider account gains org context \u2014 you can manage ", T.staff_term_plural.toLowerCase(), ", cases, and networks from your dashboard."), /*#__PURE__*/React.createElement("button", {
     onClick: handleCreateOrg,
     className: "b-pri",
     disabled: !setupData.name.trim(),
@@ -37674,7 +37821,7 @@ const ProviderApp = ({
   }, "Join Organization")), /*#__PURE__*/React.createElement(Modal, {
     open: inviteModal,
     onClose: () => setInviteModal(false),
-    title: "Invite Staff Member"
+    title: 'Invite ' + T.staff_term
   }, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 12,
@@ -37682,7 +37829,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Invite a provider to your organization. They'll receive access to cases based on their assigned role."), /*#__PURE__*/React.createElement("div", {
+  }, "Invite a ", T.staff_term.toLowerCase(), " to your organization. They'll receive access to cases based on their assigned role."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -37701,10 +37848,10 @@ const ProviderApp = ({
   }, "ROLE"), /*#__PURE__*/React.createElement("select", {
     value: inviteRole,
     onChange: e => setInviteRole(e.target.value)
-  }, ORG_ROLES.map(r => /*#__PURE__*/React.createElement("option", {
+  }, activeOrgRoles.map(r => /*#__PURE__*/React.createElement("option", {
     key: r,
     value: r
-  }, ORG_ROLE_LABELS[r])))), /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoleLabels[r])))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--blue-dim)',
       border: '1px solid rgba(91,156,245,.15)',
@@ -37714,7 +37861,7 @@ const ProviderApp = ({
       fontSize: 11.5,
       color: 'var(--tx-1)'
     }
-  }, "Role determines which cases and data the staff member can access. Admins see everything; read-only users see only aggregate dashboards."), /*#__PURE__*/React.createElement("button", {
+  }, "Role determines which cases and data the ", T.staff_term.toLowerCase(), " can access. Admins see everything; read-only users see only aggregate dashboards."), /*#__PURE__*/React.createElement("button", {
     onClick: handleInviteStaff,
     className: "b-pri",
     style: {
@@ -38069,7 +38216,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.6
     }
-  }, /*#__PURE__*/React.createElement("strong", null, orgMeta.name), " \xB7 ", ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type, /*#__PURE__*/React.createElement("br", null), "Role: ", /*#__PURE__*/React.createElement("strong", null, ORG_ROLE_LABELS[orgRole] || orgRole), orgMeta.service_area && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "Service Area: ", orgMeta.service_area), myVerification?.status === 'verified' && myVerification.email && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "Verified email: ", /*#__PURE__*/React.createElement("strong", null, myVerification.email))), emailVerifyConfig.enabled && myVerification?.status !== 'verified' ? /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("strong", null, orgMeta.name), " \xB7 ", ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type, /*#__PURE__*/React.createElement("br", null), "Role: ", /*#__PURE__*/React.createElement("strong", null, activeOrgRoleLabels[orgRole] || orgRole), orgMeta.service_area && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "Service Area: ", orgMeta.service_area), myVerification?.status === 'verified' && myVerification.email && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "Verified email: ", /*#__PURE__*/React.createElement("strong", null, myVerification.email))), emailVerifyConfig.enabled && myVerification?.status !== 'verified' ? /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8
     }
@@ -38323,7 +38470,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Configure email verification requirements for your organization. When enabled, staff members must verify they control an email at an approved domain before accessing cases."), /*#__PURE__*/React.createElement("div", {
+  }, "Configure email verification requirements for your organization. When enabled, ", T.staff_term_plural.toLowerCase(), " must verify they control an email at an approved domain before accessing cases."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -38360,7 +38507,7 @@ const ProviderApp = ({
       fontSize: 11,
       color: 'var(--tx-2)'
     }
-  }, "Staff must verify their email before full access")))), emailConfigDraft.enabled && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, T.staff_term_plural, " must verify their email before full access")))), emailConfigDraft.enabled && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -38393,7 +38540,7 @@ const ProviderApp = ({
       gap: 6,
       marginTop: 4
     }
-  }, ORG_ROLES.map(r => {
+  }, activeOrgRoles.map(r => {
     const active = (emailConfigDraft.require_for_roles || []).includes(r);
     return /*#__PURE__*/React.createElement("label", {
       key: r,
@@ -38422,7 +38569,7 @@ const ProviderApp = ({
         width: 12,
         height: 12
       }
-    }), ORG_ROLE_LABELS[r]);
+    }), activeOrgRoleLabels[r]);
   }))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
@@ -38445,7 +38592,7 @@ const ProviderApp = ({
       display: 'block',
       marginTop: 4
     }
-  }, "Time before unverified staff lose access. 0 = immediate.")), /*#__PURE__*/React.createElement("div", {
+  }, "Time before unverified ", T.staff_term_plural.toLowerCase(), " lose access. 0 = immediate.")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--gold-dim)',
       border: '1px solid var(--gold-mid)',
@@ -38460,7 +38607,7 @@ const ProviderApp = ({
     style: {
       color: 'var(--gold)'
     }
-  }, "Note:"), " Enabling verification will prompt all existing staff in the selected roles to verify their email. Currently ", staff.filter(s => s.email_verification?.status === 'verified').length, " of ", staff.length, " staff are verified.")), /*#__PURE__*/React.createElement("button", {
+  }, "Note:"), " Enabling verification will prompt all existing ", T.staff_term_plural.toLowerCase(), " in the selected roles to verify their email. Currently ", staff.filter(s => s.email_verification?.status === 'verified').length, " of ", staff.length, " ", T.staff_term_plural.toLowerCase(), " are verified.")), /*#__PURE__*/React.createElement("button", {
     onClick: handleSaveEmailVerifyConfig,
     className: "b-pri",
     style: {
@@ -38762,7 +38909,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Customize the terms your organization uses for service recipients and service providers. These labels will appear throughout the interface for all staff at your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Customize the terms your organization uses for service recipients and service providers. These labels will appear throughout the interface for all ", T.staff_term_plural.toLowerCase(), " at your organization."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -38902,6 +39049,76 @@ const ProviderApp = ({
     }
   }, t)))), /*#__PURE__*/React.createElement("div", {
     style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "users",
+    s: 14,
+    c: "var(--blue)"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, "Roster / Staff Term"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: 'var(--tx-3)'
+    }
+  }, "(default: Team Member)")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "SINGULAR"), /*#__PURE__*/React.createElement("input", {
+    value: terminologyDraft.staff_term,
+    onChange: e => setTerminologyDraft({
+      ...terminologyDraft,
+      staff_term: e.target.value
+    }),
+    placeholder: "e.g. Team Member, Staff, Employee"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "PLURAL"), /*#__PURE__*/React.createElement("input", {
+    value: terminologyDraft.staff_term_plural,
+    onChange: e => setTerminologyDraft({
+      ...terminologyDraft,
+      staff_term_plural: e.target.value
+    }),
+    placeholder: "e.g. Team Members, Staff, Employees"
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 4,
+      flexWrap: 'wrap',
+      marginTop: 8
+    }
+  }, ['Team Member', 'Staff', 'Employee', 'Worker', 'Colleague', 'Personnel'].map(t => /*#__PURE__*/React.createElement("span", {
+    key: t,
+    onClick: () => setTerminologyDraft({
+      ...terminologyDraft,
+      staff_term: t,
+      staff_term_plural: t.endsWith('f') ? t.slice(0, -1) + 'ves' : t.endsWith('s') || t.endsWith('x') || t.endsWith('ch') || t.endsWith('sh') ? t + 'es' : t + 's'
+    }),
+    className: `tag ${terminologyDraft.staff_term === t ? 'tag-blue' : 'tag-blue'}`,
+    style: {
+      fontSize: 9,
+      cursor: 'pointer',
+      transition: 'all .15s',
+      opacity: terminologyDraft.staff_term === t ? 1 : 0.5
+    }
+  }, t)))), /*#__PURE__*/React.createElement("div", {
+    style: {
       background: 'var(--bg-3)',
       borderRadius: 'var(--r)',
       padding: '12px 14px',
@@ -38921,7 +39138,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.8
     }
-  }, /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.provider_term || 'Provider', " Dashboard\" \xB7 \"My ", terminologyDraft.client_term_plural || 'Clients', "\" \xB7 \"New ", terminologyDraft.client_term || 'Client', " Record\""), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", null, "\"Anonymous ", terminologyDraft.client_term || 'Client', "\" \xB7 \"", terminologyDraft.provider_term || 'Provider', " Observation\" \xB7 \"", terminologyDraft.provider_term || 'Provider', " Profile\""))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.provider_term || 'Provider', " Dashboard\" \xB7 \"My ", terminologyDraft.client_term_plural || 'Clients', "\" \xB7 \"New ", terminologyDraft.client_term || 'Client', " Record\""), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.staff_term_plural || 'Team Members', " Roster\" \xB7 \"Invite ", terminologyDraft.staff_term || 'Team Member', "\" \xB7 \"Current ", terminologyDraft.staff_term_plural || 'Team Members', "\""))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8
@@ -38936,7 +39153,7 @@ const ProviderApp = ({
   }, "Reset to Defaults"), /*#__PURE__*/React.createElement("button", {
     onClick: handleSaveTerminology,
     className: "b-pri",
-    disabled: !terminologyDraft.client_term?.trim() || !terminologyDraft.client_term_plural?.trim() || !terminologyDraft.provider_term?.trim() || !terminologyDraft.provider_term_plural?.trim(),
+    disabled: !terminologyDraft.client_term?.trim() || !terminologyDraft.client_term_plural?.trim() || !terminologyDraft.provider_term?.trim() || !terminologyDraft.provider_term_plural?.trim() || !terminologyDraft.staff_term?.trim() || !terminologyDraft.staff_term_plural?.trim(),
     style: {
       flex: 1,
       padding: 10,
@@ -39320,7 +39537,7 @@ const ProviderApp = ({
       fontSize: 12,
       color: 'var(--tx-1)'
     }
-  }, orgOpacity === 'transparent' ? `${providerProfile.display_name || 'Staff Name'} from ${orgMeta.name || 'Your Org'}` : orgOpacity === 'translucent' ? orgMeta.name || 'Your Org' : 'An organization'))), /*#__PURE__*/React.createElement("div", {
+  }, orgOpacity === 'transparent' ? `${providerProfile.display_name || T.staff_term + ' Name'} from ${orgMeta.name || 'Your Org'}` : orgOpacity === 'translucent' ? orgMeta.name || 'Your Org' : 'An organization'))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
@@ -39384,7 +39601,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Control which staff roles in your organization can read and respond to inter-org messages. Only roles listed under \"Respond\" can send messages on behalf of your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Control which roles in your organization can read and respond to inter-org messages. Only roles listed under \"Respond\" can send messages on behalf of your organization."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -39402,7 +39619,7 @@ const ProviderApp = ({
       flexDirection: 'column',
       gap: 4
     }
-  }, ORG_ROLES.map(role => /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoles.map(role => /*#__PURE__*/React.createElement("div", {
     key: role,
     onClick: () => {
       setMsgAccessDraft(prev => ({
@@ -39446,7 +39663,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       fontWeight: msgAccessDraft.read?.includes(role) ? 600 : 400
     }
-  }, ORG_ROLE_LABELS[role])), /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[role])), /*#__PURE__*/React.createElement("span", {
     className: "tag tag-blue",
     style: {
       fontSize: 8
@@ -39469,7 +39686,7 @@ const ProviderApp = ({
       flexDirection: 'column',
       gap: 4
     }
-  }, ORG_ROLES.map(role => /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoles.map(role => /*#__PURE__*/React.createElement("div", {
     key: role,
     onClick: () => {
       setMsgAccessDraft(prev => ({
@@ -39513,7 +39730,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       fontWeight: msgAccessDraft.respond?.includes(role) ? 600 : 400
     }
-  }, ORG_ROLE_LABELS[role])), /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[role])), /*#__PURE__*/React.createElement("span", {
     className: "tag tag-gold",
     style: {
       fontSize: 8
@@ -39686,12 +39903,12 @@ const ProviderApp = ({
         color: 'var(--tx-2)',
         fontFamily: 'var(--mono)'
       }
-    }, ORG_ROLE_LABELS[s.role] || s.role)), /*#__PURE__*/React.createElement("span", {
+    }, activeOrgRoleLabels[s.role] || s.role)), /*#__PURE__*/React.createElement("span", {
       className: `tag tag-${s.role === 'admin' ? 'gold' : s.role === 'case_manager' ? 'blue' : 'teal'}`,
       style: {
         fontSize: 8
       }
-    }, (ORG_ROLE_LABELS[s.role] || s.role).toUpperCase()));
+    }, (activeOrgRoleLabels[s.role] || s.role).toUpperCase()));
   }), staff.filter(s => s.userId !== transferModal.meta?.provider).length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 16,
@@ -39699,7 +39916,7 @@ const ProviderApp = ({
       color: 'var(--tx-3)',
       fontSize: 12
     }
-  }, "No other staff available for transfer."))), /*#__PURE__*/React.createElement("div", {
+  }, "No other ", T.staff_term_plural.toLowerCase(), " available for transfer."))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
