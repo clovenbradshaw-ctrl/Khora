@@ -25191,6 +25191,8 @@ const DatabaseView = ({
   onPropose
 }) => {
   const [dbTab, setDbTab] = useState('individuals');
+  const [enabledFieldCols, setEnabledFieldCols] = useState([]);
+  const [addFieldDd, setAddFieldDd] = useState(false);
 
   // Transform cases into individual rows (same as IndividualsView)
   const individuals = cases.map(c => {
@@ -25280,6 +25282,18 @@ const DatabaseView = ({
       editable: true
     });
   });
+  // Also add provider-enabled field columns from fieldDefs
+  enabledFieldCols.forEach(key => {
+    if (!fieldKeys.has(key)) {
+      const def = Object.values(fieldDefs || {}).find(d => d.key === key);
+      IND_COLS.push({
+        key,
+        label: def?.label || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        isField: true,
+        editable: true
+      });
+    }
+  });
   const IND_GROUPS = [{
     k: 'none',
     l: 'No grouping'
@@ -25293,7 +25307,8 @@ const DatabaseView = ({
     k: 'priority',
     l: 'Priority'
   }];
-  const defaultVisCols = ['name', 'status', 'priority', 'assignedTo', 'fields_count', 'transferable', ...Array.from(fieldKeys).slice(0, 3)];
+  const enabledExtras = enabledFieldCols.filter(k => !fieldKeys.has(k));
+  const defaultVisCols = ['name', 'status', 'priority', 'assignedTo', 'fields_count', 'transferable', ...Array.from(fieldKeys).slice(0, 3), ...enabledExtras];
   const getIndVal = (row, key) => {
     if (key === 'fields_count') return Object.keys(row.fields || {}).length;
     if (key === 'transferable') return row.transferable ? 'Yes' : 'Locked';
@@ -25417,8 +25432,8 @@ const DatabaseView = ({
     v: (staff || []).length || '—',
     c: 'blue'
   }, {
-    l: 'Fields Shared',
-    v: cases.reduce((s, c) => s + Object.keys(c.sharedData || {}).length, 0),
+    l: 'Fields Active',
+    v: cases.reduce((s, c) => s + Object.keys(c.sharedData || {}).length, 0) + enabledFieldCols.length,
     c: 'teal'
   }];
   return /*#__PURE__*/React.createElement("div", {
@@ -25502,7 +25517,51 @@ const DatabaseView = ({
       display: 'block',
       marginTop: 2
     }
-  }, s.v)))), /*#__PURE__*/React.createElement(DataTable, {
+  }, s.v)))), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dt-dd-wrap",
+    style: { position: 'relative' }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "b-pri b-sm",
+    style: { display: 'flex', alignItems: 'center', gap: 4 },
+    onClick: () => setAddFieldDd(!addFieldDd)
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Add Field"), addFieldDd && /*#__PURE__*/React.createElement("div", {
+    className: "dt-dd",
+    style: { minWidth: 260, maxHeight: 320, overflow: 'auto' }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dt-dd-label"
+  }, "Select a field to add as column"), Object.values(fieldDefs || {}).length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: { padding: '12px 14px', fontSize: 11.5, color: 'var(--tx-3)' }
+  }, "No field definitions yet. Create one in the Definitions tab.") : Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !fieldKeys.has(d.key) && !enabledFieldCols.includes(d.key)).length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: { padding: '12px 14px', fontSize: 11.5, color: 'var(--tx-3)' }
+  }, "All available fields are already added.") : Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !fieldKeys.has(d.key) && !enabledFieldCols.includes(d.key)).map(d => /*#__PURE__*/React.createElement("div", {
+    key: d.uri || d.key,
+    className: "dt-dd-item",
+    onClick: () => {
+      setEnabledFieldCols(prev => [...prev, d.key]);
+      setAddFieldDd(false);
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 500, fontSize: 12.5 }
+  }, d.label || d.key), /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 10, color: 'var(--tx-3)', marginTop: 1 }
+  }, [d.category, d.data_type].filter(Boolean).join(' \u00b7 ')))), /*#__PURE__*/React.createElement("div", {
+    className: "dt-dd-item",
+    style: { borderTop: '1px solid var(--border-0)', color: 'var(--gold)', fontWeight: 600, fontSize: 11.5, marginTop: 4 },
+    onClick: () => { setAddFieldDd(false); setDbTab('definitions'); }
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 10, c: "var(--gold)" }), " New Field Definition..."))), enabledFieldCols.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }
+  }, enabledFieldCols.map(k => {
+    const def = Object.values(fieldDefs || {}).find(d => d.key === k);
+    return /*#__PURE__*/React.createElement("span", {
+      key: k,
+      className: "tag tag-teal",
+      style: { fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer' },
+      title: "Click to remove column",
+      onClick: () => setEnabledFieldCols(prev => prev.filter(x => x !== k))
+    }, def?.label || k, " \u00d7");
+  }))), /*#__PURE__*/React.createElement(DataTable, {
     data: allIndividuals,
     columns: IND_COLS,
     groupOptions: IND_GROUPS,
@@ -28396,10 +28455,15 @@ const IndividualProfilePage = ({
   orgRoom,
   orgRole,
   canAllocateResource,
-  onAllocate
+  onAllocate,
+  fieldDefs,
+  onFieldEdit
 }) => {
   const [tab, setTab] = useState('fields');
   const [profileAllocModal, setProfileAllocModal] = useState(false);
+  const [addFieldValue, setAddFieldValue] = useState(null);
+  const [addFieldInput, setAddFieldInput] = useState('');
+  const [addFieldPicker, setAddFieldPicker] = useState(false);
   const [profileAllocDraft, setProfileAllocDraft] = useState({
     resource_type_id: '',
     quantity: 1,
@@ -28526,15 +28590,64 @@ const IndividualProfilePage = ({
   }, t.label))), tab === 'fields' && /*#__PURE__*/React.createElement("div", {
     className: "profile-section"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "profile-section-title"
-  }, "Shared Fields \u2014 Client Controlled"), Object.keys(individual.fields || {}).length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "profile-section-title",
+    style: { marginBottom: 0 }
+  }, "Fields"), /*#__PURE__*/React.createElement("div", {
+    className: "dt-dd-wrap",
+    style: { position: 'relative' }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "b-pri b-sm",
+    style: { display: 'flex', alignItems: 'center', gap: 4 },
+    onClick: () => setAddFieldPicker(!addFieldPicker)
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Add Field"), addFieldPicker && /*#__PURE__*/React.createElement("div", {
+    className: "dt-dd",
+    style: { minWidth: 240, maxHeight: 280, overflow: 'auto', right: 0, left: 'auto' }
+  }, /*#__PURE__*/React.createElement("div", { className: "dt-dd-label" }, "Add a field value"), Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !(individual.fields || {})[d.key]).map(d => /*#__PURE__*/React.createElement("div", {
+    key: d.uri || d.key,
+    className: "dt-dd-item",
+    onClick: () => { setAddFieldValue(d); setAddFieldInput(''); setAddFieldPicker(false); }
+  }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 500, fontSize: 12.5 } }, d.label || d.key), /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: 'var(--tx-3)', marginTop: 1 } }, [d.category, d.data_type].filter(Boolean).join(' \u00b7 ')))), Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !(individual.fields || {})[d.key]).length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: { padding: '12px 14px', fontSize: 11.5, color: 'var(--tx-3)' }
+  }, "All fields already have values.")))), addFieldValue && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: { padding: 14, marginBottom: 12, border: '1px solid var(--gold)', background: 'var(--bg-2)' }
+  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--gold)' } }, "Set value for: ", addFieldValue.label || addFieldValue.key), /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 6 } }, /*#__PURE__*/React.createElement("input", {
+    className: "dt-search",
+    style: { flex: 1, width: 'auto' },
+    placeholder: `Enter ${addFieldValue.label || addFieldValue.key}...`,
+    value: addFieldInput,
+    onChange: e => setAddFieldInput(e.target.value),
+    onKeyDown: e => {
+      if (e.key === 'Enter' && addFieldInput.trim() && onFieldEdit) {
+        onFieldEdit(individual, addFieldValue.key, addFieldInput.trim());
+        setAddFieldValue(null);
+        setAddFieldInput('');
+      }
+    },
+    autoFocus: true
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "b-pri b-sm",
+    disabled: !addFieldInput.trim(),
+    onClick: () => {
+      if (addFieldInput.trim() && onFieldEdit) {
+        onFieldEdit(individual, addFieldValue.key, addFieldInput.trim());
+        setAddFieldValue(null);
+        setAddFieldInput('');
+      }
+    }
+  }, "Save"), /*#__PURE__*/React.createElement("button", {
+    className: "b-gho b-sm",
+    onClick: () => { setAddFieldValue(null); setAddFieldInput(''); }
+  }, "Cancel"))), Object.keys(individual.fields || {}).length === 0 && !addFieldValue ? /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       textAlign: 'center',
       padding: '30px 20px',
       color: 'var(--tx-3)'
     }
-  }, "No fields shared yet.") : /*#__PURE__*/React.createElement("div", {
+  }, "No fields yet. Click ", /*#__PURE__*/React.createElement("strong", null, "Add Field"), " above to get started.") : /*#__PURE__*/React.createElement("div", {
     className: "profile-fields-grid"
   }, Object.entries(individual.fields || {}).map(([key, f]) => {
     const _fpOpen = provenanceTarget?.entityKey === key && provenanceTarget?.roomId === individual.bridgeRoom;
@@ -28543,7 +28656,7 @@ const IndividualProfilePage = ({
     className: "profile-field-card"
   }, /*#__PURE__*/React.createElement("div", {
     className: "profile-field-label"
-  }, key.replace(/_/g, ' ')), f.disclosed === false ? /*#__PURE__*/React.createElement("div", {
+  }, (() => { const def = Object.values(fieldDefs || {}).find(d => d.key === key); return def?.label || key.replace(/_/g, ' '); })()), f.disclosed === false ? /*#__PURE__*/React.createElement("div", {
     className: "dt-locked"
   }, /*#__PURE__*/React.createElement(DtLock, null), " not disclosed") : /*#__PURE__*/React.createElement("div", {
     className: "profile-field-value"
@@ -34481,7 +34594,9 @@ const ProviderApp = ({
     orgRoom: orgRoom,
     orgRole: orgRole,
     canAllocateResource: canAllocateResource,
-    onAllocate: handleProfileAllocate
+    onAllocate: handleProfileAllocate,
+    fieldDefs: fieldDefs,
+    onFieldEdit: handleDbCellEdit
   }), /*#__PURE__*/React.createElement(NoteCreateModal, {
     open: newNoteModal,
     onClose: () => setNewNoteModal(false),
