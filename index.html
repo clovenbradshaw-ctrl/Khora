@@ -18853,27 +18853,52 @@ const LoginScreen = ({
     }
     setLoading(false);
   };
+  const infoSectionStyle = { maxWidth: 720, margin: '0 auto', padding: '0 20px' };
+  const infoCardStyle = { background: 'var(--bg-1)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '24px 24px' };
+  const sectionLabelStyle = { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--gold)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12 };
+  const sectionTitleStyle = { fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 10, letterSpacing: '-0.01em' };
+  const bodyTextStyle = { fontSize: 13.5, color: 'var(--tx-1)', lineHeight: 1.7 };
+  const featureIconBox = (bg, fg) => ({ width: 40, height: 40, borderRadius: 'var(--r-lg)', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: fg, flexShrink: 0 });
+
   return /*#__PURE__*/React.createElement("div", {
     className: "grid-bg",
     style: {
-      height: '100%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
+      minHeight: '100%',
+      overflowY: 'auto',
       position: 'relative'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      position: 'absolute',
+      position: 'fixed',
       top: 16,
-      right: 16
+      right: 16,
+      zIndex: 10
     }
-  }, /*#__PURE__*/React.createElement(ThemeToggle, null)), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(ThemeToggle, null)),
+
+  /* ── Hero section: dodecahedron + login card ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '40px 20px 20px'
+    }
+  },
+
+  /* Spinning dodecahedron hero */
+  /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 20 }
+  }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 120 })),
+
+  /* Login card */
+  /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
     style: {
       width: '100%',
-      maxWidth: 440,
-      padding: 20
+      maxWidth: 440
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -18895,28 +18920,12 @@ const LoginScreen = ({
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 14,
+      textAlign: 'center',
       marginBottom: 10
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("h1", {
     style: {
-      width: 44,
-      height: 44,
-      borderRadius: 'var(--r-lg)',
-      background: 'var(--gold-dim)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--gold)'
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "shield",
-    s: 24
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
-    style: {
-      fontSize: 24,
+      fontSize: 28,
       fontWeight: 800,
       fontFamily: 'var(--serif)',
       letterSpacing: '-0.02em'
@@ -18928,13 +18937,14 @@ const LoginScreen = ({
       color: 'var(--tx-2)',
       letterSpacing: '.08em'
     }
-  }, "SOVEREIGN CASE MANAGEMENT"))), /*#__PURE__*/React.createElement("p", {
+  }, "SOVEREIGN CASE MANAGEMENT")), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 13,
       marginTop: 18,
       marginBottom: 24,
-      lineHeight: 1.65
+      lineHeight: 1.65,
+      textAlign: 'center'
     }
   }, "Your data, your control. Every piece of information is encrypted separately \u2014 providers see only what you choose to share."), /*#__PURE__*/React.createElement("div", {
     className: "tabs",
@@ -19325,8 +19335,340 @@ const LoginScreen = ({
       fontSize: 10.5,
       color: 'var(--tx-3)'
     }
-  }, typeof matrixcs !== 'undefined' ? 'Secure connection ready' : 'Connecting\u2026')))));
+  }, typeof matrixcs !== 'undefined' ? 'Secure connection ready' : 'Connecting\u2026'))),
+
+  /* Scroll hint arrow */
+  /*#__PURE__*/React.createElement("div", {
+    style: { textAlign: 'center', marginTop: 16 }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => { const el = document.getElementById('khora-info'); if (el) el.scrollIntoView({ behavior: 'smooth' }); },
+    className: "b-gho b-xs",
+    style: { display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--tx-3)', fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.04em' }
+  }, "Learn more ", /*#__PURE__*/React.createElement(I, { n: "chevronDown", s: 14 })))
+
+  ), /* end anim-up */
+  ), /* end hero section */
+
+  /* ══════════════════════════════════════════════════════════════ */
+  /* ═══════════════════ INFO SECTIONS BELOW FOLD ═══════════════ */
+  /* ══════════════════════════════════════════════════════════════ */
+
+  /*#__PURE__*/React.createElement("div", {
+    id: "khora-info",
+    style: { paddingBottom: 80 }
+  },
+
+  /* ── Section 1: What is Khora? ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoSectionStyle, paddingTop: 64, paddingBottom: 48 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { textAlign: 'center', marginBottom: 40 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: sectionLabelStyle
+  }, "WHAT IS KHORA?"), /*#__PURE__*/React.createElement("h2", {
+    style: { ...sectionTitleStyle, fontSize: 26 }
+  }, "Your information, under your control"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
+  }, "Khora is a case management system where the person being served owns their data. You decide exactly which pieces of your information to share with each provider, and you can take it back at any time. No vendor lock-in, no corporate database you can't see inside.")),
+
+  /* Three feature cards */
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }
+  },
+
+  /* Card: You own it */
+  /*#__PURE__*/React.createElement("div", {
+    style: infoCardStyle
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--gold-dim)', 'var(--gold)')
+  }, /*#__PURE__*/React.createElement(I, { n: "shield", s: 20 })), /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)' }
+  }, "You own it")), /*#__PURE__*/React.createElement("p", {
+    style: bodyTextStyle
+  }, "Your information lives in a personal vault that belongs to you. Not to an organization, not to a database administrator \u2014 to you. You carry it between providers.")),
+
+  /* Card: Field-by-field sharing */
+  /*#__PURE__*/React.createElement("div", {
+    style: infoCardStyle
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--teal-dim)', 'var(--teal)')
+  }, /*#__PURE__*/React.createElement(I, { n: "eye", s: 20 })), /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)' }
+  }, "Field-by-field sharing")), /*#__PURE__*/React.createElement("p", {
+    style: bodyTextStyle
+  }, "Share your name with one provider, your case notes with another, your contact info with a third. Each provider sees only the specific fields you choose \u2014 nothing more.")),
+
+  /* Card: Revoke anytime */
+  /*#__PURE__*/React.createElement("div", {
+    style: infoCardStyle
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--red-dim)', 'var(--red)')
+  }, /*#__PURE__*/React.createElement(I, { n: "x", s: 20 })), /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)' }
+  }, "Revoke anytime")), /*#__PURE__*/React.createElement("p", {
+    style: bodyTextStyle
+  }, "Changed your mind? Pull back access to specific fields, or cut a provider off entirely. When you revoke, the encryption keys are destroyed \u2014 it's not a policy, it's math.")))),
+
+  /* ── Section 2: Who is Khora for? ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoSectionStyle, paddingTop: 48, paddingBottom: 48 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { textAlign: 'center', marginBottom: 40 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: sectionLabelStyle
+  }, "WHO IS IT FOR?"), /*#__PURE__*/React.createElement("h2", {
+    style: sectionTitleStyle
+  }, "Teams, organizations, and networks of any kind"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
+  }, "Khora works for anyone where a team provides something for other people. It's ideal when there are teams within teams, organizations within networks, networks within networks. Nonprofits, clinics, outreach teams, businesses \u2014 if you have staff serving clients, Khora fits.")),
+
+  /* Role cards - 2x2 grid */
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }
+  },
+
+  /* Client */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoCardStyle, display: 'flex', gap: 14, alignItems: 'flex-start' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--teal-dim)', 'var(--teal)')
+  }, /*#__PURE__*/React.createElement(I, { n: "user", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
+  }, "Client"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "The person being served. Owns a personal vault with all their data. Decides exactly who sees what, field by field."))),
+
+  /* Provider */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoCardStyle, display: 'flex', gap: 14, alignItems: 'flex-start' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--gold-dim)', 'var(--gold)')
+  }, /*#__PURE__*/React.createElement(I, { n: "briefcase", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
+  }, "Provider"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "A case worker or service professional. Connects to clients, records assessments, and manages cases \u2014 seeing only what each client has authorized."))),
+
+  /* Organization */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoCardStyle, display: 'flex', gap: 14, alignItems: 'flex-start' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--blue-dim)', 'var(--blue)')
+  }, /*#__PURE__*/React.createElement(I, { n: "users", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
+  }, "Organization"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "A team or agency. Manages staff roles, policies, and settings. Organizations can join networks to share standards with peer organizations."))),
+
+  /* Network */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoCardStyle, display: 'flex', gap: 14, alignItems: 'flex-start' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--purple-dim)', 'var(--purple)')
+  }, /*#__PURE__*/React.createElement(I, { n: "globe", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
+  }, "Network"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "The federation layer. Coordinates shared standards across member organizations \u2014 what you call things, how you measure them, and how decisions get made.")))
+
+  ), /* end role grid */
+
+  /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, textAlign: 'center', marginTop: 20, fontSize: 12.5, color: 'var(--tx-2)' }
+  }, "You don't pick a role at signup. Khora detects it automatically based on the groups you belong to. One account can hold multiple roles at once.")),
+
+  /* ── Section 3: Shared Standards & the GIVEN/MEANT divide ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoSectionStyle, paddingTop: 48, paddingBottom: 48 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { textAlign: 'center', marginBottom: 32 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: sectionLabelStyle
+  }, "SHARED STANDARDS"), /*#__PURE__*/React.createElement("h2", {
+    style: sectionTitleStyle
+  }, "Agree on what you call things"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
+  }, "When multiple organizations work together, they need a common language. Khora lets networks define shared forms, definitions, and norms \u2014 then propagate them to every member organization. Everyone collects data the same way, so it actually means the same thing.")),
+
+  /* GIVEN / MEANT explainer */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoCardStyle, marginTop: 24 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { ...sectionLabelStyle, marginBottom: 16, color: 'var(--teal)' }
+  }, "THE GIVEN / MEANT DIVIDE"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, marginBottom: 16 }
+  }, "Here's a problem most systems hide from you: the same piece of information means different things to different institutions. Khora makes this visible."), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }
+  },
+
+  /* GIVEN side */
+  /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '16px 18px', borderLeft: '3px solid var(--teal)' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 8 }
+  }, "GIVEN"), /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 6 }
+  }, "What actually happened"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "The raw information, as observed. A client says: \"I slept in my car last night.\" That's the given \u2014 uninterpreted, owned by the person who said it.")),
+
+  /* MEANT side */
+  /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '16px 18px', borderLeft: '3px solid var(--gold)' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--gold)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 8 }
+  }, "MEANT"), /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 6 }
+  }, "What an institution classifies it as"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "The institutional interpretation. One agency calls it \"Literally Homeless, Category 1.\" Another says \"Priority 1 \u2014 immediate outreach.\" A third might not count it at all. Same fact, different meanings."))
+
+  ), /* end GIVEN/MEANT grid */
+
+  /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5, color: 'var(--tx-2)' }
+  }, "Most systems collapse this distinction \u2014 they record the classification and throw away the original observation. Khora keeps both, traces which framework turned one into the other, and shows you when frameworks disagree. The raw information always belongs to the person who provided it; the interpretations are documented as exactly that \u2014 interpretations."))),
+
+  /* ── Section 4: How Security Works ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoSectionStyle, paddingTop: 48, paddingBottom: 48 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { textAlign: 'center', marginBottom: 40 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: sectionLabelStyle
+  }, "SECURITY"), /*#__PURE__*/React.createElement("h2", {
+    style: sectionTitleStyle
+  }, "Three layers of encryption, zero trust required"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
+  }, "You don't have to trust anyone \u2014 not the server operator, not the network, not us. Khora encrypts your data at every level, and the keys never leave your hands.")),
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }
+  },
+
+  /* Layer 1: In transit */
+  /*#__PURE__*/React.createElement("div", {
+    style: infoCardStyle
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--teal-dim)', 'var(--teal)')
+  }, /*#__PURE__*/React.createElement(I, { n: "lock", s: 20 })), /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)' }
+  }, "Encrypted in transit")), /*#__PURE__*/React.createElement("p", {
+    style: bodyTextStyle
+  }, "Everything you send is end-to-end encrypted before it leaves your device. The server that relays your messages cannot read them \u2014 it only knows that a message was sent, not what it says.")),
+
+  /* Layer 2: Per-field */
+  /*#__PURE__*/React.createElement("div", {
+    style: infoCardStyle
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--gold-dim)', 'var(--gold)')
+  }, /*#__PURE__*/React.createElement(I, { n: "key", s: 20 })), /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)' }
+  }, "Encrypted per field")), /*#__PURE__*/React.createElement("p", {
+    style: bodyTextStyle
+  }, "Each provider you connect with gets a unique encryption key for each piece of data you share. Two providers working on the same case literally cannot see each other's fields \u2014 it's not access control, it's separate encryption.")),
+
+  /* Layer 3: At rest */
+  /*#__PURE__*/React.createElement("div", {
+    style: infoCardStyle
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--purple-dim)', 'var(--purple)')
+  }, /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 20 })), /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)' }
+  }, "Encrypted on your device")), /*#__PURE__*/React.createElement("p", {
+    style: bodyTextStyle
+  }, "Data stored on your device is encrypted at rest with a key derived from your session. When you log out, the key is destroyed. If someone gets your device while you're logged out, they get nothing."))
+
+  )), /* end security grid + section */
+
+  /* ── Section 5: What is a Matrix account? ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoSectionStyle, paddingTop: 48, paddingBottom: 48 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { textAlign: 'center', marginBottom: 32 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: sectionLabelStyle
+  }, "YOUR ACCOUNT"), /*#__PURE__*/React.createElement("h2", {
+    style: sectionTitleStyle
+  }, "What is a Matrix account?"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
+  }, "Khora runs on Matrix \u2014 an open, federated network. Think of it like email: you pick a server to host your account, and you can connect with anyone on the network regardless of which server they chose.")),
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoCardStyle, maxWidth: 560, margin: '0 auto' }
+  },
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 14, marginBottom: 18, alignItems: 'flex-start' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--teal-dim)', 'var(--teal)')
+  }, /*#__PURE__*/React.createElement(I, { n: "globe", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
+  }, "No single company controls it"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "Matrix is an open standard, not a product. Hundreds of independent servers run it. Your account isn't trapped inside one company's platform."))),
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 14, marginBottom: 18, alignItems: 'flex-start' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--gold-dim)', 'var(--gold)')
+  }, /*#__PURE__*/React.createElement(I, { n: "share", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
+  }, "Connect across servers"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "Just like you can email someone on Gmail from Yahoo, you can connect with anyone on any Matrix server. Your choice of server doesn't limit who you work with."))),
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 14, alignItems: 'flex-start' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: featureIconBox('var(--purple-dim)', 'var(--purple)')
+  }, /*#__PURE__*/React.createElement(I, { n: "eyeOff", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
+  }, "Your server can see metadata, not content"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "The server that hosts your account can see who you connect with and when you're online, but never your actual data \u2014 it's encrypted before it leaves your device. For extra privacy, use a random username.")))
+
+  ), /* end matrix card */
+
+  /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, textAlign: 'center', marginTop: 20, fontSize: 12, color: 'var(--tx-3)' }
+  }, "Browse available servers at ", /*#__PURE__*/React.createElement("a", {
+    href: "https://servers.joinmatrix.org/",
+    target: "_blank",
+    rel: "noopener",
+    style: { color: 'var(--teal)' }
+  }, "servers.joinmatrix.org"), ".")),
+
+  /* ── Footer ── */
+  /*#__PURE__*/React.createElement("div", {
+    style: { ...infoSectionStyle, paddingTop: 40, paddingBottom: 40, textAlign: 'center', borderTop: '1px solid var(--border-0)' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 28 })), /*#__PURE__*/React.createElement("p", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--tx-3)', letterSpacing: '.06em', lineHeight: 1.8 }
+  }, "Built on the ", /*#__PURE__*/React.createElement("a", {
+    href: "https://matrix.org",
+    target: "_blank",
+    rel: "noopener",
+    style: { color: 'var(--tx-2)' }
+  }, "Matrix"), " protocol. Open standard. No vendor lock-in."))
+
+  ) /* end khora-info */
+  ); /* end outer grid-bg */
 };
+
 
 /* ═══════════════════ PERSONAL DASHBOARD ═══════════════════ */
 const PersonalDashboard = ({
