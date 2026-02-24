@@ -1228,7 +1228,7 @@ table.dt td.dt-drag-handle:active{cursor:grabbing}
 </style>
 </head>
 <body>
-<div class="beta-banner"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Beta — All data should be backed up independently. This software is under active development.</div>
+<div class="beta-banner"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Beta — All data should be backed up independently. Export your data from the Database tab. This software is under active development.</div>
 <div id="root" style="margin-top:32px">
 <!-- Canvas splash: rotating dodecahedron, replaced when React mounts -->
 <div id="splash" style="height:100%;display:flex;align-items:center;justify-content:center;background:#08090b;flex-direction:column;gap:18px">
@@ -2692,6 +2692,20 @@ const MATURITY_LEVELS = {
     icon: '🔴',
     desc: 'Being phased out'
   }
+};
+
+/* ═══════════════════ UX HELPERS ═══════════════════ */
+const aOrAn = (word) => /^[aeiou]/i.test(word) ? 'an' : 'a';
+const hueToColorName = (hue) => {
+  if (hue < 15) return 'Red';
+  if (hue < 45) return 'Orange';
+  if (hue < 70) return 'Yellow';
+  if (hue < 150) return 'Green';
+  if (hue < 190) return 'Cyan';
+  if (hue < 260) return 'Blue';
+  if (hue < 310) return 'Purple';
+  if (hue < 345) return 'Pink';
+  return 'Red';
 };
 
 /* ═══════════════════ TEAM COLOR UTILITIES ═══════════════════ */
@@ -9693,10 +9707,18 @@ const Modal = ({
     }
   }, title), /*#__PURE__*/React.createElement("button", {
     onClick: onClose,
+    "aria-label": "Close",
     style: {
       background: 'transparent',
       color: 'var(--tx-2)',
-      padding: 4
+      padding: 8,
+      minWidth: 32,
+      minHeight: 32,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 'var(--r)',
+      cursor: 'pointer'
     }
   }, /*#__PURE__*/React.createElement(I, {
     n: "x",
@@ -14645,7 +14667,8 @@ const SiFormItem = ({
   }, form.name), /*#__PURE__*/React.createElement("div", {
     className: "si-form-meta"
   }, /*#__PURE__*/React.createElement("span", {
-    className: `si-form-status ${maturity}`
+    className: `si-form-status ${maturity}`,
+    title: MATURITY_LEVELS[maturity]?.desc || ''
   }, matLabel), /*#__PURE__*/React.createElement("span", null, "v", form.version)), form._hasUpdate && /*#__PURE__*/React.createElement("div", {
     className: "si-form-update"
   }, "\u25B2 new")));
@@ -16360,7 +16383,8 @@ const FormsTab = ({
             React.createElement('span', null, `v${f.version || 1}`),
             React.createElement('span', null, '\u00B7'),
             React.createElement('span', {
-              className: `sw-forms-item-status ${f.maturity || 'draft'}`
+              className: `sw-forms-item-status ${f.maturity || 'draft'}`,
+              title: (MATURITY_LEVELS[f.maturity] || MATURITY_LEVELS.draft).desc
             }, (MATURITY_LEVELS[f.maturity] || MATURITY_LEVELS.draft).label)
           )
         )
@@ -17695,7 +17719,7 @@ const OP_DESCRIPTIONS = {
     desc: 'Designation / Naming'
   },
   INS: {
-    verb: 'INS',
+    verb: 'Instantiate',
     desc: 'Instantiation / First observation'
   },
   SEG: {
@@ -17719,7 +17743,7 @@ const OP_DESCRIPTIONS = {
     desc: 'Superposition / Layering'
   },
   REC: {
-    verb: 'REC',
+    verb: 'Reconfigure',
     desc: 'Reconfiguration / Recursion'
   }
 };
@@ -18463,7 +18487,7 @@ const ActionLog = ({
       className: `tag tag-${rmC}`, style: { fontSize: 8.5, flexShrink: 0 }
     }, ev.roomInfo.type),
     /*#__PURE__*/React.createElement("span", {
-      className: `tag tag-${opC}`, style: { fontSize: 9, fontFamily: 'var(--mono)', minWidth: 28, textAlign: 'center', flexShrink: 0 }
+      className: `tag tag-${opC}`, title: OP_DESCRIPTIONS[ev.op] ? `${OP_DESCRIPTIONS[ev.op].verb}: ${OP_DESCRIPTIONS[ev.op].desc}` : ev.op, style: { fontSize: 9, fontFamily: 'var(--mono)', minWidth: 28, textAlign: 'center', flexShrink: 0, cursor: 'help' }
     }, ev.op),
     ev.label && /*#__PURE__*/React.createElement("span", {
       style: { color: 'var(--tx-1)' }
@@ -25265,7 +25289,8 @@ const EditableCell = ({
   });
   return /*#__PURE__*/React.createElement("div", {
     className: "dt-ecell",
-    onClick: e => {
+    title: "Double-click to edit",
+    onDoubleClick: e => {
       e.stopPropagation();
       setEditing(true);
     }
@@ -27497,7 +27522,7 @@ const DatabaseView = ({
     c: 'purple'
   }, {
     l: T.staff_term_plural,
-    v: (staff || []).length || '—',
+    v: (staff || []).length,
     c: 'blue'
   }, {
     l: 'Fields Active',
@@ -30041,6 +30066,7 @@ const TeamDetailView = ({
     }
   }), /*#__PURE__*/React.createElement("input", {
     type: "range", min: 0, max: 360, value: team.color_hue != null ? team.color_hue : 260,
+    "aria-label": `Team color: ${hueToColorName(team.color_hue != null ? team.color_hue : 260)}`,
     onChange: (e) => {
       const hue = parseInt(e.target.value);
       onUpdateTeam({ ...team, color_hue: hue });
@@ -30049,10 +30075,11 @@ const TeamDetailView = ({
     },
     style: { flex: 1, accentColor: `hsl(${team.color_hue != null ? team.color_hue : 260}, 65%, 55%)` }
   }), /*#__PURE__*/React.createElement("span", {
-    style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', minWidth: 30 }
-  }, team.color_hue != null ? team.color_hue : 260, "\u00B0"))), onSwitchTeam && /*#__PURE__*/React.createElement("button", {
+    style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', minWidth: 50 }
+  }, hueToColorName(team.color_hue != null ? team.color_hue : 260), " ", team.color_hue != null ? team.color_hue : 260, "\u00B0"))), onSwitchTeam && /*#__PURE__*/React.createElement("button", {
     onClick: () => onSwitchTeam(teamMode?.roomId === team.roomId ? null : team.roomId),
     className: teamMode?.roomId === team.roomId ? "b-pri b-sm" : "b-gho b-sm",
+    title: "When operating as this team, actions you take (notes, field changes, allocations) will be recorded under this team\u2019s context.",
     style: {
       marginBottom: 12,
       display: 'flex',
@@ -32186,7 +32213,7 @@ const DashboardOverview = ({
     i: 'shield'
   }, {
     l: T.staff_term_plural,
-    v: (staff || []).length || '—',
+    v: (staff || []).length,
     c: 'blue',
     i: 'briefcase'
   }, {
@@ -32597,7 +32624,7 @@ const IndividualsView = ({
       alignItems: 'center',
       gap: 4
     }
-  }, "Find Client"))), /*#__PURE__*/React.createElement("div", {
+  }, "Find ", T?.client_term || 'Individual'))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))',
@@ -32610,7 +32637,7 @@ const IndividualsView = ({
     c: 'gold'
   }, {
     l: T.staff_term_plural,
-    v: staff.length || '—',
+    v: staff.length,
     c: 'blue'
   }, {
     l: 'Access Model',
@@ -37137,7 +37164,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "search",
     s: 12
-  }), "Find Client"), /*#__PURE__*/React.createElement("button", {
+  }), "Find ", T?.client_term || 'Individual'), /*#__PURE__*/React.createElement("button", {
     onClick: () => loadCases(),
     className: "b-gho b-xs",
     style: {
@@ -37589,7 +37616,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "search",
     s: 14
-  }), "Find Client"), orgRoom && hasOrgMsgPermission('read') && /*#__PURE__*/React.createElement("button", {
+  }), "Find ", T?.client_term || 'Individual'), orgRoom && hasOrgMsgPermission('read') && /*#__PURE__*/React.createElement("button", {
     onClick: () => setComposeOrgModal(true),
     className: "b-pri b-sm",
     style: {
@@ -38123,7 +38150,7 @@ const ProviderApp = ({
         fontSize: 11.5,
         color: 'var(--gold)'
       }
-    }, "Your role (", orgRole, ") does not have permission to respond. Contact your admin."))));
+    }, "Your role (", orgRole, ") does not have permission to respond. Ask an organization admin to update your role to enable messaging."))));
   })() : /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
@@ -39861,7 +39888,7 @@ const ProviderApp = ({
       color: 'var(--tx-3)',
       marginTop: 8
     }
-  }, "No metric events yet. Clients must consent to anonymized reporting.")) : Object.entries(metricsByCategory).map(([cat, vals]) => /*#__PURE__*/React.createElement("div", {
+  }, "No metric events yet. Individuals must consent to anonymized reporting. Consent can be requested through the individual\u2019s bridge room settings.")) : Object.entries(metricsByCategory).map(([cat, vals]) => /*#__PURE__*/React.createElement("div", {
     key: cat,
     className: "card",
     style: {
@@ -42116,7 +42143,7 @@ const ProviderApp = ({
         fontSize: 11.5,
         color: 'var(--gold)'
       }
-    }, "Your role (", activeOrgRoleLabels[orgRole] || orgRole, ") does not have permission to respond to org messages. Contact your admin."))));
+    }, "Your role (", activeOrgRoleLabels[orgRole] || orgRole, ") does not have permission to respond to org messages. Ask an organization admin to update your role to enable messaging."))));
   })())), view === 'resources' && !activeCase && /*#__PURE__*/React.createElement(ResourcesTableView, {
     resourceTypes: resourceTypes,
     resourceRelations: resourceRelations,
@@ -42163,7 +42190,7 @@ const ProviderApp = ({
   }))), /*#__PURE__*/React.createElement(Modal, {
     open: discoverModal,
     onClose: () => setDiscoverModal(false),
-    title: "Find Client"
+    title: "Find " + (T?.client_term || 'Individual')
   }, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 12,
@@ -42171,13 +42198,13 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Look up a client by their Matrix ID. If they've created a bridge room and invited you, it will appear in your cases."), /*#__PURE__*/React.createElement("div", {
+  }, "Look up ", aOrAn(T?.client_term || 'individual'), " ", (T?.client_term || 'individual').toLowerCase(), " by their Matrix ID. If they've created a bridge room and invited you, it will appear in your cases."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "CLIENT MATRIX ID"), /*#__PURE__*/React.createElement("input", {
+  }, (T?.client_term || 'INDIVIDUAL').toUpperCase(), " MATRIX ID"), /*#__PURE__*/React.createElement("input", {
     value: discoverUserId,
     onChange: e => setDiscoverUserId(e.target.value),
     placeholder: "@client:matrix.org"
@@ -44402,7 +44429,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Create a ", T.client_term.toLowerCase(), " record. This creates a private encrypted Matrix room. If you provide a Matrix ID, the ", T.client_term.toLowerCase(), " will be invited and given superadmin control (power level 100) \u2014 they can remove anyone from the room."), /*#__PURE__*/React.createElement("div", {
+  }, "Create ", aOrAn(T.client_term), " ", T.client_term.toLowerCase(), " record. This creates a private encrypted Matrix room. If you provide a Matrix ID, the ", T.client_term.toLowerCase(), " will be invited and given superadmin control (power level 100) \u2014 they can remove anyone from the room."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
