@@ -616,6 +616,60 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .sw-dict-stat{font-size:12px;color:var(--tx-2);display:flex;align-items:center;gap:4px}
 .sw-dict-stat strong{color:var(--tx-0);font-family:var(--mono)}
 
+/* ── URI Library Browser ── */
+.uri-browser-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:310;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease both;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.uri-browser{width:760px;max-width:94vw;max-height:85vh;background:var(--bg-1);border:1px solid var(--border-0);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden;animation:fadeUp .2s ease both}
+.uri-browser-header{padding:18px 22px 0;flex-shrink:0}
+.uri-browser-header-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.uri-browser-title{font-size:16px;font-weight:700;font-family:var(--serif);color:var(--tx-0);display:flex;align-items:center;gap:8px}
+.uri-browser-close{background:none;border:none;cursor:pointer;color:var(--tx-2);font-size:18px;padding:4px 8px;border-radius:4px;transition:all .15s}
+.uri-browser-close:hover{background:var(--bg-3);color:var(--tx-0)}
+.uri-browser-search{position:relative;margin-bottom:12px}
+.uri-browser-search input{width:100%;padding:11px 16px 11px 38px;border-radius:8px;border:1px solid var(--border-1);background:var(--bg-2);color:var(--tx-0);font-size:14px;font-family:var(--sans);outline:none;transition:border .2s,box-shadow .2s}
+.uri-browser-search input:focus{border-color:var(--teal);box-shadow:0 0 0 3px var(--teal-dim)}
+.uri-browser-search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);pointer-events:none}
+.uri-browser-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border-0)}
+.uri-browser-lib-chip{padding:5px 12px;border-radius:14px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border-0);background:var(--bg-2);color:var(--tx-2);transition:all .15s;font-family:var(--sans);display:flex;align-items:center;gap:5px}
+.uri-browser-lib-chip:hover{border-color:var(--border-2);color:var(--tx-0)}
+.uri-browser-lib-chip.active{border-color:var(--teal);background:var(--teal-dim);color:var(--teal)}
+.uri-browser-lib-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.uri-browser-cat-chips{display:flex;gap:4px;flex-wrap:wrap}
+.uri-browser-cat-chip{padding:3px 10px;border-radius:10px;font-size:10px;font-weight:500;cursor:pointer;border:1px solid var(--border-0);background:var(--bg-2);color:var(--tx-3);transition:all .15s}
+.uri-browser-cat-chip:hover{color:var(--tx-1);border-color:var(--border-1)}
+.uri-browser-cat-chip.active{border-color:var(--teal);background:var(--teal-dim);color:var(--teal)}
+.uri-browser-body{flex:1;overflow-y:auto;padding:0 22px 14px}
+.uri-browser-results-count{font-size:11px;color:var(--tx-3);font-family:var(--mono);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.uri-browser-grid{display:flex;flex-direction:column;gap:6px}
+.uri-browser-entry{padding:12px 16px;border:1px solid var(--border-0);border-radius:var(--r-lg);background:var(--bg-2);cursor:pointer;transition:all .15s;display:flex;gap:12px;align-items:flex-start}
+.uri-browser-entry:hover{border-color:var(--teal);background:var(--bg-3);transform:translateY(-1px)}
+.uri-browser-entry.selected{border-color:var(--teal);background:var(--teal-dim)}
+.uri-browser-entry-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;font-weight:700}
+.uri-browser-entry-body{flex:1;min-width:0}
+.uri-browser-entry-label{font-size:13.5px;font-weight:600;color:var(--tx-0);margin-bottom:2px}
+.uri-browser-entry-uri{font-size:10px;font-family:var(--mono);color:var(--teal);opacity:.8;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uri-browser-entry-def{font-size:12px;color:var(--tx-2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.uri-browser-entry-tags{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.uri-browser-entry-tag{font-size:9px;padding:1px 7px;border-radius:8px;background:var(--bg-3);color:var(--tx-3);font-family:var(--mono)}
+.uri-browser-entry-lib{font-size:9px;padding:1px 7px;border-radius:8px;font-family:var(--mono);font-weight:600}
+.uri-browser-entry-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.uri-browser-entry-type{font-size:9px;padding:2px 8px;border-radius:4px;font-family:var(--mono);font-weight:600;text-transform:uppercase}
+.uri-browser-entry-select{padding:5px 14px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--teal);background:var(--teal-dim);color:var(--teal);cursor:pointer;transition:all .15s;opacity:0;white-space:nowrap}
+.uri-browser-entry:hover .uri-browser-entry-select{opacity:1}
+.uri-browser-entry-select:hover{background:var(--teal);color:var(--bg-0)}
+.uri-browser-footer{padding:12px 22px;border-top:1px solid var(--border-0);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:var(--bg-2)}
+.uri-browser-footer-info{font-size:11px;color:var(--tx-3);display:flex;align-items:center;gap:6px}
+.uri-browser-footer-actions{display:flex;gap:8px}
+.uri-browser-empty{padding:40px 20px;text-align:center;color:var(--tx-3);font-size:13px}
+.uri-browser-empty-icon{font-size:28px;margin-bottom:8px;opacity:.4}
+.uri-browser-lib-info{padding:10px 14px;border-radius:var(--r);background:var(--bg-0);border:1px solid var(--border-0);margin-bottom:12px;font-size:11px;color:var(--tx-2);line-height:1.5;display:flex;align-items:flex-start;gap:8px}
+.uri-browser-lib-info-name{font-weight:700;color:var(--tx-0);font-size:12px;margin-bottom:2px}
+.uri-browser-selected-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:14px;font-size:10px;font-weight:600;font-family:var(--mono);background:var(--teal-dim);color:var(--teal);margin-top:6px}
+@media(max-width:700px){
+  .uri-browser{max-width:100vw;max-height:100vh;height:100vh;border-radius:0}
+  .uri-browser-grid{gap:4px}
+  .uri-browser-entry{padding:10px 12px}
+}
+
 /* ── Forms Tab (split panel) ── */
 .sw-forms-split{display:flex;height:100%;overflow:hidden;margin:-20px -24px;/* negate canvas-inner padding */}
 .sw-forms-list{width:300px;min-width:300px;border-right:1px solid var(--border-0);display:flex;flex-direction:column;
@@ -2722,6 +2776,231 @@ const CROSSWALK_TYPES = {
     color: 'red',
     desc: 'Same name, different meaning'
   }
+};
+
+/* ═══════════════════ URI LIBRARIES (§Searchable Definitions) ═══════════════════
+ * DES(uri_libraries, {standard_vocabularies}) — semantic_interoperability
+ *
+ * Curated libraries of standard URIs from established vocabularies.
+ * Used throughout the app to let users attach well-known definitions to
+ * their fields, forms, and observations. Each library entry provides:
+ *   - uri: the canonical URI for the concept
+ *   - label: human-readable name
+ *   - definition: what this concept means
+ *   - data_type: expected data type (text, date, select, etc.)
+ *   - category: grouping within the library
+ *   - tags: searchable keywords
+ * ════════════════════════════════════════════════════════════════════════ */
+const URI_LIBRARIES = [
+  {
+    id: 'schema_org',
+    name: 'Schema.org',
+    prefix: 'https://schema.org/',
+    description: 'Structured data vocabulary maintained by Google, Microsoft, Yahoo, and Yandex. Widely used for web-standard person, organization, and event descriptions.',
+    color: 'blue',
+    icon: 'globe',
+    entries: [
+      { uri: 'https://schema.org/givenName', label: 'Given Name', definition: 'The given (first) name of a person.', data_type: 'text', category: 'identity', tags: ['name', 'first name', 'person'] },
+      { uri: 'https://schema.org/familyName', label: 'Family Name', definition: 'The family (last) name of a person.', data_type: 'text', category: 'identity', tags: ['name', 'last name', 'surname', 'person'] },
+      { uri: 'https://schema.org/name', label: 'Name', definition: 'The full name of the thing (person, org, place, etc.).', data_type: 'text', category: 'identity', tags: ['name', 'full name'] },
+      { uri: 'https://schema.org/email', label: 'Email', definition: 'An email address.', data_type: 'email', category: 'contact', tags: ['email', 'address', 'electronic'] },
+      { uri: 'https://schema.org/telephone', label: 'Telephone', definition: 'A telephone number.', data_type: 'phone', category: 'contact', tags: ['phone', 'telephone', 'mobile', 'cell'] },
+      { uri: 'https://schema.org/birthDate', label: 'Birth Date', definition: 'Date of birth.', data_type: 'date', category: 'identity', tags: ['dob', 'birthday', 'born', 'age'] },
+      { uri: 'https://schema.org/gender', label: 'Gender', definition: 'Gender of the person.', data_type: 'single_select', category: 'identity', tags: ['gender', 'sex', 'identity'] },
+      { uri: 'https://schema.org/address', label: 'Postal Address', definition: 'Physical address of the item.', data_type: 'address', category: 'contact', tags: ['address', 'street', 'postal', 'mailing'] },
+      { uri: 'https://schema.org/nationality', label: 'Nationality', definition: 'Nationality of the person.', data_type: 'text', category: 'identity', tags: ['nationality', 'country', 'citizen'] },
+      { uri: 'https://schema.org/knows', label: 'Knows', definition: 'The most generic bi-directional social relationship.', data_type: 'text', category: 'social', tags: ['relationship', 'contact', 'knows'] },
+      { uri: 'https://schema.org/memberOf', label: 'Member Of', definition: 'An organization to which the person belongs.', data_type: 'text', category: 'social', tags: ['member', 'organization', 'affiliation'] },
+      { uri: 'https://schema.org/jobTitle', label: 'Job Title', definition: 'The job title of the person.', data_type: 'text', category: 'employment', tags: ['job', 'title', 'role', 'position'] },
+      { uri: 'https://schema.org/worksFor', label: 'Works For', definition: 'Organizations the person works for.', data_type: 'text', category: 'employment', tags: ['employer', 'organization', 'work'] },
+      { uri: 'https://schema.org/healthCondition', label: 'Health Condition', definition: 'A health condition relevant to the person.', data_type: 'text', category: 'health', tags: ['health', 'condition', 'medical', 'diagnosis'] },
+      { uri: 'https://schema.org/identifier', label: 'Identifier', definition: 'A unique identifier for the thing.', data_type: 'text', category: 'identity', tags: ['id', 'identifier', 'number', 'code'] },
+      { uri: 'https://schema.org/description', label: 'Description', definition: 'A free-text description of the item.', data_type: 'text_long', category: 'general', tags: ['description', 'notes', 'text'] },
+      { uri: 'https://schema.org/image', label: 'Image', definition: 'An image of the item.', data_type: 'document', category: 'general', tags: ['image', 'photo', 'picture'] },
+      { uri: 'https://schema.org/Organization', label: 'Organization', definition: 'An organization such as a school, NGO, corporation, club, etc.', data_type: 'text', category: 'social', tags: ['organization', 'org', 'company', 'institution'] },
+      { uri: 'https://schema.org/Place', label: 'Place', definition: 'Entities that have a somewhat fixed, physical extension.', data_type: 'text', category: 'location', tags: ['place', 'location', 'address', 'geo'] },
+      { uri: 'https://schema.org/Event', label: 'Event', definition: 'An event happening at a certain time and location.', data_type: 'text', category: 'general', tags: ['event', 'appointment', 'meeting', 'occurrence'] }
+    ]
+  },
+  {
+    id: 'dublin_core',
+    name: 'Dublin Core',
+    prefix: 'http://purl.org/dc/terms/',
+    description: 'ISO 15836 metadata standard for describing resources. Foundational vocabulary for document and record metadata across libraries, archives, and information systems.',
+    color: 'teal',
+    icon: 'book',
+    entries: [
+      { uri: 'http://purl.org/dc/terms/title', label: 'Title', definition: 'A name given to the resource.', data_type: 'text', category: 'general', tags: ['title', 'name', 'label'] },
+      { uri: 'http://purl.org/dc/terms/description', label: 'Description', definition: 'An account of the resource content.', data_type: 'text_long', category: 'general', tags: ['description', 'summary', 'abstract'] },
+      { uri: 'http://purl.org/dc/terms/subject', label: 'Subject', definition: 'The topic or subject matter of the resource.', data_type: 'text', category: 'general', tags: ['subject', 'topic', 'keyword', 'tag'] },
+      { uri: 'http://purl.org/dc/terms/creator', label: 'Creator', definition: 'An entity primarily responsible for making the resource.', data_type: 'text', category: 'provenance', tags: ['creator', 'author', 'made by'] },
+      { uri: 'http://purl.org/dc/terms/date', label: 'Date', definition: 'A point or period of time associated with an event in the lifecycle of the resource.', data_type: 'date', category: 'provenance', tags: ['date', 'when', 'time'] },
+      { uri: 'http://purl.org/dc/terms/created', label: 'Date Created', definition: 'Date of creation of the resource.', data_type: 'date', category: 'provenance', tags: ['created', 'creation date', 'started'] },
+      { uri: 'http://purl.org/dc/terms/modified', label: 'Date Modified', definition: 'Date on which the resource was changed.', data_type: 'date', category: 'provenance', tags: ['modified', 'updated', 'changed'] },
+      { uri: 'http://purl.org/dc/terms/identifier', label: 'Identifier', definition: 'An unambiguous reference to the resource within a given context.', data_type: 'text', category: 'identity', tags: ['id', 'identifier', 'reference'] },
+      { uri: 'http://purl.org/dc/terms/language', label: 'Language', definition: 'A language of the resource.', data_type: 'text', category: 'general', tags: ['language', 'locale', 'lang'] },
+      { uri: 'http://purl.org/dc/terms/type', label: 'Type', definition: 'The nature or genre of the resource.', data_type: 'single_select', category: 'general', tags: ['type', 'kind', 'genre', 'category'] },
+      { uri: 'http://purl.org/dc/terms/format', label: 'Format', definition: 'The file format, physical medium, or dimensions of the resource.', data_type: 'text', category: 'general', tags: ['format', 'file type', 'mime'] },
+      { uri: 'http://purl.org/dc/terms/rights', label: 'Rights', definition: 'Information about rights held in and over the resource.', data_type: 'text', category: 'governance', tags: ['rights', 'license', 'permission', 'copyright'] },
+      { uri: 'http://purl.org/dc/terms/source', label: 'Source', definition: 'A related resource from which the described resource is derived.', data_type: 'text', category: 'provenance', tags: ['source', 'origin', 'derived from'] },
+      { uri: 'http://purl.org/dc/terms/coverage', label: 'Coverage', definition: 'The spatial or temporal topic of the resource.', data_type: 'text', category: 'general', tags: ['coverage', 'scope', 'jurisdiction', 'geography'] },
+      { uri: 'http://purl.org/dc/terms/relation', label: 'Relation', definition: 'A related resource.', data_type: 'text', category: 'general', tags: ['relation', 'related to', 'see also'] }
+    ]
+  },
+  {
+    id: 'foaf',
+    name: 'FOAF',
+    prefix: 'http://xmlns.com/foaf/0.1/',
+    description: 'Friend of a Friend — RDF vocabulary for describing persons, social networks, and online accounts. Standard in linked data and social web applications.',
+    color: 'purple',
+    icon: 'users',
+    entries: [
+      { uri: 'http://xmlns.com/foaf/0.1/name', label: 'Name', definition: 'A name for some thing (person, org, etc.).', data_type: 'text', category: 'identity', tags: ['name', 'full name'] },
+      { uri: 'http://xmlns.com/foaf/0.1/firstName', label: 'First Name', definition: 'The first name of a person.', data_type: 'text', category: 'identity', tags: ['first name', 'given name'] },
+      { uri: 'http://xmlns.com/foaf/0.1/lastName', label: 'Last Name', definition: 'The last name of a person.', data_type: 'text', category: 'identity', tags: ['last name', 'family name', 'surname'] },
+      { uri: 'http://xmlns.com/foaf/0.1/mbox', label: 'Email (Mailbox)', definition: 'A personal mailbox, i.e., an Internet mailbox associated with exactly one owner.', data_type: 'email', category: 'contact', tags: ['email', 'mailbox'] },
+      { uri: 'http://xmlns.com/foaf/0.1/phone', label: 'Phone', definition: 'A phone number associated with the person.', data_type: 'phone', category: 'contact', tags: ['phone', 'telephone'] },
+      { uri: 'http://xmlns.com/foaf/0.1/age', label: 'Age', definition: 'The age of the agent.', data_type: 'number', category: 'identity', tags: ['age', 'years old'] },
+      { uri: 'http://xmlns.com/foaf/0.1/gender', label: 'Gender', definition: 'The gender of this Agent (typically but not necessarily \'male\' or \'female\').', data_type: 'single_select', category: 'identity', tags: ['gender', 'sex'] },
+      { uri: 'http://xmlns.com/foaf/0.1/knows', label: 'Knows', definition: 'A person known by this person (indicates some level of reciprocated interaction).', data_type: 'text', category: 'social', tags: ['knows', 'relationship', 'contact'] },
+      { uri: 'http://xmlns.com/foaf/0.1/based_near', label: 'Based Near', definition: 'A location that something is based near, for loose geographic associations.', data_type: 'text', category: 'location', tags: ['location', 'near', 'based', 'geography'] },
+      { uri: 'http://xmlns.com/foaf/0.1/Organization', label: 'Organization', definition: 'An organization.', data_type: 'text', category: 'social', tags: ['organization', 'org', 'company'] },
+      { uri: 'http://xmlns.com/foaf/0.1/Group', label: 'Group', definition: 'A class of Agents representing a collection of individuals.', data_type: 'text', category: 'social', tags: ['group', 'team', 'collection'] },
+      { uri: 'http://xmlns.com/foaf/0.1/homepage', label: 'Homepage', definition: 'A homepage for some thing.', data_type: 'text', category: 'contact', tags: ['homepage', 'website', 'url'] },
+      { uri: 'http://xmlns.com/foaf/0.1/depiction', label: 'Depiction', definition: 'An image that depicts some thing.', data_type: 'document', category: 'general', tags: ['image', 'photo', 'depiction'] }
+    ]
+  },
+  {
+    id: 'hmis',
+    name: 'HMIS',
+    prefix: 'https://hudhdx.info/Resources/Vendors/HMIS/',
+    description: 'HUD Homeless Management Information System data standards. Mandatory for federally funded homeless services, CoC reporting, and PIT counts.',
+    color: 'gold',
+    icon: 'home',
+    entries: [
+      { uri: 'hmis:PersonalID', label: 'Personal ID', definition: 'A unique system-generated identifier for the client within HMIS.', data_type: 'text', category: 'identity', tags: ['id', 'personal id', 'hmis id', 'client id'] },
+      { uri: 'hmis:FirstName', label: 'First Name', definition: 'First name of the client as reported during intake.', data_type: 'text', category: 'identity', tags: ['first name', 'given name'] },
+      { uri: 'hmis:LastName', label: 'Last Name', definition: 'Last name of the client as reported during intake.', data_type: 'text', category: 'identity', tags: ['last name', 'family name', 'surname'] },
+      { uri: 'hmis:SSN', label: 'SSN (Last 4)', definition: 'Last four digits of Social Security Number for identification.', data_type: 'text', category: 'identity', tags: ['ssn', 'social security', 'id number'] },
+      { uri: 'hmis:DOB', label: 'Date of Birth', definition: 'Client date of birth.', data_type: 'date', category: 'identity', tags: ['dob', 'birthday', 'birth date'] },
+      { uri: 'hmis:Race', label: 'Race', definition: 'Race of the client per HUD standards (may select multiple).', data_type: 'multi_select', category: 'demographics', tags: ['race', 'ethnicity', 'demographic'] },
+      { uri: 'hmis:Ethnicity', label: 'Ethnicity', definition: 'Hispanic/Latino ethnicity of the client per HUD categories.', data_type: 'single_select', category: 'demographics', tags: ['ethnicity', 'hispanic', 'latino'] },
+      { uri: 'hmis:Gender', label: 'Gender', definition: 'Gender identity of the client per HUD data standards.', data_type: 'multi_select', category: 'demographics', tags: ['gender', 'identity', 'sex'] },
+      { uri: 'hmis:VeteranStatus', label: 'Veteran Status', definition: 'Whether the client has served in the U.S. Armed Forces.', data_type: 'single_select', category: 'demographics', tags: ['veteran', 'military', 'armed forces'] },
+      { uri: 'hmis:DisablingCondition', label: 'Disabling Condition', definition: 'Whether the client has a disabling condition as defined by HUD.', data_type: 'single_select', category: 'health', tags: ['disability', 'disabling', 'condition'] },
+      { uri: 'hmis:ProjectEntryDate', label: 'Project Entry Date', definition: 'Date the client entered the project/program.', data_type: 'date', category: 'enrollment', tags: ['entry date', 'enrollment', 'start date', 'intake'] },
+      { uri: 'hmis:ProjectExitDate', label: 'Project Exit Date', definition: 'Date the client exited the project/program.', data_type: 'date', category: 'enrollment', tags: ['exit date', 'discharge', 'end date'] },
+      { uri: 'hmis:Destination', label: 'Destination', definition: 'Living situation the client moved to upon exit.', data_type: 'single_select', category: 'enrollment', tags: ['destination', 'exit', 'housing', 'living situation'] },
+      { uri: 'hmis:LivingSituation', label: 'Living Situation', definition: 'Client\'s living situation at time of project entry.', data_type: 'single_select', category: 'enrollment', tags: ['living situation', 'housing status', 'prior living'] },
+      { uri: 'hmis:LengthOfStay', label: 'Length of Stay', definition: 'Length of stay in prior living situation.', data_type: 'single_select', category: 'enrollment', tags: ['length of stay', 'duration', 'time'] },
+      { uri: 'hmis:DateOfEngagement', label: 'Date of Engagement', definition: 'Date the client was first engaged by street outreach.', data_type: 'date', category: 'enrollment', tags: ['engagement', 'outreach', 'contact date'] },
+      { uri: 'hmis:TimesHomelessPastThreeYears', label: 'Times Homeless (3yr)', definition: 'Number of times the client has been homeless in the past three years.', data_type: 'single_select', category: 'history', tags: ['homeless', 'chronic', 'history', 'episodes'] },
+      { uri: 'hmis:MonthsHomelessPastThreeYears', label: 'Months Homeless (3yr)', definition: 'Total months homeless in the past three years.', data_type: 'single_select', category: 'history', tags: ['months', 'chronic', 'duration', 'homeless'] },
+      { uri: 'hmis:IncomeFromAnySource', label: 'Income from Any Source', definition: 'Whether the client has income from any source.', data_type: 'single_select', category: 'income', tags: ['income', 'earnings', 'money'] },
+      { uri: 'hmis:TotalMonthlyIncome', label: 'Total Monthly Income', definition: 'Total monthly income from all sources in dollars.', data_type: 'number', category: 'income', tags: ['income', 'monthly', 'total', 'dollars'] },
+      { uri: 'hmis:InsuranceFromAnySource', label: 'Insurance from Any Source', definition: 'Whether the client has health insurance from any source.', data_type: 'single_select', category: 'health', tags: ['insurance', 'health insurance', 'coverage'] },
+      { uri: 'hmis:DomesticViolenceVictim', label: 'Domestic Violence Victim', definition: 'Whether the client is a victim/survivor of domestic violence.', data_type: 'single_select', category: 'safety', tags: ['domestic violence', 'dv', 'victim', 'safety'] },
+      { uri: 'hmis:CurrentlyFleeing', label: 'Currently Fleeing DV', definition: 'Whether the client is currently fleeing a DV situation.', data_type: 'single_select', category: 'safety', tags: ['fleeing', 'domestic violence', 'safety', 'crisis'] },
+      { uri: 'hmis:ConnectionWithSOAR', label: 'Connection with SOAR', definition: 'Whether the client is connected with SSI/SSDI Outreach, Access, and Recovery.', data_type: 'single_select', category: 'benefits', tags: ['soar', 'ssi', 'ssdi', 'benefits'] }
+    ]
+  },
+  {
+    id: 'vcard',
+    name: 'vCard',
+    prefix: 'http://www.w3.org/2006/vcard/ns#',
+    description: 'W3C vCard ontology for contact and address information. Maps to the widely-deployed vCard standard (RFC 6350) used in phone contacts and email clients.',
+    color: 'green',
+    icon: 'contact',
+    entries: [
+      { uri: 'http://www.w3.org/2006/vcard/ns#fn', label: 'Formatted Name', definition: 'The formatted name string associated with the vCard object.', data_type: 'text', category: 'identity', tags: ['name', 'full name', 'formatted'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#hasEmail', label: 'Email', definition: 'An email address associated with the object.', data_type: 'email', category: 'contact', tags: ['email', 'address'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#hasTelephone', label: 'Telephone', definition: 'A telephone number associated with the object.', data_type: 'phone', category: 'contact', tags: ['phone', 'telephone'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#hasAddress', label: 'Address', definition: 'A postal address associated with the object.', data_type: 'address', category: 'contact', tags: ['address', 'postal', 'mailing'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#bday', label: 'Birthday', definition: 'Date of birth of the individual.', data_type: 'date', category: 'identity', tags: ['birthday', 'dob', 'birth date'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#hasGeo', label: 'Geographic Location', definition: 'Geographic coordinates associated with the object.', data_type: 'text', category: 'location', tags: ['geo', 'coordinates', 'location', 'lat', 'lng'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#role', label: 'Role', definition: 'The role associated with the individual within an organization.', data_type: 'text', category: 'employment', tags: ['role', 'job', 'position', 'title'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#org', label: 'Organization Name', definition: 'The organization name associated with the object.', data_type: 'text', category: 'social', tags: ['organization', 'org', 'company'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#note', label: 'Note', definition: 'A note associated with the object.', data_type: 'text_long', category: 'general', tags: ['note', 'comment', 'text'] },
+      { uri: 'http://www.w3.org/2006/vcard/ns#hasLanguage', label: 'Language', definition: 'Language(s) associated with the object.', data_type: 'text', category: 'general', tags: ['language', 'spoken', 'preferred'] }
+    ]
+  },
+  {
+    id: 'hl7_fhir',
+    name: 'HL7 FHIR',
+    prefix: 'http://hl7.org/fhir/',
+    description: 'Fast Healthcare Interoperability Resources — the modern standard for exchanging healthcare information electronically. Used in clinical systems, EHRs, and health information exchanges.',
+    color: 'orange',
+    icon: 'heart',
+    entries: [
+      { uri: 'http://hl7.org/fhir/Patient', label: 'Patient', definition: 'Demographics and administrative information about an individual receiving care.', data_type: 'text', category: 'identity', tags: ['patient', 'client', 'individual'] },
+      { uri: 'http://hl7.org/fhir/Patient.name', label: 'Patient Name', definition: 'A name associated with the patient.', data_type: 'text', category: 'identity', tags: ['name', 'patient name'] },
+      { uri: 'http://hl7.org/fhir/Patient.birthDate', label: 'Birth Date', definition: 'The date of birth for the individual.', data_type: 'date', category: 'identity', tags: ['birth date', 'dob'] },
+      { uri: 'http://hl7.org/fhir/Patient.gender', label: 'Administrative Gender', definition: 'Administrative gender — the gender the patient is considered to have for administration purposes.', data_type: 'single_select', category: 'demographics', tags: ['gender', 'sex', 'administrative'] },
+      { uri: 'http://hl7.org/fhir/Patient.address', label: 'Patient Address', definition: 'An address for the individual.', data_type: 'address', category: 'contact', tags: ['address', 'home', 'postal'] },
+      { uri: 'http://hl7.org/fhir/Patient.telecom', label: 'Contact Point', definition: 'A contact detail (phone, email, etc.) for the individual.', data_type: 'text', category: 'contact', tags: ['phone', 'email', 'contact', 'telecom'] },
+      { uri: 'http://hl7.org/fhir/Patient.maritalStatus', label: 'Marital Status', definition: 'The patient\'s most recent marital (civil) status.', data_type: 'single_select', category: 'demographics', tags: ['marital', 'married', 'single', 'status'] },
+      { uri: 'http://hl7.org/fhir/Patient.communication', label: 'Communication Language', definition: 'A language which may be used to communicate with the patient about their health.', data_type: 'text', category: 'demographics', tags: ['language', 'communication', 'spoken'] },
+      { uri: 'http://hl7.org/fhir/Condition', label: 'Condition', definition: 'A clinical condition, problem, diagnosis, or other event/situation.', data_type: 'text', category: 'health', tags: ['condition', 'diagnosis', 'problem', 'health'] },
+      { uri: 'http://hl7.org/fhir/Observation', label: 'Observation', definition: 'Measurements and simple assertions made about a patient or other subject.', data_type: 'text', category: 'health', tags: ['observation', 'measurement', 'vital sign', 'lab'] },
+      { uri: 'http://hl7.org/fhir/Encounter', label: 'Encounter', definition: 'An interaction between a patient and healthcare provider for the purpose of providing services.', data_type: 'text', category: 'service', tags: ['encounter', 'visit', 'appointment', 'session'] },
+      { uri: 'http://hl7.org/fhir/ServiceRequest', label: 'Service Request', definition: 'A record of a request for a procedure or diagnostic or other service to be planned, proposed, or performed.', data_type: 'text', category: 'service', tags: ['service', 'request', 'referral', 'order'] },
+      { uri: 'http://hl7.org/fhir/Consent', label: 'Consent', definition: 'A record of a healthcare consumer\'s choices regarding sharing of information.', data_type: 'text', category: 'governance', tags: ['consent', 'permission', 'authorization', 'sharing'] },
+      { uri: 'http://hl7.org/fhir/RelatedPerson', label: 'Related Person', definition: 'Information about a person that is involved in the care for a patient but is not the target of healthcare.', data_type: 'text', category: 'social', tags: ['related', 'family', 'caregiver', 'emergency contact'] },
+      { uri: 'http://hl7.org/fhir/MedicationStatement', label: 'Medication Statement', definition: 'A record of a medication being taken by a patient.', data_type: 'text', category: 'health', tags: ['medication', 'prescription', 'drug', 'medicine'] }
+    ]
+  }
+];
+
+/* Helper: flatten all URI library entries into a searchable index */
+const URI_LIBRARY_INDEX = (() => {
+  const index = [];
+  URI_LIBRARIES.forEach(lib => {
+    (lib.entries || []).forEach(entry => {
+      index.push({
+        ...entry,
+        library_id: lib.id,
+        library_name: lib.name,
+        library_color: lib.color,
+        library_prefix: lib.prefix,
+        _searchText: [entry.label, entry.definition, entry.uri, ...(entry.tags || [])].join(' ').toLowerCase()
+      });
+    });
+  });
+  return index;
+})();
+
+/* Search across all URI libraries */
+const searchUriLibraries = (query, options = {}) => {
+  const { libraryId, category, limit = 50 } = options;
+  if (!query || query.length < 2) {
+    let pool = URI_LIBRARY_INDEX;
+    if (libraryId) pool = pool.filter(e => e.library_id === libraryId);
+    if (category && category !== 'all') pool = pool.filter(e => e.category === category);
+    return pool.slice(0, limit);
+  }
+  const q = query.toLowerCase();
+  const terms = q.split(/\s+/).filter(t => t.length >= 2);
+  let pool = URI_LIBRARY_INDEX;
+  if (libraryId) pool = pool.filter(e => e.library_id === libraryId);
+  if (category && category !== 'all') pool = pool.filter(e => e.category === category);
+  const scored = pool.map(entry => {
+    let score = 0;
+    const st = entry._searchText;
+    // Exact URI match
+    if (st.includes(q)) score += 10;
+    // All terms present
+    const allHit = terms.every(t => st.includes(t));
+    if (allHit) score += 5;
+    // Individual term hits
+    terms.forEach(t => { if (st.includes(t)) score += 2; });
+    // Label starts with query
+    if (entry.label.toLowerCase().startsWith(q)) score += 8;
+    // Tag exact match
+    if ((entry.tags || []).some(t => t === q)) score += 6;
+    return { ...entry, _score: score };
+  }).filter(e => e._score > 0);
+  scored.sort((a, b) => b._score - a._score);
+  return scored.slice(0, limit);
 };
 
 /* ═══════════════════ RESOURCE TRACKING CONSTANTS (§Resource Build) ═══════════════════ */
@@ -14583,6 +14862,9 @@ const DictionaryTab = ({ fieldDefs, allForms, catLabels, catColors, catIcons, on
   const [filterCat, setFilterCat] = useState('all');
   const [expandedUri, setExpandedUri] = useState(null);
   const [editDraft, setEditDraft] = useState({});
+  const [uriBrowserOpen, setUriBrowserOpen] = useState(false);
+  const [uriBrowserMode, setUriBrowserMode] = useState('import'); // 'import' or 'link'
+  const [linkTargetUri, setLinkTargetUri] = useState(null);
 
   // Collect ALL field definitions: vault fields + fieldDefs dictionary + form-generated
   const allFieldEntries = useMemo(() => {
@@ -14675,6 +14957,49 @@ const DictionaryTab = ({ fieldDefs, allForms, catLabels, catColors, catIcons, on
     setExpandedUri(null);
   };
 
+  // Import a URI library entry as a new field definition
+  const doImportFromUri = entry => {
+    if (!onSaveFieldDef) return;
+    onSaveFieldDef({
+      uri: entry.uri,
+      key: entry.key,
+      label: entry.label,
+      definition: entry.definition,
+      data_type: entry.data_type || 'text',
+      category: entry.category || 'general',
+      sensitive: false,
+      scope: null,
+      authority: entry.source_library || null,
+      source_library: entry.source_library,
+      source_library_id: entry.source_library_id,
+      version: 1,
+      version_history: [],
+      migration_rules: [],
+      supersedes: null,
+      superseded_by: null,
+      created_by: 'uri_library',
+      created_at: Date.now()
+    });
+    setUriBrowserOpen(false);
+  };
+
+  // Link an existing field to a standard URI
+  const doLinkToUri = entry => {
+    if (!onSaveFieldDef || !linkTargetUri) return;
+    const existing = allFieldEntries.find(f => f.uri === linkTargetUri);
+    if (existing) {
+      onSaveFieldDef({
+        ...existing,
+        standard_uri: entry.uri,
+        standard_label: entry.label,
+        standard_library: entry.source_library,
+        standard_library_id: entry.source_library_id
+      });
+    }
+    setUriBrowserOpen(false);
+    setLinkTargetUri(null);
+  };
+
   const typeColor = (dt) => {
     const m = { text: 'blue', select: 'teal', date: 'gold', number: 'orange', boolean: 'green',
       email: 'blue', phone: 'blue', address: 'gold', text_long: 'purple', document: 'orange',
@@ -14683,11 +15008,21 @@ const DictionaryTab = ({ fieldDefs, allForms, catLabels, catColors, catIcons, on
   };
 
   return React.createElement('div', null,
-    // Stats row
-    React.createElement('div', { className: 'sw-dict-stats' },
-      React.createElement('span', { className: 'sw-dict-stat' }, React.createElement('strong', null, allFieldEntries.length), ' total fields'),
-      React.createElement('span', { className: 'sw-dict-stat' }, React.createElement('strong', null, allFieldEntries.filter(f => f.source === 'vault').length), ' vault'),
-      React.createElement('span', { className: 'sw-dict-stat' }, React.createElement('strong', null, allFieldEntries.filter(f => f.sensitive).length), ' sensitive')
+    // Stats row + import button
+    React.createElement('div', { className: 'sw-dict-stats', style: { justifyContent: 'space-between', alignItems: 'center' } },
+      React.createElement('div', { style: { display: 'flex', gap: 16, flexWrap: 'wrap' } },
+        React.createElement('span', { className: 'sw-dict-stat' }, React.createElement('strong', null, allFieldEntries.length), ' total fields'),
+        React.createElement('span', { className: 'sw-dict-stat' }, React.createElement('strong', null, allFieldEntries.filter(f => f.source === 'vault').length), ' vault'),
+        React.createElement('span', { className: 'sw-dict-stat' }, React.createElement('strong', null, allFieldEntries.filter(f => f.sensitive).length), ' sensitive')
+      ),
+      onSaveFieldDef && React.createElement('button', {
+        className: 'b-gho b-sm',
+        style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--teal)', borderColor: 'var(--teal)' },
+        onClick: () => { setUriBrowserMode('import'); setUriBrowserOpen(true); }
+      },
+        React.createElement(I, { n: 'globe', s: 12, c: 'var(--teal)' }),
+        'Import from URI Library'
+      )
     ),
     // Toolbar
     React.createElement('div', { className: 'sw-dict-toolbar' },
@@ -14739,6 +15074,17 @@ const DictionaryTab = ({ fieldDefs, allForms, catLabels, catColors, catIcons, on
                 f.scope && React.createElement('div', { className: 'sw-dict-card-scope' },
                   React.createElement('strong', { style: { color: 'var(--tx-2)', fontSize: 10 } }, 'SCOPE: '), f.scope
                 ),
+                // Standard URI link display
+                f.standard_uri && React.createElement('div', {
+                  className: 'uri-browser-selected-badge',
+                  style: { marginBottom: 8 }
+                },
+                  React.createElement(I, { n: 'globe', s: 10, c: 'var(--teal)' }),
+                  'Linked: ', f.standard_uri,
+                  f.standard_library && React.createElement('span', {
+                    style: { opacity: .7, marginLeft: 4 }
+                  }, '(', f.standard_library, ')')
+                ),
                 onSaveFieldDef && React.createElement('div', { className: 'sw-dict-card-editor', onClick: e => e.stopPropagation() },
                   React.createElement('label', null, 'Definition'),
                   React.createElement('textarea', {
@@ -14752,6 +15098,15 @@ const DictionaryTab = ({ fieldDefs, allForms, catLabels, catColors, catIcons, on
                     onChange: e => setEditDraft(d => ({ ...d, scope: e.target.value })),
                     placeholder: 'What is included and excluded...'
                   }),
+                  // Link to Standard URI button
+                  React.createElement('button', {
+                    className: 'b-gho b-xs',
+                    style: { display: 'flex', alignItems: 'center', gap: 5, color: 'var(--teal)', borderColor: 'var(--teal)', alignSelf: 'flex-start', fontSize: 11 },
+                    onClick: e => { e.stopPropagation(); setLinkTargetUri(f.uri); setUriBrowserMode('link'); setUriBrowserOpen(true); }
+                  },
+                    React.createElement(I, { n: 'globe', s: 10, c: 'var(--teal)' }),
+                    f.standard_uri ? 'Change Linked URI' : 'Link to Standard URI'
+                  ),
                   React.createElement('div', { style: { display: 'flex', gap: 6, justifyContent: 'flex-end' } },
                     React.createElement(SwBtn, { ghost: true, onClick: (e) => { e.stopPropagation(); setExpandedUri(null); } }, 'Cancel'),
                     React.createElement(SwBtn, { accent: SWC.given, onClick: (e) => { e.stopPropagation(); doSave(); } }, 'Save')
@@ -14760,7 +15115,14 @@ const DictionaryTab = ({ fieldDefs, allForms, catLabels, catColors, catIcons, on
               )
             );
           })
-        )
+        ),
+    // URI Library Browser modal
+    uriBrowserOpen && React.createElement(UriLibraryBrowser, {
+      open: true,
+      onClose: () => { setUriBrowserOpen(false); setLinkTargetUri(null); },
+      onSelect: uriBrowserMode === 'link' ? doLinkToUri : doImportFromUri,
+      mode: uriBrowserMode === 'link' ? 'link' : 'select'
+    })
   );
 };
 
@@ -15667,6 +16029,191 @@ const FormsTab = ({
   );
 };
 
+/* ── UriLibrariesTab — inline browsable view of all URI libraries ── */
+const UriLibrariesTab = ({ onImport, fieldDefs }) => {
+  const [search, setSearch] = useState('');
+  const [selectedLib, setSelectedLib] = useState('all');
+  const [selectedCat, setSelectedCat] = useState('all');
+  const [expandedUri, setExpandedUri] = useState(null);
+
+  const results = searchUriLibraries(search, {
+    libraryId: selectedLib !== 'all' ? selectedLib : undefined,
+    category: selectedCat !== 'all' ? selectedCat : undefined,
+    limit: 100
+  });
+
+  const pool = selectedLib !== 'all'
+    ? URI_LIBRARY_INDEX.filter(e => e.library_id === selectedLib)
+    : URI_LIBRARY_INDEX;
+  const categories = [...new Set(pool.map(e => e.category).filter(Boolean))].sort();
+
+  const activeLib = selectedLib !== 'all' ? URI_LIBRARIES.find(l => l.id === selectedLib) : null;
+  const existingUris = new Set(Object.keys(fieldDefs || {}));
+
+  const typeColor = dt => {
+    const m = { text: 'blue', select: 'teal', date: 'gold', number: 'orange', boolean: 'green',
+      email: 'blue', phone: 'blue', address: 'gold', text_long: 'purple', document: 'orange',
+      single_select: 'teal', multi_select: 'teal', duration: 'gold' };
+    return m[dt] || 'blue';
+  };
+
+  return React.createElement('div', null,
+    // Stats
+    React.createElement('div', { className: 'sw-dict-stats' },
+      React.createElement('span', { className: 'sw-dict-stat' },
+        React.createElement('strong', null, URI_LIBRARIES.length), ' libraries'
+      ),
+      React.createElement('span', { className: 'sw-dict-stat' },
+        React.createElement('strong', null, URI_LIBRARY_INDEX.length), ' total definitions'
+      ),
+      React.createElement('span', { className: 'sw-dict-stat' },
+        React.createElement('strong', null, URI_LIBRARY_INDEX.filter(e => existingUris.has(e.uri)).length), ' already imported'
+      )
+    ),
+    // Library cards row
+    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, marginBottom: 16 } },
+      URI_LIBRARIES.map(lib => React.createElement('div', {
+        key: lib.id,
+        className: `card-h`,
+        style: {
+          padding: '12px 16px',
+          cursor: 'pointer',
+          borderColor: selectedLib === lib.id ? `var(--${lib.color})` : undefined,
+          background: selectedLib === lib.id ? `var(--${lib.color}-dim)` : undefined
+        },
+        onClick: () => { setSelectedLib(selectedLib === lib.id ? 'all' : lib.id); setSelectedCat('all'); }
+      },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
+          React.createElement('span', { style: { width: 8, height: 8, borderRadius: '50%', background: `var(--${lib.color})` } }),
+          React.createElement('span', { style: { fontSize: 13, fontWeight: 700 } }, lib.name),
+          React.createElement('span', { style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginLeft: 'auto' } }, lib.entries.length)
+        ),
+        React.createElement('div', { style: { fontSize: 11, color: 'var(--tx-2)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } },
+          lib.description
+        )
+      ))
+    ),
+    // Search + filters
+    React.createElement('div', { className: 'sw-dict-toolbar' },
+      React.createElement('div', { className: 'sw-dict-search' },
+        React.createElement('span', { className: 'sw-dict-search-icon' }, React.createElement(I, { n: 'search', s: 13, c: 'var(--tx-3)' })),
+        React.createElement('input', {
+          value: search,
+          onChange: e => setSearch(e.target.value),
+          placeholder: 'Search URI definitions by name, keyword, or URI\u2026'
+        })
+      ),
+      categories.length > 1 && React.createElement('div', { className: 'sw-dict-filters' },
+        React.createElement('button', { className: `sw-dict-filter${selectedCat === 'all' ? ' active' : ''}`, onClick: () => setSelectedCat('all') }, 'All'),
+        categories.map(c => React.createElement('button', {
+          key: c,
+          className: `sw-dict-filter${selectedCat === c ? ' active' : ''}`,
+          onClick: () => setSelectedCat(c)
+        }, c))
+      )
+    ),
+    // Active library description
+    activeLib && React.createElement('div', { className: 'uri-browser-lib-info', style: { marginBottom: 14 } },
+      React.createElement('div', null,
+        React.createElement('div', { className: 'uri-browser-lib-info-name' }, activeLib.name),
+        React.createElement('div', null, activeLib.description),
+        React.createElement('div', { style: { marginTop: 4, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)' } }, 'Prefix: ', activeLib.prefix)
+      )
+    ),
+    // Results count
+    React.createElement('div', { style: { fontSize: 11, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginBottom: 10 } },
+      results.length, ' ', results.length === 1 ? 'definition' : 'definitions',
+      search && React.createElement('span', null, ' matching "', search, '"')
+    ),
+    // Results grid
+    results.length === 0
+      ? React.createElement('div', { className: 'sw-dict-empty' },
+          search ? `No URI definitions matching "${search}"` : 'No definitions in this category.'
+        )
+      : React.createElement('div', { className: 'sw-dict-grid' },
+          results.map(entry => {
+            const isExpanded = expandedUri === entry.uri;
+            const alreadyImported = existingUris.has(entry.uri);
+            return React.createElement('div', {
+              key: entry.uri,
+              className: `sw-dict-card${isExpanded ? ' expanded' : ''}`,
+              onClick: () => setExpandedUri(isExpanded ? null : entry.uri)
+            },
+              React.createElement('div', { className: 'sw-dict-card-header' },
+                React.createElement('div', null,
+                  React.createElement('div', { className: 'sw-dict-card-name' }, entry.label),
+                  React.createElement('div', { className: 'sw-dict-card-uri' }, entry.uri)
+                ),
+                React.createElement('div', { className: 'sw-dict-card-badges' },
+                  alreadyImported && React.createElement('span', { className: 'tag tag-green', style: { fontSize: 8 } }, 'IMPORTED'),
+                  React.createElement('span', {
+                    className: `tag tag-${entry.library_color}`,
+                    style: { fontSize: 8 }
+                  }, entry.library_name),
+                  React.createElement('span', {
+                    className: `tag tag-${typeColor(entry.data_type)}`,
+                    style: { fontSize: 8 }
+                  }, (entry.data_type || 'text').toUpperCase())
+                )
+              ),
+              React.createElement('div', { className: 'sw-dict-card-def' }, entry.definition),
+              // Tags
+              (entry.tags || []).length > 0 && React.createElement('div', { className: 'sw-dict-card-usage', style: { marginTop: 6 } },
+                (entry.tags || []).map(t => React.createElement('span', {
+                  key: t,
+                  className: 'sw-dict-card-form-tag'
+                }, t))
+              ),
+              // Expanded: full details + import button
+              isExpanded && React.createElement('div', { style: { marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-0)' } },
+                React.createElement('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 } },
+                  React.createElement('div', null,
+                    React.createElement('div', { style: { fontSize: 10, fontWeight: 600, color: 'var(--tx-2)', marginBottom: 2 } }, 'LIBRARY'),
+                    React.createElement('div', { style: { fontSize: 12 } }, entry.library_name)
+                  ),
+                  React.createElement('div', null,
+                    React.createElement('div', { style: { fontSize: 10, fontWeight: 600, color: 'var(--tx-2)', marginBottom: 2 } }, 'CATEGORY'),
+                    React.createElement('div', { style: { fontSize: 12 } }, entry.category)
+                  ),
+                  React.createElement('div', null,
+                    React.createElement('div', { style: { fontSize: 10, fontWeight: 600, color: 'var(--tx-2)', marginBottom: 2 } }, 'DATA TYPE'),
+                    React.createElement('div', { style: { fontSize: 12 } }, entry.data_type || 'text')
+                  ),
+                  React.createElement('div', null,
+                    React.createElement('div', { style: { fontSize: 10, fontWeight: 600, color: 'var(--tx-2)', marginBottom: 2 } }, 'FULL URI'),
+                    React.createElement('div', { style: { fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--teal)', wordBreak: 'break-all' } }, entry.uri)
+                  )
+                ),
+                onImport && React.createElement('div', { style: { display: 'flex', gap: 6, justifyContent: 'flex-end' }, onClick: e => e.stopPropagation() },
+                  alreadyImported
+                    ? React.createElement('span', { style: { fontSize: 11, color: 'var(--green)', display: 'flex', alignItems: 'center', gap: 4 } },
+                        React.createElement(I, { n: 'check', s: 12, c: 'var(--green)' }), 'Already in dictionary'
+                      )
+                    : React.createElement('button', {
+                        className: 'b-pri b-sm',
+                        onClick: e => {
+                          e.stopPropagation();
+                          onImport({
+                            uri: entry.uri,
+                            key: entry.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, ''),
+                            label: entry.label,
+                            definition: entry.definition,
+                            data_type: entry.data_type || 'text',
+                            category: entry.category || 'general',
+                            tags: entry.tags || [],
+                            source_library: entry.library_name,
+                            source_library_id: entry.library_id
+                          });
+                        }
+                      }, 'Import to Dictionary')
+                )
+              )
+            );
+          })
+        )
+  );
+};
+
 /* ── SchemaWorkbench — top-level tab orchestrator ── */
 const SchemaWorkbench = ({
   isOrg,
@@ -15747,6 +16294,7 @@ const SchemaWorkbench = ({
 
   const tabs = [
     { id: 'dictionary', label: 'Dictionary', icon: 'book', count: Object.keys(fieldDefs || {}).length + VAULT_FIELDS.length },
+    { id: 'uri_libraries', label: 'URI Libraries', icon: 'globe', count: URI_LIBRARIES.length },
     { id: 'forms', label: 'Forms', icon: 'layers', count: allForms.length },
     { id: 'columns', label: 'Columns', icon: 'grid', count: null },
     { id: 'governance', label: 'Governance', icon: 'shieldCheck', count: null }
@@ -15782,6 +16330,34 @@ const SchemaWorkbench = ({
           catColors: catColors || CAT_COLORS,
           catIcons: CAT_ICONS,
           onSaveFieldDef: onSaveFieldDef
+        })
+      ),
+      activeTab === 'uri_libraries' && React.createElement('div', { className: 'sw-canvas-inner' },
+        React.createElement(UriLibrariesTab, {
+          onImport: onSaveFieldDef ? entry => {
+            onSaveFieldDef({
+              uri: entry.uri,
+              key: entry.key,
+              label: entry.label,
+              definition: entry.definition,
+              data_type: entry.data_type || 'text',
+              category: entry.category || 'general',
+              sensitive: false,
+              scope: null,
+              authority: entry.source_library || null,
+              source_library: entry.source_library,
+              source_library_id: entry.source_library_id,
+              version: 1,
+              version_history: [],
+              migration_rules: [],
+              supersedes: null,
+              superseded_by: null,
+              created_by: 'uri_library',
+              created_at: Date.now()
+            });
+            showToast('Imported: ' + entry.label);
+          } : null,
+          fieldDefs: fieldDefs
         })
       ),
       activeTab === 'forms' && React.createElement('div', { className: 'sw-canvas-inner', style: { padding: 0 } },
@@ -26527,10 +27103,195 @@ const EvolveFieldModal = ({ open, onClose, fieldDef, onSaveFieldDef, governanceR
   );
 };
 
+/* ─── UriLibraryBrowser — searchable modal to browse standard URI vocabularies ─── */
+const UriLibraryBrowser = ({ open, onClose, onSelect, mode = 'select' }) => {
+  const [search, setSearch] = useState('');
+  const [selectedLib, setSelectedLib] = useState('all');
+  const [selectedCat, setSelectedCat] = useState('all');
+  const [selectedEntry, setSelectedEntry] = useState(null);
+
+  if (!open) return null;
+
+  const results = searchUriLibraries(search, {
+    libraryId: selectedLib !== 'all' ? selectedLib : undefined,
+    category: selectedCat !== 'all' ? selectedCat : undefined,
+    limit: 80
+  });
+
+  // Gather all categories from current results pool for filter chips
+  const pool = selectedLib !== 'all'
+    ? URI_LIBRARY_INDEX.filter(e => e.library_id === selectedLib)
+    : URI_LIBRARY_INDEX;
+  const categories = [...new Set(pool.map(e => e.category).filter(Boolean))].sort();
+
+  const activeLib = selectedLib !== 'all' ? URI_LIBRARIES.find(l => l.id === selectedLib) : null;
+
+  const typeColor = dt => {
+    const m = { text: 'blue', select: 'teal', date: 'gold', number: 'orange', boolean: 'green',
+      email: 'blue', phone: 'blue', address: 'gold', text_long: 'purple', document: 'orange',
+      single_select: 'teal', multi_select: 'teal', duration: 'gold' };
+    return m[dt] || 'blue';
+  };
+
+  const handleSelect = entry => {
+    if (onSelect) {
+      onSelect({
+        uri: entry.uri,
+        key: entry.label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, ''),
+        label: entry.label,
+        definition: entry.definition,
+        data_type: entry.data_type || 'text',
+        category: entry.category || 'general',
+        tags: entry.tags || [],
+        source_library: entry.library_name,
+        source_library_id: entry.library_id
+      });
+    }
+    onClose();
+  };
+
+  return React.createElement('div', {
+    className: 'uri-browser-overlay',
+    onClick: e => { if (e.target === e.currentTarget) onClose(); }
+  },
+    React.createElement('div', { className: 'uri-browser' },
+      // Header
+      React.createElement('div', { className: 'uri-browser-header' },
+        React.createElement('div', { className: 'uri-browser-header-row' },
+          React.createElement('div', { className: 'uri-browser-title' },
+            React.createElement(I, { n: 'globe', s: 18, c: 'var(--teal)' }),
+            mode === 'link' ? 'Link to Standard URI' : 'Browse URI Libraries'
+          ),
+          React.createElement('button', { className: 'uri-browser-close', onClick: onClose }, '\u2715')
+        ),
+        // Search
+        React.createElement('div', { className: 'uri-browser-search' },
+          React.createElement('span', { className: 'uri-browser-search-icon' },
+            React.createElement(I, { n: 'search', s: 14, c: 'var(--tx-3)' })
+          ),
+          React.createElement('input', {
+            value: search,
+            onChange: e => setSearch(e.target.value),
+            placeholder: 'Search by name, definition, URI, or keyword\u2026',
+            autoFocus: true
+          })
+        ),
+        // Library filter chips
+        React.createElement('div', { className: 'uri-browser-filters' },
+          React.createElement('button', {
+            className: `uri-browser-lib-chip${selectedLib === 'all' ? ' active' : ''}`,
+            onClick: () => { setSelectedLib('all'); setSelectedCat('all'); }
+          }, 'All Libraries'),
+          URI_LIBRARIES.map(lib => React.createElement('button', {
+            key: lib.id,
+            className: `uri-browser-lib-chip${selectedLib === lib.id ? ' active' : ''}`,
+            onClick: () => { setSelectedLib(lib.id); setSelectedCat('all'); }
+          },
+            React.createElement('span', { className: 'uri-browser-lib-dot', style: { background: `var(--${lib.color})` } }),
+            lib.name,
+            React.createElement('span', { style: { fontSize: 9, opacity: .6, fontFamily: 'var(--mono)' } }, lib.entries.length)
+          ))
+        ),
+        // Category chips (contextual to selected library)
+        categories.length > 1 && React.createElement('div', { className: 'uri-browser-cat-chips', style: { marginBottom: 14 } },
+          React.createElement('button', {
+            className: `uri-browser-cat-chip${selectedCat === 'all' ? ' active' : ''}`,
+            onClick: () => setSelectedCat('all')
+          }, 'All'),
+          categories.map(c => React.createElement('button', {
+            key: c,
+            className: `uri-browser-cat-chip${selectedCat === c ? ' active' : ''}`,
+            onClick: () => setSelectedCat(c)
+          }, c))
+        )
+      ),
+      // Body
+      React.createElement('div', { className: 'uri-browser-body' },
+        // Active library info bar
+        activeLib && React.createElement('div', { className: 'uri-browser-lib-info' },
+          React.createElement('div', null,
+            React.createElement('div', { className: 'uri-browser-lib-info-name' }, activeLib.name),
+            React.createElement('div', null, activeLib.description),
+            React.createElement('div', { style: { marginTop: 4, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)' } }, 'Prefix: ', activeLib.prefix)
+          )
+        ),
+        // Results count
+        React.createElement('div', { className: 'uri-browser-results-count' },
+          React.createElement('span', null, results.length, ' ', results.length === 1 ? 'result' : 'results'),
+          search && React.createElement('span', null, ' for "', search, '"')
+        ),
+        // Results grid
+        results.length === 0
+          ? React.createElement('div', { className: 'uri-browser-empty' },
+              React.createElement('div', { className: 'uri-browser-empty-icon' }, React.createElement(I, { n: 'search', s: 28, c: 'var(--tx-3)' })),
+              React.createElement('div', null, search ? `No URIs matching "${search}"` : 'No entries in this category.'),
+              React.createElement('div', { style: { fontSize: 11, marginTop: 4 } }, 'Try a different search term or browse another library.')
+            )
+          : React.createElement('div', { className: 'uri-browser-grid' },
+              results.map(entry => React.createElement('div', {
+                key: entry.uri,
+                className: `uri-browser-entry${selectedEntry === entry.uri ? ' selected' : ''}`,
+                onClick: () => setSelectedEntry(selectedEntry === entry.uri ? null : entry.uri)
+              },
+                // Color dot / icon
+                React.createElement('div', {
+                  className: 'uri-browser-entry-icon',
+                  style: { background: `var(--${entry.library_color}-dim)`, color: `var(--${entry.library_color})` }
+                }, entry.label.charAt(0).toUpperCase()),
+                // Body
+                React.createElement('div', { className: 'uri-browser-entry-body' },
+                  React.createElement('div', { className: 'uri-browser-entry-label' }, entry.label),
+                  React.createElement('div', { className: 'uri-browser-entry-uri' }, entry.uri),
+                  React.createElement('div', { className: 'uri-browser-entry-def' }, entry.definition),
+                  React.createElement('div', { className: 'uri-browser-entry-tags' },
+                    React.createElement('span', {
+                      className: 'uri-browser-entry-lib',
+                      style: { background: `var(--${entry.library_color}-dim)`, color: `var(--${entry.library_color})` }
+                    }, entry.library_name),
+                    React.createElement('span', { className: 'uri-browser-entry-tag' }, entry.category),
+                    (entry.tags || []).slice(0, 3).map(t => React.createElement('span', { key: t, className: 'uri-browser-entry-tag' }, t))
+                  )
+                ),
+                // Right side: type badge + select button
+                React.createElement('div', { className: 'uri-browser-entry-right' },
+                  React.createElement('span', {
+                    className: 'uri-browser-entry-type',
+                    style: { background: `var(--${typeColor(entry.data_type)}-dim)`, color: `var(--${typeColor(entry.data_type)})` }
+                  }, (entry.data_type || 'text').replace('_', ' ')),
+                  React.createElement('button', {
+                    className: 'uri-browser-entry-select',
+                    onClick: e => { e.stopPropagation(); handleSelect(entry); }
+                  }, mode === 'link' ? 'Link' : 'Select')
+                )
+              ))
+            )
+      ),
+      // Footer
+      React.createElement('div', { className: 'uri-browser-footer' },
+        React.createElement('div', { className: 'uri-browser-footer-info' },
+          React.createElement(I, { n: 'globe', s: 11, c: 'var(--tx-3)' }),
+          URI_LIBRARIES.length, ' libraries \u00B7 ', URI_LIBRARY_INDEX.length, ' total definitions'
+        ),
+        React.createElement('div', { className: 'uri-browser-footer-actions' },
+          selectedEntry && React.createElement('button', {
+            className: 'b-pri b-sm',
+            onClick: () => {
+              const entry = URI_LIBRARY_INDEX.find(e => e.uri === selectedEntry);
+              if (entry) handleSelect(entry);
+            }
+          }, mode === 'link' ? 'Link Selected URI' : 'Use Selected URI'),
+          React.createElement('button', { className: 'b-gho b-sm', onClick: onClose }, 'Cancel')
+        )
+      )
+    )
+  );
+};
+
 /* ─── FieldPicker — select a field definition to insert into a form ─── */
 const FieldPicker = ({ open, onClose, onSelect, fieldDefs, catLabels, catColors }) => {
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('all');
+  const [uriBrowserOpen, setUriBrowserOpen] = useState(false);
 
   if (!open) return null;
 
@@ -26544,11 +27305,39 @@ const FieldPicker = ({ open, onClose, onSelect, fieldDefs, catLabels, catColors 
 
   const cats = [...new Set(defs.map(d => d.category).filter(Boolean))];
 
+  const handleUriSelect = entry => {
+    onSelect({
+      uri: entry.uri,
+      key: entry.key,
+      label: entry.label,
+      definition: entry.definition,
+      data_type: entry.data_type || 'text',
+      category: entry.category || 'general',
+      sensitive: false,
+      source_library: entry.source_library
+    });
+    onClose();
+  };
+
   return React.createElement('div', { className: 'fp-overlay', onClick: e => { if (e.target === e.currentTarget) onClose(); } },
     React.createElement('div', { className: 'fp-modal' },
       React.createElement('div', { className: 'fp-header' },
         React.createElement('span', { style: { fontSize: 14, fontWeight: 600 } }, 'Insert from Field Dictionary'),
         React.createElement('button', { className: 'b-gho b-xs', onClick: onClose, style: { fontSize: 14, lineHeight: 1, padding: '2px 8px' } }, '\u2715')
+      ),
+      // URI Library browser button
+      React.createElement('div', {
+        style: { padding: '8px 14px', borderBottom: '1px solid var(--border-0)', display: 'flex', alignItems: 'center', gap: 8 }
+      },
+        React.createElement('button', {
+          className: 'b-gho b-sm',
+          style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--teal)', borderColor: 'var(--teal)', fontSize: 12 },
+          onClick: () => setUriBrowserOpen(true)
+        },
+          React.createElement(I, { n: 'globe', s: 12, c: 'var(--teal)' }),
+          'Browse URI Libraries'
+        ),
+        React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)' } }, 'Schema.org \u00B7 Dublin Core \u00B7 FOAF \u00B7 HMIS \u00B7 vCard \u00B7 FHIR')
       ),
       React.createElement('div', { className: 'fp-search' },
         React.createElement('input', { value: search, onChange: e => setSearch(e.target.value), placeholder: 'Search fields...',  autoFocus: true }),
@@ -26584,7 +27373,14 @@ const FieldPicker = ({ open, onClose, onSelect, fieldDefs, catLabels, catColors 
             )
           ))
       )
-    )
+    ),
+    // URI Library Browser modal (nested)
+    uriBrowserOpen && React.createElement(UriLibraryBrowser, {
+      open: true,
+      onClose: () => setUriBrowserOpen(false),
+      onSelect: handleUriSelect,
+      mode: 'select'
+    })
   );
 };
 
@@ -26620,6 +27416,7 @@ const TeamDetailView = ({
   });
   const [addExistingField, setAddExistingField] = useState(false);
   const [selectedExistingUri, setSelectedExistingUri] = useState('');
+  const [uriBrowserOpen, setUriBrowserOpen] = useState(false);
   // Embedding-based similarity suggestions
   const [similarFields, setSimilarFields] = useState([]);
   const [searchingSimilar, setSearchingSimilar] = useState(false);
@@ -27710,7 +28507,41 @@ const TeamDetailView = ({
       cursor: 'pointer',
       fontSize: 18
     }
-  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
+  }, "\xD7")),
+  // Import from URI Library button
+  React.createElement('div', {
+    style: { marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }
+  },
+    React.createElement('button', {
+      className: 'b-gho b-sm',
+      style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--teal)', borderColor: 'var(--teal)', fontSize: 12 },
+      onClick: () => setUriBrowserOpen(true)
+    },
+      React.createElement(I, { n: 'globe', s: 12, c: 'var(--teal)' }),
+      'Import from URI Library'
+    ),
+    React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)' } }, 'Pre-fill from Schema.org, HMIS, FHIR, etc.')
+  ),
+  // URI Library Browser
+  uriBrowserOpen && React.createElement(UriLibraryBrowser, {
+    open: true,
+    onClose: () => setUriBrowserOpen(false),
+    onSelect: entry => {
+      setFieldDraft(d => ({
+        ...d,
+        key: entry.key,
+        label: entry.label,
+        definition: entry.definition,
+        data_type: entry.data_type || 'text',
+        category: entry.category || d.category,
+        standard_uri: entry.uri,
+        source_library: entry.source_library
+      }));
+      setUriBrowserOpen(false);
+    },
+    mode: 'select'
+  }),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
