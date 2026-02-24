@@ -117,6 +117,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .card-h{background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r-lg);padding:20px;transition:border-color .2s,transform .2s;cursor:pointer}
 .card-h:hover{border-color:var(--gold);transform:translateY(-2px)}
 .section-label{font-size:12px;font-family:var(--mono);color:var(--tx-1);letter-spacing:.07em;font-weight:500;margin-bottom:12px;display:block}
+.app-sidebar .section-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .toggle-track{width:38px;height:20px;border-radius:10px;position:relative;cursor:pointer;transition:background .2s}
 .toggle-track.on{background:var(--green)}.toggle-track.off{background:var(--border-1)}
 .toggle-knob{width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
@@ -184,6 +185,14 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .note-sheet-expand-toggle{display:flex;align-items:center;gap:6px;padding:12px 0;color:var(--tx-2);font-size:13px;cursor:pointer;border:none;background:none;font-family:var(--sans);-webkit-tap-highlight-color:transparent}
 .note-sheet-expand{padding:12px 0;border-top:1px solid var(--border-0);margin-top:4px}
 
+/* ═══ Responsive: tablet sidebar + EO vocab grid ═══ */
+@media(max-width:1100px){
+  .app-sidebar{width:220px!important;min-width:220px!important}
+}
+@media(max-width:900px){
+  .app-sidebar{width:200px!important;min-width:200px!important}
+  .eo-vocab-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))!important}
+}
 @media(max-width:700px){
   .app-sidebar{display:none!important}
   .app-main{padding:14px!important;padding-bottom:calc(70px + var(--safe-b))!important}
@@ -237,6 +246,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
   .pd-grid{grid-template-columns:1fr}
   .inbox-header h2{font-size:18px}
   .note-sheet-body textarea{min-height:50vh}
+  .eo-vocab-grid{grid-template-columns:1fr!important}
 }
 
 /* ═══ GIVEN/MEANT Divide Visualization ═══ */
@@ -1391,6 +1401,9 @@ const I = ({
       fill: "currentColor",
       stroke: "none"
     })),
+    phone: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
+      d: "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+    })),
     mail: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
       d: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
     }), /*#__PURE__*/React.createElement("polyline", {
@@ -1853,6 +1866,11 @@ function extractHomeserver(matrixId) {
   return idx >= 0 ? matrixId.slice(idx + 1) : 'unknown';
 }
 
+// Validate Matrix user ID format: @localpart:server
+function isValidMatrixId(id) {
+  return /^@[^:]+:[^:]+$/.test(id?.trim());
+}
+
 // Emit an EO operation
 // Enriches every event with provenance metadata (created_by, origin_server)
 // and builds provenance chains linking each op to its predecessor on the same entity.
@@ -2178,6 +2196,8 @@ const EVT = {
   ORG_VERIFY_CHALLENGE: `${NS}.org.verification_challenge`,
   // Organization terminology customization
   ORG_TERMINOLOGY: `${NS}.org.terminology`,
+  // Organization custom roles
+  ORG_ROLES: `${NS}.org.roles`,
   // Teams (flexible groups of people, not tied to a single org)
   TEAM_META: `${NS}.team.metadata`,
   TEAM_MEMBERS: `${NS}.team.members`,
@@ -2237,21 +2257,21 @@ const MATURITY_LEVELS = {
     label: 'Draft',
     color: 'blue',
     icon: '🔵',
-    desc: 'Proposed, not yet reviewed'
+    desc: 'This question is proposed \u2014 it hasn\u2019t been formally reviewed yet and may change'
   },
   trial: {
     id: 'trial',
     label: 'Trial',
     color: 'gold',
     icon: '🟡',
-    desc: 'Approved for testing, may change'
+    desc: 'This question is approved for use but still being tested \u2014 it could be updated'
   },
   normative: {
     id: 'normative',
     label: 'Normative',
     color: 'green',
     icon: '🟢',
-    desc: 'Locked, changes require formal process'
+    desc: 'This question is finalized \u2014 it\u2019s the agreed-upon standard across the network'
   },
   de_facto: {
     id: 'de_facto',
@@ -2269,6 +2289,20 @@ const MATURITY_LEVELS = {
   }
 };
 
+/* ═══════════════════ TEAM COLOR UTILITIES ═══════════════════ */
+const randomTeamHue = () => Math.floor(Math.random() * 360);
+const teamColorThemed = (hue, isLight) => {
+  if (hue == null) hue = 260;
+  const l = isLight ? 38 : 55;
+  const s = isLight ? 55 : 65;
+  return {
+    primary: `hsl(${hue}, ${s}%, ${l}%)`,
+    dim: `hsla(${hue}, ${s}%, ${l}%, 0.10)`,
+    border: `hsla(${hue}, ${s}%, ${l}%, 0.15)`,
+    mid: `hsla(${hue}, ${s}%, ${l}%, 0.22)`
+  };
+};
+
 /* ═══════════════════ PROPAGATION LEVELS (MVP §CON Semantics) ═══════════════════ */
 // DES(schema.coupling_strengths, {values: [required, standard, recommended, optional]}) — network_governance
 const PROPAGATION_LEVELS = {
@@ -2276,19 +2310,19 @@ const PROPAGATION_LEVELS = {
     id: 'required',
     label: 'Required',
     color: 'red',
-    desc: 'Tight coupling — auto-applied to orgs, immutable'
+    desc: 'All organizations in the network must use this form \u2014 it can\u2019t be changed locally'
   },
   standard: {
     id: 'standard',
     label: 'Standard',
     color: 'gold',
-    desc: 'Expected coupling — auto-applied, notify on divergence'
+    desc: 'Used by default across the network \u2014 organizations are notified if they diverge'
   },
   recommended: {
     id: 'recommended',
     label: 'Recommended',
     color: 'blue',
-    desc: 'Suggested coupling — org reviews, adopts or ignores'
+    desc: 'Suggested by the network \u2014 each organization decides whether to adopt it'
   },
   optional: {
     id: 'optional',
@@ -3537,7 +3571,7 @@ const DOMAIN_CONFIG = {
     id: 'form_status_engagement',
     name: 'Status & Engagement',
     version: 1,
-    description: 'Core status and engagement tracking for active cases',
+    description: 'Track your current status and any meetings or contacts with your providers',
     maturity: 'normative',
     source: {
       level: 'network',
@@ -3725,7 +3759,7 @@ const DOMAIN_CONFIG = {
     id: 'form_intake',
     name: 'Intake',
     version: 1,
-    description: 'Intake and enrollment event tracking',
+    description: 'Record intake steps like applications, documents, and enrollment',
     maturity: 'trial',
     source: {
       level: 'network',
@@ -3796,7 +3830,7 @@ const DOMAIN_CONFIG = {
     id: 'form_context',
     name: 'Additional Context',
     version: 1,
-    description: 'Supplementary context and situation changes',
+    description: 'Note any changes in your situation or new needs that come up',
     maturity: 'draft',
     source: {
       level: 'local'
@@ -4505,6 +4539,15 @@ const DOMAIN_CONFIG = {
     intake_coordinator: 'Intake Coordinator',
     read_only: 'Read Only'
   },
+  /* ── Default Org Roles (editable by admin, stored in org state) ── */
+  defaultOrgRoles: [
+    { key: 'admin', label: 'Admin', description: 'Full access. Manage team, see all cases, configure schema.', protected: true },
+    { key: 'provider', label: 'Provider (Team Member)', description: 'View aggregate dashboards only. No PII access.' },
+    { key: 'case_manager', label: 'Case Manager', description: 'Assigned cases only. Full read/write on assigned bridges.' },
+    { key: 'field_worker', label: 'Field Worker', description: 'Assigned cases. Record encounters. Limited to own observations.' },
+    { key: 'intake_coordinator', label: 'Intake Coordinator', description: 'Create new bridges. Run intake assessments. Route to case managers.' },
+    { key: 'read_only', label: 'Read Only', description: 'View aggregate dashboards only. No PII access.' }
+  ],
   /* ── Relationship Types ── */
   // Accounts can be connected through multiple relationship kinds.
   // client_provider is the default service relationship in MVP bridge flows.
@@ -4569,7 +4612,9 @@ const DOMAIN_CONFIG = {
     client_term: 'Individual',
     client_term_plural: 'Individuals',
     provider_term: 'Team Member',
-    provider_term_plural: 'Team Members'
+    provider_term_plural: 'Team Members',
+    staff_term: 'Team Member',
+    staff_term_plural: 'Team Members'
   }
 };
 
@@ -8615,7 +8660,7 @@ const Toast = ({
  * Shows user type, org affiliation, and team membership badges.
  * Used in messaging views to clarify who you're talking to.
  * ═══════════════════════════════════════════════════════════ */
-const ConnectionBadges = ({ userType, orgName, orgType, teamName, teamNames, role, verified, size = 'sm' }) => {
+const ConnectionBadges = ({ userType, orgName, orgType, teamName, teamNames, teamColors, role, verified, size = 'sm' }) => {
   const badges = [];
   const sz = size === 'xs' ? 8 : 9;
   const iconSz = size === 'xs' ? 7 : 9;
@@ -8637,11 +8682,19 @@ const ConnectionBadges = ({ userType, orgName, orgType, teamName, teamNames, rol
       verified ? React.createElement(I, { n: "shieldCheck", s: iconSz }) : React.createElement(I, { n: "users", s: iconSz }),
       orgName, orgType ? ` \u00B7 ${ORG_TYPE_LABELS[orgType] || orgType}` : ''));
   }
-  // Team badge(s)
+  // Team badge(s) — use dynamic team color if available
   const allTeams = teamNames || (teamName ? [teamName] : []);
   allTeams.forEach((tn, i) => {
-    badges.push(React.createElement("span", { key: `team-${i}`, className: `conn-badge conn-badge-team`, style: { fontSize: sz } },
-      React.createElement(I, { n: "users", s: iconSz }), tn));
+    const tc = teamColors?.find(c => c.name === tn);
+    const dynamicStyle = tc?.color_hue != null ? {
+      background: `hsla(${tc.color_hue}, 65%, 55%, 0.10)`,
+      color: `hsl(${tc.color_hue}, 65%, 55%)`
+    } : {};
+    badges.push(React.createElement("span", {
+      key: `team-${i}`,
+      className: `conn-badge ${tc?.color_hue != null ? '' : 'conn-badge-team'}`,
+      style: { fontSize: sz, ...dynamicStyle }
+    }, React.createElement(I, { n: "users", s: iconSz }), tn));
   });
   // Role badge (if within an org)
   if (role && orgName) {
@@ -8832,7 +8885,7 @@ const SourceBadge = ({
       fontSize: 9
     },
     title: `${source.propagation}: ${prop?.desc || ''}`
-  }, "Network \xB7 ", prop?.label || source.propagation);
+  }, "Shared \xB7 ", prop?.label || source.propagation);
 };
 
 // Consent gradient — not a vote count, a distribution of positions
@@ -17437,6 +17490,9 @@ const ClientApp = ({
   const [clientSharingConsentModal, setClientSharingConsentModal] = useState(null); // {team} — prompts client team member to choose sharing preference
   const [myResources, setMyResources] = useState([]); // resource vault records from bridges
   const isMobile = useIsMobile();
+  // Contact sharing state
+  const [shareContactModal, setShareContactModal] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
 
   useEffect(() => {
     initVault();
@@ -17454,6 +17510,34 @@ const ClientApp = ({
     }
     return cats;
   }, [customFieldDefs, frameworkFields]);
+
+  // ─── Contact sharing helpers ───
+  const getContactText = () => {
+    const lines = [];
+    if (vaultData.full_name) lines.push(vaultData.full_name);
+    if (vaultData.email) lines.push(vaultData.email);
+    if (vaultData.phone) lines.push(vaultData.phone);
+    lines.push('');
+    lines.push('Khora ID: ' + svc.userId);
+    return lines.join('\n');
+  };
+  const copyContact = async () => {
+    try {
+      await navigator.clipboard.writeText(getContactText());
+      setCopiedField('contact');
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch { showToast('Copy failed — please select and copy manually', 'warn'); }
+  };
+  const shareContactViaEmail = () => {
+    const subject = encodeURIComponent('My contact details');
+    const body = encodeURIComponent(getContactText());
+    window.open('mailto:?subject=' + subject + '&body=' + body, '_self');
+  };
+  const shareContactViaSMS = () => {
+    const body = encodeURIComponent(getContactText());
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    window.open('sms:' + (isIOS ? '&' : '?') + 'body=' + body, '_self');
+  };
 
   // INS(vault.custom_field_def, {user_defined}) — schema_extension — client creates custom vault field
   const handleAddCustomField = async () => {
@@ -17529,12 +17613,14 @@ const ClientApp = ({
     setLoading(true);
     setInitError(null);
     try {
-      // Phase 1: Auto-join any invited client_record rooms so they appear in scanRooms
+      // Phase 1: Auto-join any invited client_record rooms so they appear in scanRooms.
+      // Safety: only join rooms that were explicitly created for this user (client_matrix_id match)
+      // AND have a valid owner set. Rooms are shown as "pending" until the client manually claims them.
       try {
         const invited = await svc.scanInvitedRooms([EVT.IDENTITY]);
         for (const [rid, state] of Object.entries(invited)) {
           const id = state[EVT.IDENTITY];
-          if (id?.account_type === 'client_record' && id.client_matrix_id === svc.userId) {
+          if (id?.account_type === 'client_record' && id.client_matrix_id === svc.userId && id.owner) {
             try {
               await svc.joinRoom(rid);
             } catch (e) {
@@ -17882,6 +17968,14 @@ const ClientApp = ({
   // CON(vault.providers.{id}, {bridge_room, initiated_by: client}) — relationship_establishment + INS(bridge.room, {e2ee, meta, refs}) — secure_channel
   const handleAddProvider = async () => {
     if (!newProviderId.trim()) return;
+    if (!isValidMatrixId(newProviderId)) {
+      showToast('Invalid Matrix ID — use format @user:server', 'error');
+      return;
+    }
+    if (providers.find(p => p.providerUserId === newProviderId.trim())) {
+      showToast('Already connected to this provider', 'info');
+      return;
+    }
     try {
       const bridgeId = await svc.createRoom(`[Khora Bridge] ${svc.userId} ↔ ${newProviderId}`, 'Khora bridge — shared data room', [{
         type: EVT.BRIDGE_META,
@@ -18005,6 +18099,11 @@ const ClientApp = ({
   const handleHardRevoke = async pi => {
     const prov = providers[pi];
     try {
+      // Step 1: Seal old bridge — emit NUL, tombstone, and kick provider BEFORE creating new bridge
+      await emitOp(prov.bridgeRoomId, 'NUL', dot('bridge', 'relationship'), {
+        reason: 'hard_revoke'
+      }, bridgeFrame(prov.bridgeRoomId));
+      // Step 2: Create new bridge with fresh keys
       const newBridgeId = await svc.createRoom(`[Khora Bridge] ${svc.userId} ↔ ${prov.providerUserId}`, 'Khora bridge — replaced', [{
         type: EVT.BRIDGE_META,
         state_key: '',
@@ -18028,16 +18127,15 @@ const ClientApp = ({
           fields: {}
         }
       }]);
-      await emitOp(prov.bridgeRoomId, 'NUL', dot('bridge', 'relationship'), {
-        reason: 'hard_revoke'
-      }, bridgeFrame(prov.bridgeRoomId));
-      const stillShared = Object.fromEntries(Object.entries(prov.sharedFields).filter(([, v]) => v));
-      if (Object.keys(stillShared).length > 0) await syncFieldsToBridge(newBridgeId, stillShared, vaultData);
-      await svc.invite(newBridgeId, prov.providerUserId);
+      // Step 3: Tombstone old bridge (points to new) and kick provider from old
       await svc.tombstone(prov.bridgeRoomId, newBridgeId);
       try {
         await svc.kick(prov.bridgeRoomId, prov.providerUserId, 'Bridge rotated — data revoked');
       } catch {}
+      // Step 4: Sync shared fields to new bridge and invite provider
+      const stillShared = Object.fromEntries(Object.entries(prov.sharedFields).filter(([, v]) => v));
+      if (Object.keys(stillShared).length > 0) await syncFieldsToBridge(newBridgeId, stillShared, vaultData);
+      await svc.invite(newBridgeId, prov.providerUserId);
       await emitOp(newBridgeId, 'CON', dot('bridge', 'connection', prov.providerUserId), {
         relationship: RELATIONSHIP_TYPES.client_provider.id,
         bridge_room: newBridgeId,
@@ -18417,8 +18515,7 @@ const ClientApp = ({
       { id: 'records', icon: 'shield', label: 'My Records', badge: pendingClaims.length, badgeClass: 'nav-badge-gold' },
       { id: 'metrics', icon: 'bar', label: 'Metrics' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
-      { id: 'transparency', icon: 'eye', label: 'Transparency' },
-      { id: 'eo-graph', icon: 'graphNodes', label: 'EO Graph' }
+      { id: 'transparency', icon: 'eye', label: 'Transparency' }
     ],
     onMoreNavigate: id => { setView(id); setActiveBridge(null); }
   },
@@ -18474,12 +18571,21 @@ const ClientApp = ({
       fontSize: 15
     }
   }, "Khora")), /*#__PURE__*/React.createElement("div", {
+    onClick: () => setShareContactModal(true),
     style: {
       display: 'flex',
       alignItems: 'center',
       gap: 6,
-      marginTop: 8
-    }
+      marginTop: 8,
+      padding: '6px 8px',
+      marginLeft: -8,
+      marginRight: -8,
+      borderRadius: 'var(--r)',
+      cursor: 'pointer',
+      transition: 'background .2s'
+    },
+    onMouseEnter: e => e.currentTarget.style.background = 'var(--bg-2)',
+    onMouseLeave: e => e.currentTarget.style.background = 'transparent'
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontFamily: 'var(--mono)',
@@ -18490,7 +18596,7 @@ const ClientApp = ({
       whiteSpace: 'nowrap',
       flex: 1
     }
-  }, svc.userId), /*#__PURE__*/React.createElement("span", {
+  }, svc.userId), /*#__PURE__*/React.createElement(I, { n: "share", s: 12, c: "var(--tx-3)" }), /*#__PURE__*/React.createElement("span", {
     className: "tag tag-teal"
   }, ROLES.client.label.toUpperCase()))),
   /* ─── Mode Toggle (sidebar) ─── */
@@ -18548,10 +18654,6 @@ const ClientApp = ({
     id: 'transparency',
     icon: 'eye',
     label: 'Transparency'
-  }, {
-    id: 'eo-graph',
-    icon: 'graphNodes',
-    label: 'EO Graph'
   }].map(item => /*#__PURE__*/React.createElement("div", {
     key: item.id,
     onClick: () => {
@@ -18687,7 +18789,8 @@ const ClientApp = ({
     style: {
       flex: 1,
       overflow: 'auto',
-      padding: 24
+      padding: 24,
+      minWidth: 0
     }
   }, view === 'dashboard' && !activeBridge && /*#__PURE__*/React.createElement(PersonalDashboard, {
     session: session,
@@ -18993,7 +19096,7 @@ const ClientApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Structured observations \u2014 the thermometer readings. What happened, not what it means."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, "Record what\u2019s happening in your own words. These are your self-reports \u2014 simple check-ins that help your providers stay in the loop."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     roomId: vaultRoom,
     encrypted: true,
@@ -19014,7 +19117,7 @@ const ClientApp = ({
       color: 'var(--tx-2)',
       marginBottom: 12
     }
-  }, "Choose a form field to record what you observed. Each observation is an immutable GIVEN event in your vault."), DEFAULT_FORMS.map(f => /*#__PURE__*/React.createElement("div", {
+  }, "Pick a question below to record something that happened. Your answers are stored privately in your encrypted vault \u2014 only you decide who sees them."), DEFAULT_FORMS.map(f => /*#__PURE__*/React.createElement("div", {
     key: f.id,
     style: {
       marginBottom: 12
@@ -19036,10 +19139,25 @@ const ClientApp = ({
     maturity: f.maturity
   }), f.source && /*#__PURE__*/React.createElement(SourceBadge, {
     source: f.source
-  })), /*#__PURE__*/React.createElement("div", {
+  })), f.description && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 11,
+      color: 'var(--tx-2)',
+      lineHeight: 1.5,
+      marginBottom: 2,
+      marginTop: 2
+    }
+  }, f.description), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 10,
+      color: 'var(--tx-3)',
+      fontStyle: 'italic',
+      marginBottom: 6
+    }
+  }, f.source?.level === 'network' ? "This form was set up by your care network and shared to all member organizations." : "This form was created locally by your organization."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))',
+      gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))',
       gap: 8
     }
   }, f.fields.map(p => /*#__PURE__*/React.createElement("div", {
@@ -19813,7 +19931,7 @@ const ClientApp = ({
   }, "Not part of any teams yet. Teams are created by ", ROLES.provider.label.toLowerCase(), "s to collaborate.")) : /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill,minmax(250px,1fr))',
+      gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))',
       gap: 10
     }
   }, myTeams.map(team => {
@@ -20551,7 +20669,7 @@ const ClientApp = ({
     s: 14
   }), "New Conversation"), clientTeamMemberContacts.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setNewTeamDMModal(true),
-    className: "b-gho",
+    className: "b-gho b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 6 }
   }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "New DM"))), myTeams.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "tabs",
@@ -21216,9 +21334,44 @@ const ClientApp = ({
     session: session
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  }), view === 'eo-graph' && !activeBridge && /*#__PURE__*/React.createElement(EOGraphView, {
-    onBack: () => setView('dashboard')
   })), /*#__PURE__*/React.createElement(Modal, {
+    open: shareContactModal,
+    onClose: () => setShareContactModal(false),
+    title: "Share My Details",
+    w: 400
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-lg)', padding: '14px 16px', marginBottom: 16 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 15, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 4 }
+  }, vaultData.full_name || svc.userId?.split(':')[0]?.replace('@', '') || 'Anonymous'),
+  vaultData.email && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: 'var(--tx-1)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }
+  }, /*#__PURE__*/React.createElement(I, { n: "mail", s: 12, c: "var(--tx-2)" }), vaultData.email),
+  vaultData.phone && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: 'var(--tx-1)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }
+  }, /*#__PURE__*/React.createElement(I, { n: "phone", s: 12, c: "var(--tx-2)" }), vaultData.phone),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginTop: 6 }
+  }, svc.userId)),
+  !vaultData.full_name && !vaultData.email && !vaultData.phone && /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 11, color: 'var(--tx-2)', fontStyle: 'italic', marginBottom: 12 }
+  }, "Add your name, email, or phone in My Vault to include them when sharing."),
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 8 }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: copyContact,
+    style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', cursor: 'pointer', color: copiedField === 'contact' ? 'var(--green)' : 'var(--tx-1)', fontSize: 12, fontWeight: 600, transition: 'all .2s' }
+  }, /*#__PURE__*/React.createElement(I, { n: copiedField === 'contact' ? "check" : "copy", s: 14 }), copiedField === 'contact' ? 'Copied!' : 'Copy'),
+  /*#__PURE__*/React.createElement("button", {
+    onClick: shareContactViaSMS,
+    style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--tx-1)', fontSize: 12, fontWeight: 600, transition: 'all .2s' }
+  }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "Text"),
+  /*#__PURE__*/React.createElement("button", {
+    onClick: shareContactViaEmail,
+    style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--tx-1)', fontSize: 12, fontWeight: 600, transition: 'all .2s' }
+  }, /*#__PURE__*/React.createElement(I, { n: "mail", s: 14 }), "Email"))),
+
+  /*#__PURE__*/React.createElement(Modal, {
     open: editModal,
     onClose: () => setEditModal(false),
     title: "Edit Vault Data",
@@ -22419,7 +22572,7 @@ const IndividualPanel = ({
       op: "INS"
     }), " in the ", /*#__PURE__*/React.createElement("strong", null, "bridge room"), " \u2192 encrypted via Megolm + per-field AES-256-GCM \u2192 client + provider can read. Internal notes emit ", /*#__PURE__*/React.createElement(DtEo, {
       op: "INS"
-    }), " in the ", /*#__PURE__*/React.createElement("strong", null, "roster room"), " \u2192 only org staff can read."));
+    }), " in the ", /*#__PURE__*/React.createElement("strong", null, "roster room"), " \u2192 only org team members can read."));
   })()), panelTab === 'allocations' && /*#__PURE__*/React.createElement(React.Fragment, null, indAllocs.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '40px 0',
@@ -22807,7 +22960,8 @@ const NoteCreateModal = ({
   onSave,
   showToast,
   T,
-  initialAttachTo
+  initialAttachTo,
+  teamContext
 }) => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -22837,7 +22991,7 @@ const NoteCreateModal = ({
   if (!open) return null;
   const allPeople = [...(staff || []).map(s => ({
     userId: s.userId,
-    displayName: s.display_name || s.userId?.split(':')[0]?.replace('@', '') || 'Staff'
+    displayName: s.display_name || s.userId?.split(':')[0]?.replace('@', '') || T.staff_term
   })), ...(individuals || []).map(ind => ({
     userId: ind._case?.clientUserId || ind.id,
     displayName: ind.name || 'Unknown'
@@ -22854,7 +23008,8 @@ const NoteCreateModal = ({
       author: svc.userId,
       created: Date.now(),
       updated: Date.now(),
-      tombstoned: false
+      tombstoned: false,
+      ...(teamContext ? { team_id: teamContext.roomId, team_name: teamContext.name } : {})
     };
     try {
       const targetRoom = attachTo || rosterRoom;
@@ -23551,7 +23706,7 @@ const DatabaseView = ({
     v: allIndividuals.filter(i => i.status === 'active').length,
     c: 'green'
   }, {
-    l: 'Staff',
+    l: T.staff_term_plural,
     v: (staff || []).length || '—',
     c: 'blue'
   }, {
@@ -24938,6 +25093,8 @@ const TeamDetailView = ({
   fieldDefs,
   fieldCrosswalks,
   showToast,
+  teamMode,
+  onSwitchTeam,
   onBack,
   onInvite,
   onUpdateTeam,
@@ -25338,7 +25495,48 @@ const TeamDetailView = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: tab.icon,
     s: 13
-  }), tab.label))), teamTab === 'overview' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }), tab.label))), teamTab === 'overview' && /*#__PURE__*/React.createElement("div", null, isLead && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: '16px 20px',
+      marginBottom: 12,
+      borderLeft: team.color_hue != null ? `3px solid hsl(${team.color_hue}, 65%, 55%)` : undefined
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "TEAM COLOR"), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+      background: `hsl(${team.color_hue != null ? team.color_hue : 260}, 65%, 55%)`
+    }
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "range", min: 0, max: 360, value: team.color_hue != null ? team.color_hue : 260,
+    onChange: async (e) => {
+      const hue = parseInt(e.target.value);
+      const updatedMeta = { name: team.name, description: team.description, color_hue: hue, created: team.created, created_by: team.created_by, org_id: team.org_id, org_name: team.org_name };
+      await svc.setState(team.roomId, EVT.TEAM_META, updatedMeta);
+      onUpdateTeam({ ...team, color_hue: hue });
+    },
+    style: { flex: 1, accentColor: `hsl(${team.color_hue != null ? team.color_hue : 260}, 65%, 55%)` }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', minWidth: 30 }
+  }, team.color_hue != null ? team.color_hue : 260, "\u00B0"))), onSwitchTeam && /*#__PURE__*/React.createElement("button", {
+    onClick: () => onSwitchTeam(teamMode?.roomId === team.roomId ? null : team.roomId),
+    className: teamMode?.roomId === team.roomId ? "b-pri b-sm" : "b-gho b-sm",
+    style: {
+      marginBottom: 12,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      width: '100%',
+      justifyContent: 'center'
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: teamMode?.roomId === team.roomId ? "check" : "users",
+    s: 13
+  }), teamMode?.roomId === team.roomId ? "Operating as This Team" : "Operate as This Team"), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: '16px 20px',
@@ -26809,7 +27007,7 @@ const IndividualProfilePage = ({
     members: [
       ...(individual._case?.meta?.client ? [{ userId: individual._case.meta.client, role: 'client (sovereign owner)' }] : []),
       ...(individual._case?.meta?.provider ? [{ userId: individual._case.meta.provider, role: 'provider' }] : []),
-      ...((individual._case?.meta?.assigned_staff || []).filter(s => s !== individual._case?.meta?.provider).map(s => ({ userId: s, role: 'assigned staff' })))
+      ...((individual._case?.meta?.assigned_staff || []).filter(s => s !== individual._case?.meta?.provider).map(s => ({ userId: s, role: 'assigned ' + T.staff_term.toLowerCase() })))
     ],
     extra: [
       { label: 'Record type', value: 'Individual profile stored in a shared bridge room' },
@@ -27371,7 +27569,7 @@ const DashboardOverview = ({
     c: 'teal',
     i: 'shield'
   }, {
-    l: 'Staff',
+    l: T.staff_term_plural,
     v: (staff || []).length || '—',
     c: 'blue',
     i: 'briefcase'
@@ -27795,7 +27993,7 @@ const IndividualsView = ({
     v: cases.length,
     c: 'gold'
   }, {
-    l: 'Staff',
+    l: T.staff_term_plural,
     v: staff.length || '—',
     c: 'blue'
   }, {
@@ -28202,9 +28400,11 @@ const ProviderApp = ({
   onLogout,
   showToast,
   availableContexts,
-  activeContext,
+  activeMode,
   onSwitchContext
 }) => {
+  const { theme: appTheme } = useTheme();
+  const isLightTheme = appTheme === 'light';
   const [rosterRoom, setRosterRoom] = useState(null);
   const [metricsRoom, setMetricsRoom] = useState(null);
   const [schemaRoom, setSchemaRoom] = useState(null);
@@ -28304,6 +28504,7 @@ const ProviderApp = ({
       setView('dashboard');
     }
   }, [teams]);
+  const [teamMode, setTeamMode] = useState(null); // null = individual mode, { roomId, name, color_hue } = operating as team
   // Field definitions & crosswalks
   const [fieldDefs, setFieldDefs] = useState({}); // uri → definition object
   const [fieldCrosswalks, setFieldCrosswalks] = useState([]); // crosswalk records
@@ -28320,6 +28521,8 @@ const ProviderApp = ({
   const [activeResourceProfile, setActiveResourceProfile] = useState(null); // resource row for profile page
   const cellEditTimerRef = useRef({}); // debounce timers for cell edits
   const isMobile = useIsMobile();
+  // Memoized team colors list for badge rendering
+  const teamColorsList = useMemo(() => teams.map(t => ({ name: t.name, color_hue: t.color_hue })), [teams]);
   // Provider profile — self-reported identity info
   const [providerProfile, setProviderProfile] = useState({});
   const [profileModal, setProfileModal] = useState(false);
@@ -28330,6 +28533,9 @@ const ProviderApp = ({
     bio: '',
     service_types: ''
   });
+  // Contact sharing state
+  const [shareContactModal, setShareContactModal] = useState(false);
+  const [shareAsOrg, setShareAsOrg] = useState(false);
   // Email verification state
   const [emailVerifyConfig, setEmailVerifyConfig] = useState(EmailVerification.defaultConfig());
   const [emailVerifyModal, setEmailVerifyModal] = useState(false);
@@ -28368,7 +28574,16 @@ const ProviderApp = ({
   });
   const [terminologyModal, setTerminologyModal] = useState(false);
   // Convenience accessors for the active terminology
-  const T = orgTerminology; // T.client_term, T.client_term_plural, T.provider_term, T.provider_term_plural
+  const T = orgTerminology; // T.client_term, T.client_term_plural, T.provider_term, T.provider_term_plural, T.staff_term, T.staff_term_plural
+  // ─── Org custom roles ───
+  const [orgRolesConfig, setOrgRolesConfig] = useState(DOMAIN_CONFIG.defaultOrgRoles);
+  const [editingRole, setEditingRole] = useState(null); // {key, label, description} being edited
+  const [addRoleModal, setAddRoleModal] = useState(false);
+  const [newRoleDraft, setNewRoleDraft] = useState({ label: '', description: '' });
+  // Derived role accessors — used in place of static ORG_ROLES / ORG_ROLE_LABELS
+  const activeOrgRoles = orgRolesConfig.map(r => r.key);
+  const activeOrgRoleLabels = Object.fromEntries(orgRolesConfig.map(r => [r.key, r.label]));
+  const activeOrgRoleDescs = Object.fromEntries(orgRolesConfig.map(r => [r.key, r.description]));
   // ─── Inbox chat state ───
   const [inboxConvo, setInboxConvo] = useState(null); // room ID of active inbox conversation
   const [inboxMessages, setInboxMessages] = useState([]);
@@ -28470,6 +28685,26 @@ const ProviderApp = ({
     setActiveChannel(null);
     setChannelMessages([]);
   }, [allOrgs, orgRoom]);
+
+  // ─── Team mode switching ───
+  const switchTeam = React.useCallback((targetRoomId) => {
+    if (!targetRoomId) {
+      setTeamMode(null);
+      try { localStorage.removeItem('khora_active_team'); } catch {}
+      return;
+    }
+    const target = teams.find(t => t.roomId === targetRoomId);
+    if (!target) return;
+    const mode = { roomId: target.roomId, name: target.name, color_hue: target.color_hue };
+    setTeamMode(mode);
+    try { localStorage.setItem('khora_active_team', JSON.stringify({ roomId: target.roomId })); } catch {}
+  }, [teams]);
+
+  // Helper: active context for tagging actions with team/org
+  const activeContext = () => ({
+    ...(teamMode ? { team_id: teamMode.roomId, team_name: teamMode.name } : {}),
+    ...(orgRoom ? { org_id: orgRoom, org_name: orgMeta.name } : {})
+  });
 
   // Notification helpers
   const addNotification = notif => {
@@ -28588,14 +28823,15 @@ const ProviderApp = ({
     type: 'org',
     room: room || orgRoom,
     role: orgRole || 'admin',
-    epistemic: 'MEANT'
+    epistemic: 'MEANT',
+    ...(teamMode ? { team_id: teamMode.roomId, team_name: teamMode.name } : {})
   });
   const initProvider = async () => {
     setLoading(true);
     setInitError(null);
     try {
       // Single-pass scan: fetch all Khora state across rooms in one request
-      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK, EVT.DM_META]);
+      const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.ORG_ROLES, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK, EVT.DM_META]);
       let roster = null,
         metricsR = null,
         schema = null,
@@ -28755,6 +28991,16 @@ const ProviderApp = ({
           if (i % 3 === 2) await new Promise(r => setTimeout(r, 200));
         }
       }
+      // Fallback: if metrics/schema not found by owner, check org metadata for linked room IDs
+      if (detectedOrgs.length > 0) {
+        const activeOrg = detectedOrgs[0];
+        if (!metricsR && activeOrg.meta?.metrics_room) {
+          metricsR = activeOrg.meta.metrics_room;
+        }
+        if (!schema && activeOrg.meta?.schema_room) {
+          schema = activeOrg.meta.schema_room;
+        }
+      }
       setRosterRoom(roster);
       setMetricsRoom(metricsR);
       setSchemaRoom(schema);
@@ -28800,6 +29046,10 @@ const ProviderApp = ({
           setOrgTerminology(t);
           setTerminologyDraft(t);
         }
+        // Load org custom roles
+        if (orgState?.[EVT.ORG_ROLES]?.roles) {
+          setOrgRolesConfig(orgState[EVT.ORG_ROLES].roles);
+        }
         // Load detected org messaging channels
         if (detectedOrgChannels.length > 0) setOrgChannels(detectedOrgChannels);
         // Load case assignments from org room
@@ -28812,6 +29062,14 @@ const ProviderApp = ({
       }
       // Load teams detected during scan
       if (detectedTeams.length > 0) setTeams(detectedTeams);
+      // Restore team mode from localStorage
+      try {
+        const savedTeamId = JSON.parse(localStorage.getItem('khora_active_team') || 'null')?.roomId;
+        if (savedTeamId) {
+          const savedTeam = detectedTeams.find(t => t.roomId === savedTeamId);
+          if (savedTeam) setTeamMode({ roomId: savedTeam.roomId, name: savedTeam.name, color_hue: savedTeam.color_hue });
+        }
+      } catch {}
       // Detect existing team member DM rooms from scan
       const detectedDMs = [];
       for (const [rid, state] of Object.entries(scanned)) {
@@ -29068,7 +29326,7 @@ const ProviderApp = ({
           quantity: content.quantity || 1,
           unit: content.unit || 'unit',
           status: content.status || 'active',
-          allocatedBy: (content.allocated_by || '').split(':')[0]?.replace('@', '') || 'Staff',
+          allocatedBy: (content.allocated_by || '').split(':')[0]?.replace('@', '') || T.staff_term,
           org: 'Organization',
           at: content.allocated_at || e.getTs(),
           expiresAt: content.expires_at || null,
@@ -29253,7 +29511,7 @@ const ProviderApp = ({
       showToast(`${selectedRows.length} individual(s) removed`, 'success');
     } else if (actionId === 'assign') {
       const staffList = (staff || []).map(s => s.display_name || s.userId?.split(':')[0]?.replace('@', '') || s.userId);
-      const staffName = window.prompt('Assign to staff member' + (staffList.length > 0 ? ' (' + staffList.join(', ') + ')' : '') + ':');
+      const staffName = window.prompt('Assign to ' + T.staff_term.toLowerCase() + (staffList.length > 0 ? ' (' + staffList.join(', ') + ')' : '') + ':');
       if (!staffName) return;
       for (const rowId of selectedRows) {
         try {
@@ -29488,7 +29746,8 @@ const ProviderApp = ({
       author: svc.userId,
       ts: Date.now(),
       created_by: svc.userId,
-      origin_server: extractHomeserver(svc.userId)
+      origin_server: extractHomeserver(svc.userId),
+      ...(teamMode ? { team_id: teamMode.roomId, team_name: teamMode.name } : {})
     };
     await svc.sendEvent(activeCase, EVT.OBSERVATION, obs);
     await emitOp(activeCase, 'INS', dot('bridge', 'observations', provObsModal.key), {
@@ -29584,8 +29843,9 @@ const ProviderApp = ({
           origin_server: extractHomeserver(svc.userId)
         });
       } catch (e) {
-        // Provider may not have state permission — update org assignment instead
-        console.warn('Bridge meta update:', e.message);
+        // Expected: provider may not have bridge state permission (client has PL 100).
+        // Org-side ROSTER_ASSIGN is the authoritative record for case assignments.
+        console.warn('Bridge meta update (expected if client controls bridge):', e.message);
       }
       // Step 3: Update ROSTER_ASSIGN in org room
       const updatedAssignments = {
@@ -29614,6 +29874,15 @@ const ProviderApp = ({
         reason: 'org_transfer',
         initiated_by: svc.userId
       }, orgFrame());
+      // Step 5: Remove old provider from bridge room to revoke access
+      if (c.meta.provider !== transferTarget) {
+        try {
+          await svc.kick(c.bridgeRoomId, c.meta.provider, 'Case transferred to new provider');
+        } catch (e) {
+          // May fail if we lack kick permission (client has PL 100) — log but don't block
+          console.warn('Old provider kick during transfer:', e.message);
+        }
+      }
       setTransferModal(null);
       setTransferTarget('');
       showToast(`Case transferred to ${targetStaff.userId}`, 'success');
@@ -29700,13 +29969,17 @@ const ProviderApp = ({
   };
   const handleClientInvite = async () => {
     if (!clientInviteModal || !clientInviteMatrixId.trim()) return;
+    if (!isValidMatrixId(clientInviteMatrixId)) {
+      showToast('Invalid Matrix ID — use format @user:server', 'error');
+      return;
+    }
     try {
       const clientId = clientInviteMatrixId.trim();
-      // Set power levels: client gets PL 100 (superadmin), provider stays at 50
+      // Set client PL 100, invite, THEN demote self to PL 50.
+      // Order matters: if invite fails after self-demotion, no one has admin.
       await svc.setPowerLevel(clientInviteModal.roomId, clientId, 100);
-      await svc.setPowerLevel(clientInviteModal.roomId, svc.userId, 50);
-      // Invite the client
       await svc.invite(clientInviteModal.roomId, clientId);
+      await svc.setPowerLevel(clientInviteModal.roomId, svc.userId, 50);
       // Update identity state with the client's Matrix ID
       await svc.setState(clientInviteModal.roomId, EVT.IDENTITY, {
         ...clientInviteModal,
@@ -29732,6 +30005,7 @@ const ProviderApp = ({
   const handleCreateTeam = async () => {
     if (!newTeamName.trim()) return;
     try {
+      const teamHue = randomTeamHue();
       // Default team schema: identity + contact fields from vault
       const defaultSchemaFields = DOMAIN_CONFIG.vaultFields.filter(f => f.category === 'identity' || f.category === 'contact').map(f => ({
         uri: f.uri,
@@ -29752,6 +30026,7 @@ const ProviderApp = ({
         content: {
           name: newTeamName,
           description: newTeamDesc || '',
+          color_hue: teamHue,
           created: Date.now(),
           created_by: svc.userId,
           org_id: orgRoom || null,
@@ -29802,6 +30077,7 @@ const ProviderApp = ({
         roomId,
         name: newTeamName,
         description: newTeamDesc || '',
+        color_hue: teamHue,
         created: Date.now(),
         created_by: svc.userId,
         org_id: orgRoom || null,
@@ -29835,8 +30111,16 @@ const ProviderApp = ({
   };
   const handleTeamInvite = async () => {
     if (!teamInviteModal || !teamInviteUserId.trim()) return;
+    if (!isValidMatrixId(teamInviteUserId)) {
+      showToast('Invalid Matrix ID — use format @user:server', 'error');
+      return;
+    }
     try {
       const uid = teamInviteUserId.trim();
+      // Warn if invitee is not an org member (cross-org teams are allowed but noteworthy)
+      if (orgRoom && staff.length > 0 && !staff.find(s => s.userId === uid)) {
+        showToast(`Note: ${uid} is not a member of your organization`, 'info');
+      }
       // Invite user to the team room
       if (svc.client) await svc.client.invite(teamInviteModal.roomId, uid);else await svc._api('POST', `/rooms/${encodeURIComponent(teamInviteModal.roomId)}/invite`, {
         user_id: uid
@@ -29945,6 +30229,39 @@ const ProviderApp = ({
     }
   };
 
+  // ─── Contact sharing helpers ───
+  const getContactText = (asOrg) => {
+    const lines = [];
+    const name = providerProfile.display_name || svc.userId?.split(':')[0]?.replace('@', '');
+    if (name) lines.push(name);
+    if (asOrg && providerProfile.title) lines.push(providerProfile.title);
+    if (asOrg && orgMeta?.name) lines.push(orgMeta.name);
+    if (asOrg && providerProfile.credentials) lines.push(providerProfile.credentials);
+    if (asOrg && myVerification?.status === 'verified' && myVerification.email) {
+      lines.push(myVerification.email);
+    }
+    lines.push('');
+    lines.push('Khora ID: ' + svc.userId);
+    return lines.join('\n');
+  };
+  const copyContact = async () => {
+    try {
+      await navigator.clipboard.writeText(getContactText(shareAsOrg));
+      setCopiedField('contact');
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch { showToast('Copy failed — please select and copy manually', 'warn'); }
+  };
+  const shareContactViaEmail = () => {
+    const subject = encodeURIComponent('My contact details');
+    const body = encodeURIComponent(getContactText(shareAsOrg));
+    window.open('mailto:?subject=' + subject + '&body=' + body, '_self');
+  };
+  const shareContactViaSMS = () => {
+    const body = encodeURIComponent(getContactText(shareAsOrg));
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    window.open('sms:' + (isIOS ? '&' : '?') + 'body=' + body, '_self');
+  };
+
   // ─── Import completion handler ───
   const handleImportComplete = importResults => {
     const newRecords = importResults.created.map(r => ({
@@ -29963,7 +30280,7 @@ const ProviderApp = ({
   const getSetupInstructions = roomId => {
     const hs = svc._baseUrl ? svc._baseUrl.replace(/^https?:\/\//, '') : 'matrix.org';
     const link = getInviteUrl(roomId);
-    return `You've been invited to securely manage your information on Khora.\n\nTo get started:\n\n1. Create a free Matrix account:\n   Go to https://${hs} and click "Create Account"\n   (Matrix is a secure, decentralized messaging protocol — your data stays on the server you choose)\n\n2. Download a Matrix client (optional):\n   Web: https://app.element.io\n   Mobile: Search "Element" in your app store\n   Or use any Matrix-compatible app\n\n3. Sign in with your new account\n\n4. Click this link to join your room:\n   ${link}\n\n5. You will have full control of this room — you can remove anyone from it at any time.\n\nQuestions? Contact your provider for help getting set up.`;
+    return `You've been invited to securely manage your information on Khora.\n\nTo get started:\n\n1. Create a free Matrix account:\n   Go to https://${hs} and click "Create Account"\n   (Matrix is a secure, decentralized messaging protocol — your data stays on the server you choose)\n\n2. Download a Matrix client (optional):\n   Web: https://app.element.io\n   Mobile: Search "Element" in your app store\n   Or use any Matrix-compatible app\n\n3. Sign in with your new account\n\n4. Accept the room invitation:\n   The invite should appear automatically in your Matrix client.\n   You can also open this link: ${link}\n   (Note: this is a private room — the invite must be accepted from the account specified above)\n\n5. You will have full control of this room — you can remove anyone from it at any time.\n\nQuestions? Contact your provider for help getting set up.`;
   };
 
   // Discover client by Matrix ID
@@ -30091,13 +30408,33 @@ const ProviderApp = ({
       } else {
         await svc._api('POST', `/join/${encodeURIComponent(joinNetworkId)}`, {});
       }
+      // Add this org to the network members list
+      try {
+        const currentMembers = await svc.getState(joinNetworkId, EVT.NET_MEMBERS);
+        const orgs = currentMembers?.organizations || [];
+        if (!orgs.find(o => o.id === orgRoom)) {
+          orgs.push({ id: orgRoom, name: orgMeta.name || '', joined: Date.now(), role: 'member' });
+          await svc.setState(joinNetworkId, EVT.NET_MEMBERS, { ...currentMembers, organizations: orgs });
+        }
+        await emitOp(joinNetworkId, 'CON', dot('network', 'org', orgRoom), {
+          action: 'join',
+          org_name: orgMeta.name || '',
+          joined_by: svc.userId
+        }, networkFrame(joinNetworkId));
+      } catch (e) {
+        console.warn('Network members update:', e.message);
+      }
       setNetworkRoom(joinNetworkId);
       await loadNetworkMembers(joinNetworkId);
       setJoinNetworkModal(false);
       setJoinNetworkId('');
       showToast('Joined network', 'success');
     } catch (e) {
-      showToast('Failed to join: ' + e.message, 'error');
+      if (e.message?.includes('forbidden') || e.message?.includes('not invited')) {
+        showToast('Cannot join — you must be invited by a network admin first', 'error');
+      } else {
+        showToast('Failed to join: ' + e.message, 'error');
+      }
     }
   };
 
@@ -30457,6 +30794,12 @@ const ProviderApp = ({
           }]
         }
       }, {
+        type: EVT.ORG_ROLES,
+        state_key: '',
+        content: {
+          roles: DOMAIN_CONFIG.defaultOrgRoles
+        }
+      }, {
         type: EVT.ROSTER_ASSIGN,
         state_key: '',
         content: {}
@@ -30536,6 +30879,20 @@ const ProviderApp = ({
         id: 'transform_default',
         transforms: DEFAULT_TRANSFORMS
       }, 'default');
+      // Link supporting room IDs back to the org so other members can discover them
+      try {
+        await svc.setState(org, EVT.ORG_METADATA, {
+          name: setupData.name,
+          type: setupData.type,
+          service_area: setupData.service_area,
+          languages: setupData.languages.split(',').map(s => s.trim()),
+          created: Date.now(),
+          metrics_room: orgMetricsR,
+          schema_room: orgSchema
+        });
+      } catch (e) {
+        console.warn('Org metadata linkage:', e.message);
+      }
     } catch (e) {
       showToast('Error creating org: ' + e.message, 'error');
     }
@@ -30551,22 +30908,46 @@ const ProviderApp = ({
       // Load the org metadata
       const meta = await svc.getState(joinOrgId, EVT.ORG_METADATA);
       const roster = await svc.getState(joinOrgId, EVT.ORG_ROSTER);
-      const entry = roster?.staff?.find(s => s.userId === svc.userId);
+      let entry = roster?.staff?.find(s => s.userId === svc.userId);
+      // Add user to roster if not already present (pending admin role assignment)
+      if (!entry) {
+        const staffList = roster?.staff || [];
+        entry = { userId: svc.userId, role: 'pending', joined: Date.now() };
+        staffList.push(entry);
+        try {
+          await svc.setState(joinOrgId, EVT.ORG_ROSTER, { staff: staffList });
+          await emitOp(joinOrgId, 'CON', dot('org', 'staff', svc.userId), {
+            action: 'join_request',
+            role: 'pending'
+          }, orgFrame(joinOrgId));
+        } catch (e) {
+          console.warn('Roster self-add:', e.message);
+        }
+      }
       setOrgRoom(joinOrgId);
-      setOrgRole(entry?.role || 'read_only');
+      setOrgRole(entry?.role || 'pending');
       if (meta) setOrgMeta(meta);
-      if (roster?.staff) setStaff(roster.staff);
+      const updatedRoster = await svc.getState(joinOrgId, EVT.ORG_ROSTER);
+      if (updatedRoster?.staff) setStaff(updatedRoster.staff);
       setJoinOrgModal(false);
       setJoinOrgId('');
       showToast(`Joined organization${meta?.name ? ' "' + meta.name + '"' : ''}`, 'success');
     } catch (e) {
-      showToast('Failed to join org: ' + e.message, 'error');
+      if (e.message?.includes('forbidden') || e.message?.includes('not invited')) {
+        showToast('Cannot join — you must be invited by an org admin first. Share your Matrix ID with them.', 'error');
+      } else {
+        showToast('Failed to join org: ' + e.message, 'error');
+      }
     }
   };
 
   // CON(org.staff.{userId}, {invitation}) — staff_onboarding — invites user and adds to roster
   const handleInviteStaff = async () => {
     if (!inviteUserId.trim() || !orgRoom) return;
+    if (!isValidMatrixId(inviteUserId)) {
+      showToast('Invalid Matrix ID — use format @user:server', 'error');
+      return;
+    }
     try {
       await svc.invite(orgRoom, inviteUserId);
       const newStaff = [...staff, {
@@ -30585,7 +30966,7 @@ const ProviderApp = ({
       setStaff(newStaff);
       setInviteModal(false);
       setInviteUserId('');
-      showToast(`Invited ${inviteUserId} as ${ORG_ROLE_LABELS[inviteRole]}`, 'success');
+      showToast(`Invited ${inviteUserId} as ${activeOrgRoleLabels[inviteRole]}`, 'success');
     } catch (e) {
       showToast('Invite failed: ' + e.message, 'error');
     }
@@ -30807,16 +31188,13 @@ const ProviderApp = ({
         updated_by: svc.userId
       }, orgFrame());
       setProviderProfile(profile);
-      // Broadcast profile to all bridge rooms so clients can see provider identity
-      for (const c of cases) {
-        try {
-          await svc.setState(c.bridgeRoomId, EVT.PROVIDER_PROFILE, profile);
-        } catch (e) {
-          console.warn('Profile broadcast failed for bridge', c.bridgeRoomId, e.message);
-        }
-      }
       setProfileModal(false);
-      showToast('Profile updated — broadcast to all bridges', 'success');
+      showToast('Profile saved', 'success');
+      // Background sync to bridges — non-blocking
+      for (const c of cases) {
+        svc.setState(c.bridgeRoomId, EVT.PROVIDER_PROFILE, profile)
+          .catch(e => console.warn('Profile sync to bridge failed', c.bridgeRoomId, e.message));
+      }
     } catch (e) {
       showToast('Failed to save profile: ' + e.message, 'error');
     }
@@ -30841,6 +31219,22 @@ const ProviderApp = ({
     const allowed = orgMsgAccess[action] || [];
     return allowed.includes(orgRole);
   }, [orgRole, orgMsgAccess]);
+
+  // Build opacity-aware envelope for inter-org messages.
+  // transparent: reveals org room ID, org name, sender ID, sender name
+  // translucent: reveals org name only (not room ID or sender identity)
+  // opaque: reveals nothing about the sender org
+  const buildOpacityEnvelope = useCallback(() => ({
+    [`${NS}.type`]: 'org_message',
+    [`${NS}.envelope`]: {
+      opacity: orgOpacity,
+      org_room_id: orgOpacity === 'transparent' ? orgRoom : undefined,
+      org_name: orgOpacity !== 'opaque' ? orgMeta.name || undefined : undefined,
+      sender_id: orgOpacity === 'transparent' ? svc.userId : undefined,
+      sender_name: orgOpacity === 'transparent' ? providerProfile.display_name || undefined : undefined,
+      ts: Date.now()
+    }
+  }), [orgOpacity, orgRoom, orgMeta.name, providerProfile.display_name]);
 
   // Save opacity setting (admin only)
   const handleSaveOpacity = async level => {
@@ -30901,6 +31295,7 @@ const ProviderApp = ({
       await emitOp(orgRoom, 'ALT', dot('org', 'terminology', 'terms'), {
         client_term: terminologyDraft.client_term,
         provider_term: terminologyDraft.provider_term,
+        staff_term: terminologyDraft.staff_term,
         changed_by: svc.userId
       }, orgFrame());
       showToast('Terminology updated', 'success');
@@ -30914,6 +31309,53 @@ const ProviderApp = ({
     setTerminologyDraft({
       ...TERMINOLOGY_DEFAULTS
     });
+  };
+
+  // Save org custom roles (admin only)
+  const handleSaveOrgRoles = async (roles) => {
+    if (!orgRoom || orgRole !== 'admin') return;
+    try {
+      await svc.setState(orgRoom, EVT.ORG_ROLES, { roles, updated: Date.now(), updated_by: svc.userId });
+      setOrgRolesConfig(roles);
+      await emitOp(orgRoom, 'ALT', dot('org', 'roles', 'config'), { role_count: roles.length, changed_by: svc.userId }, orgFrame());
+      showToast('Roles updated', 'success');
+    } catch (e) {
+      showToast('Failed to update roles: ' + e.message, 'error');
+    }
+  };
+
+  // Delete an org role (admin only, not the protected admin role)
+  const handleDeleteRole = async (roleKey) => {
+    if (!orgRoom || orgRole !== 'admin') return;
+    const role = orgRolesConfig.find(r => r.key === roleKey);
+    if (role?.protected) { showToast('Cannot delete the Admin role', 'warn'); return; }
+    const usersWithRole = staff.filter(s => s.role === roleKey);
+    if (usersWithRole.length > 0) {
+      showToast(`Cannot delete role — ${usersWithRole.length} ${usersWithRole.length === 1 ? 'member has' : 'members have'} this role. Reassign them first.`, 'warn');
+      return;
+    }
+    const updated = orgRolesConfig.filter(r => r.key !== roleKey);
+    await handleSaveOrgRoles(updated);
+  };
+
+  // Add a new custom org role
+  const handleAddRole = async () => {
+    if (!newRoleDraft.label.trim()) return;
+    let key = newRoleDraft.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    // Ensure uniqueness
+    while (orgRolesConfig.some(r => r.key === key)) { key += '_1'; }
+    const updated = [...orgRolesConfig, { key, label: newRoleDraft.label.trim(), description: newRoleDraft.description.trim() || 'Custom role.' }];
+    await handleSaveOrgRoles(updated);
+    setNewRoleDraft({ label: '', description: '' });
+    setAddRoleModal(false);
+  };
+
+  // Save edits to an existing role (label/description)
+  const handleSaveRoleEdit = async () => {
+    if (!editingRole) return;
+    const updated = orgRolesConfig.map(r => r.key === editingRole.key ? { ...r, label: editingRole.label.trim(), description: editingRole.description.trim() } : r);
+    await handleSaveOrgRoles(updated);
+    setEditingRole(null);
   };
 
   // Create org-to-org messaging channel
@@ -30951,11 +31393,28 @@ const ProviderApp = ({
           created_by: svc.userId
         }
       }]);
-      // Invite the peer org room members (the channel inherits access from org rooms)
+      // Invite eligible staff from the peer org (not the room ID — Matrix can't invite rooms)
       try {
-        await svc.invite(channelRoom, peerOrgId);
+        const peerRoster = await svc.getState(peerOrgId, EVT.ORG_ROSTER);
+        const peerStaff = peerRoster?.staff || [];
+        const peerMsgAccess = await svc.getState(peerOrgId, EVT.ORG_MSG_ACCESS);
+        const readRoles = peerMsgAccess?.read || ['admin', 'case_manager'];
+        let invited = 0;
+        for (const s of peerStaff.filter(s => readRoles.includes(s.role))) {
+          try { await svc.invite(channelRoom, s.userId); invited++; } catch {}
+        }
+        if (invited === 0 && peerStaff.length > 0) {
+          // Fallback: invite all staff if no role-filtered matches
+          for (const s of peerStaff) {
+            try { await svc.invite(channelRoom, s.userId); invited++; } catch {}
+          }
+        }
+        if (invited === 0) {
+          showToast('Channel created but could not invite peer org staff — they may need to join manually', 'warn');
+        }
       } catch (e) {
-        console.warn('Peer invite:', e.message);
+        console.warn('Peer org staff invite:', e.message);
+        showToast('Channel created but peer org roster not readable — share the channel ID with them', 'warn');
       }
       await emitOp(channelRoom, 'INS', dot('org', 'channels', 'channel'), {
         from_org: orgRoom,
@@ -30998,18 +31457,7 @@ const ProviderApp = ({
       return;
     }
     try {
-      // Build opacity envelope: what the receiving org sees depends on our opacity setting
-      const envelope = {
-        [`${NS}.type`]: 'org_message',
-        [`${NS}.envelope`]: {
-          opacity: orgOpacity,
-          org_room_id: orgOpacity === 'opaque' ? undefined : orgRoom,
-          org_name: orgOpacity === 'opaque' ? undefined : orgMeta.name || undefined,
-          sender_id: orgOpacity === 'transparent' ? svc.userId : undefined,
-          sender_name: orgOpacity === 'transparent' ? providerProfile.display_name || undefined : undefined,
-          ts: Date.now()
-        }
-      };
+      const envelope = buildOpacityEnvelope();
       await svc.sendMessage(activeChannel, orgMsgText, envelope);
       await emitOp(activeChannel, 'INS', dot('org', 'messages', 'org_message'), {
         opacity: orgOpacity,
@@ -31080,17 +31528,7 @@ const ProviderApp = ({
         showToast('You do not have permission to send org messages', 'warn');
         return;
       }
-      const envelope = {
-        [`${NS}.type`]: 'org_message',
-        [`${NS}.envelope`]: {
-          opacity: orgOpacity,
-          org_room_id: orgOpacity === 'opaque' ? undefined : orgRoom,
-          org_name: orgOpacity === 'opaque' ? undefined : orgMeta.name || undefined,
-          sender_id: orgOpacity === 'transparent' ? svc.userId : undefined,
-          sender_name: orgOpacity === 'transparent' ? providerProfile.display_name || undefined : undefined,
-          ts: Date.now()
-        }
-      };
+      const envelope = buildOpacityEnvelope();
       await svc.sendMessage(inboxConvo, inboxMsgText, envelope);
       await emitOp(inboxConvo, 'INS', dot('org', 'messages', 'org_message'), {
         opacity: orgOpacity,
@@ -31314,7 +31752,6 @@ const ProviderApp = ({
       { id: 'metrics', icon: 'bar', label: 'Metrics' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' },
-      { id: 'eo-graph', icon: 'graphNodes', label: 'EO Graph' },
       ...(orgRoom ? [{ id: 'org-settings', icon: 'briefcase', label: 'Organization' }] : [])
     ],
     onMoreNavigate: id => { setView(id); setActiveCase(null); setActiveIndividual(null); setActiveResourceProfile(null); }
@@ -31322,7 +31759,7 @@ const ProviderApp = ({
     availableContexts && availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", { style: { padding: '8px 0', borderTop: '1px solid var(--border-0)', marginTop: 8, display: 'flex', gap: 4 } },
       [{id:'provider',label:ROLES.provider.label,icon:'briefcase'},{id:'client',label:ROLES.client.label,icon:'shield'}].filter(opt => availableContexts.includes(opt.id)).map(opt => /*#__PURE__*/React.createElement("button", {
         key: opt.id, onClick: () => onSwitchContext(opt.id),
-        className: activeContext === opt.id ? 'b-pri b-xs' : 'b-gho b-xs',
+        className: activeMode === opt.id ? 'b-pri b-xs' : 'b-gho b-xs',
         style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 'var(--r)', fontSize: 11 }
       }, /*#__PURE__*/React.createElement(I, { n: opt.icon, s: 11 }), opt.label))
     ),
@@ -31353,7 +31790,7 @@ const ProviderApp = ({
       minWidth: 260,
       height: '100%',
       background: 'var(--bg-1)',
-      borderRight: '1px solid var(--border-0)',
+      borderRight: teamMode ? `2px solid ${teamColorThemed(teamMode.color_hue, isLightTheme).primary}` : '1px solid var(--border-0)',
       display: 'flex',
       flexDirection: 'column'
     }
@@ -31391,7 +31828,7 @@ const ProviderApp = ({
     onDismiss: n => setNotifications(prev => prev.filter(x => x.id !== n.id)),
     onDismissAll: handleDismissAllNotifs
   })), /*#__PURE__*/React.createElement("div", {
-    onClick: openProfileModal,
+    onClick: () => setShareContactModal(true),
     style: {
       marginTop: 10,
       padding: '10px 12px',
@@ -31484,7 +31921,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       fontFamily: 'var(--mono)'
     }
-  }, ORG_ROLE_LABELS[orgRole] || orgRole, " \xB7 ", ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type)), myVerification?.status === 'verified' ? /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[orgRole] || orgRole, " \xB7 ", ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type)), myVerification?.status === 'verified' ? /*#__PURE__*/React.createElement("span", {
     className: "tag tag-green",
     style: {
       fontSize: 7.5,
@@ -31497,7 +31934,7 @@ const ProviderApp = ({
       padding: '1px 5px',
       cursor: 'pointer'
     },
-    onClick: openEmailVerifyModal
+    onClick: e => { e.stopPropagation(); openEmailVerifyModal(); }
   }, "UNVERIFIED") : /*#__PURE__*/React.createElement("span", {
     className: "tag tag-green",
     style: {
@@ -31567,7 +32004,7 @@ const ProviderApp = ({
   }, [{id:'provider',label:ROLES.provider.label,icon:'briefcase'},{id:'client',label:ROLES.client.label,icon:'shield'}].filter(opt => availableContexts.includes(opt.id)).map(opt => /*#__PURE__*/React.createElement("button", {
     key: opt.id,
     onClick: () => onSwitchContext(opt.id),
-    className: activeContext === opt.id ? 'b-pri b-xs' : 'b-gho b-xs',
+    className: activeMode === opt.id ? 'b-pri b-xs' : 'b-gho b-xs',
     style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 'var(--r)', fontSize: 11 }
   }, /*#__PURE__*/React.createElement(I, { n: opt.icon, s: 11 }), opt.label))),
   /* ─── Team Context Switcher (sidebar) ─── */
@@ -31637,10 +32074,6 @@ const ProviderApp = ({
       id: 'transparency',
       icon: 'eye',
       label: 'Transparency'
-    }, {
-      id: 'eo-graph',
-      icon: 'graphNodes',
-      label: 'EO Graph'
     }].map(item => /*#__PURE__*/React.createElement("div", {
       key: item.id,
       onClick: () => {
@@ -31751,7 +32184,7 @@ const ProviderApp = ({
   }, {
     id: 'staff',
     icon: 'users',
-    label: 'Staff'
+    label: T.staff_term_plural
   }, {
     id: 'network',
     icon: 'globe',
@@ -31957,12 +32390,15 @@ const ProviderApp = ({
     style: {
       flex: 1,
       overflow: 'auto',
-      padding: 0
+      padding: 0,
+      minWidth: 0
     }
   }, orgRoom && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '8px 20px',
-      background: 'var(--blue-dim)',
+      background: 'linear-gradient(var(--bg-1), var(--bg-1)), linear-gradient(var(--blue-dim), var(--blue-dim))',
+      backdropFilter: 'blur(8px)',
+      WebkitBackdropFilter: 'blur(8px)',
       borderBottom: '1px solid rgba(91,156,245,.15)',
       display: 'flex',
       alignItems: 'center',
@@ -31993,7 +32429,7 @@ const ProviderApp = ({
     style: {
       fontSize: 8
     }
-  }, ORG_ROLE_LABELS[orgRole] || orgRole), /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoleLabels[orgRole] || orgRole), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1
     }
@@ -32014,7 +32450,66 @@ const ProviderApp = ({
   }, allOrgs.map(o => /*#__PURE__*/React.createElement("option", {
     key: o.roomId,
     value: o.roomId
-  }, o.meta?.name || o.roomId)))), /*#__PURE__*/React.createElement("div", {
+  }, o.meta?.name || o.roomId)))), teamMode && (() => {
+    const tc = teamColorThemed(teamMode.color_hue, isLightTheme);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '6px 20px',
+        background: tc.dim,
+        borderBottom: `1px solid ${tc.border}`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        minHeight: 34,
+        position: 'sticky',
+        top: orgRoom ? 40 : 0,
+        zIndex: 4
+      }
+    }, /*#__PURE__*/React.createElement(I, {
+      n: "users",
+      s: 14,
+      c: tc.primary
+    }), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 700,
+        fontSize: 12.5,
+        color: tc.primary,
+        fontFamily: 'var(--serif)'
+      }
+    }, teamMode.name), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: tc.primary,
+        opacity: 0.7,
+        fontFamily: 'var(--mono)',
+        letterSpacing: '.06em',
+        fontWeight: 600
+      }
+    }, "TEAM MODE"), /*#__PURE__*/React.createElement("div", {
+      style: { flex: 1 }
+    }), teams.length > 1 && /*#__PURE__*/React.createElement("select", {
+      value: teamMode.roomId,
+      onChange: e => switchTeam(e.target.value),
+      style: {
+        background: 'var(--bg-2)',
+        color: 'var(--tx-0)',
+        border: `1px solid ${tc.border}`,
+        borderRadius: 'var(--r)',
+        padding: '3px 8px',
+        fontSize: 10,
+        fontFamily: 'var(--sans)',
+        cursor: 'pointer',
+        outline: 'none'
+      }
+    }, teams.map(t => /*#__PURE__*/React.createElement("option", {
+      key: t.roomId,
+      value: t.roomId
+    }, t.name))), /*#__PURE__*/React.createElement("button", {
+      onClick: () => switchTeam(null),
+      className: "b-gho b-xs",
+      style: { fontSize: 10, padding: '3px 10px' }
+    }, "Individual Mode"));
+  })(), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 24
     }
@@ -32076,7 +32571,7 @@ const ProviderApp = ({
     openEmailVerifyModal: openEmailVerifyModal,
     orgChannels: orgChannels,
     ORG_TYPE_LABELS: ORG_TYPE_LABELS,
-    ORG_ROLE_LABELS: ORG_ROLE_LABELS,
+    ORG_ROLE_LABELS: activeOrgRoleLabels,
     notes: activeTeamObj ? dbNotes.filter(n => activeTeamMemberIds.includes(n.by || n.author)) : dbNotes,
     onNewNote: () => {
       setNewNoteAttachTo(null);
@@ -32183,7 +32678,8 @@ const ProviderApp = ({
     onSave: handleNoteSave,
     showToast: showToast,
     T: T,
-    initialAttachTo: newNoteAttachTo
+    initialAttachTo: newNoteAttachTo,
+    teamContext: teamMode
   }), /*#__PURE__*/React.createElement(Modal, {
     open: !!noteDetailModal,
     onClose: () => setNoteDetailModal(null),
@@ -32276,7 +32772,8 @@ const ProviderApp = ({
     onSave: handleNoteSave,
     showToast: showToast,
     T: T,
-    initialAttachTo: newNoteAttachTo
+    initialAttachTo: newNoteAttachTo,
+    teamContext: teamMode
   })), view === 'resource-profile' && activeResourceProfile && /*#__PURE__*/React.createElement(ResourceProfilePage, {
     resource: activeResourceProfile,
     allocations: allAllocations,
@@ -32323,7 +32820,7 @@ const ProviderApp = ({
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setDiscoverModal(true),
-    className: "b-gho",
+    className: "b-gho b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -32334,7 +32831,7 @@ const ProviderApp = ({
     s: 14
   }), "Find Client"), orgRoom && hasOrgMsgPermission('read') && /*#__PURE__*/React.createElement("button", {
     onClick: () => setComposeOrgModal(true),
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -32345,7 +32842,7 @@ const ProviderApp = ({
     s: 14
   }), "New Channel"), teamMemberContacts.length > 0 && /*#__PURE__*/React.createElement("button", {
     onClick: () => setNewTeamDMModal(true),
-    className: "b-gho",
+    className: "b-gho b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 6 }
   }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "New DM"))), (orgRoom && hasOrgMsgPermission('read') || teams.length > 0) && /*#__PURE__*/React.createElement("div", {
     className: "tabs",
@@ -32477,6 +32974,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(ConnectionBadges, {
     userType: "client",
     teamName: (() => { const t = teams.find(t => (t.members || []).some(m => m.userId === c.clientUserId)); return t?.name || null; })(),
+    teamColors: teamColorsList,
     size: "xs"
   }), /*#__PURE__*/React.createElement("span", {
     className: "tag tag-green",
@@ -32621,6 +33119,7 @@ const ProviderApp = ({
           userType: dm.peerType || 'provider',
           orgName: dm.orgName,
           teamName: dm.teamName,
+          teamColors: teamColorsList,
           size: "xs"
         }))))))))), /*#__PURE__*/React.createElement("div", {
     className: "inbox-chat"
@@ -32677,6 +33176,7 @@ const ProviderApp = ({
     }), "E2EE"), convoType === 'case' && /*#__PURE__*/React.createElement(ConnectionBadges, {
       userType: "client",
       teamName: caseData ? (() => { const t = teams.find(t => (t.members || []).some(m => m.userId === caseData.clientUserId)); return t?.name || null; })() : null,
+      teamColors: teamColorsList,
       size: "xs"
     }), convoType === 'case' && caseData && /*#__PURE__*/React.createElement("span", {
       style: {
@@ -32692,6 +33192,7 @@ const ProviderApp = ({
       userType: dmData.peerType || 'provider',
       orgName: dmData.orgName,
       teamName: dmData.teamName,
+      teamColors: teamColorsList,
       size: "xs"
     }))), convoType === 'case' && /*#__PURE__*/React.createElement("button", {
       onClick: () => openCase(inboxConvo),
@@ -32932,7 +33433,7 @@ const ProviderApp = ({
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setImportModal(true),
-    className: "b-gho",
+    className: "b-gho b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -32948,7 +33449,7 @@ const ProviderApp = ({
       setNewClientMatrixId('');
       setNewClientNotes('');
     },
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -33235,7 +33736,7 @@ const ProviderApp = ({
       setNewTeamName('');
       setNewTeamDesc('');
     },
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -33319,7 +33820,7 @@ const ProviderApp = ({
   }, "Create a team to collaborate with people across your organization or beyond.")) : /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))',
+      gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))',
       gap: 10
     }
   }, teams.map(team => /*#__PURE__*/React.createElement("div", {
@@ -33328,13 +33829,14 @@ const ProviderApp = ({
     style: {
       padding: 0,
       overflow: 'hidden',
-      cursor: 'pointer'
+      cursor: 'pointer',
+      borderLeft: team.color_hue != null ? `3px solid hsl(${team.color_hue}, 65%, 55%)` : undefined
     },
     onClick: () => { setActiveTeamDetail(team); setActiveTeamContext(team.roomId); try { localStorage.setItem('khora_active_team', team.roomId); } catch {} }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '14px 18px',
-      borderBottom: '1px solid var(--border-0)'
+      borderBottom: team.color_hue != null ? `1px solid hsla(${team.color_hue}, 65%, 55%, 0.15)` : '1px solid var(--border-0)'
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -33363,7 +33865,18 @@ const ProviderApp = ({
     style: {
       fontSize: 8
     }
-  }, team.org_name))), team.description && /*#__PURE__*/React.createElement("p", {
+  }, team.org_name), teamMode?.roomId === team.roomId && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 8,
+      padding: '3px 10px',
+      borderRadius: 14,
+      fontWeight: 600,
+      fontFamily: 'var(--mono)',
+      letterSpacing: '.03em',
+      background: `hsla(${team.color_hue || 260}, 65%, 55%, 0.10)`,
+      color: `hsl(${team.color_hue || 260}, 65%, 55%)`
+    }
+  }, "ACTIVE"))), team.description && /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 11.5,
       color: 'var(--tx-2)',
@@ -33565,13 +34078,15 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.6
     }
-  }, /*#__PURE__*/React.createElement("strong", null, "Teams are flexible."), " They can include anyone \u2014 staff from your org, people from other orgs, or unaffiliated individuals. Teams are now governed by their own schema \u2014 click a team to view and manage its data definitions."))), view === 'teams' && !activeCase && activeTeamDetail && /*#__PURE__*/React.createElement(TeamDetailView, {
+  }, /*#__PURE__*/React.createElement("strong", null, "Teams are flexible."), " They can include anyone \u2014 ", T.staff_term_plural.toLowerCase(), " from your org, people from other orgs, or unaffiliated individuals. Teams are now governed by their own schema \u2014 click a team to view and manage its data definitions."))), view === 'teams' && !activeCase && activeTeamDetail && /*#__PURE__*/React.createElement(TeamDetailView, {
     team: activeTeamDetail,
     teams: teams,
     svc: svc,
     fieldDefs: fieldDefs,
     fieldCrosswalks: fieldCrosswalks,
     showToast: showToast,
+    teamMode: teamMode,
+    onSwitchTeam: switchTeam,
     onBack: () => setActiveTeamDetail(null),
     onInvite: team => {
       setTeamInviteModal(team);
@@ -33683,8 +34198,8 @@ const ProviderApp = ({
     encrypted: true,
     encLabel: "Megolm E2EE + AES-256-GCM at rest",
     label: "Case / Bridge Room",
-    members: [{ userId: activeCaseData.clientUserId, role: 'client (room owner)' }, { userId: activeCaseData.meta?.provider || svc.userId, role: 'provider' }, ...(activeCaseData.meta?.assigned_staff || []).filter(s => s !== activeCaseData.meta?.provider).map(s => ({ userId: s, role: 'assigned staff' }))],
-    extra: [{ label: 'Ownership', value: 'The client owns this bridge room (power level 100). Shared data is encrypted and only visible to room members.' }, { label: 'Transfer status', value: activeCaseData.transferable ? 'Transferable \u2014 case can be reassigned to another staff member' : 'Transfer locked \u2014 only the current provider can access' }]
+    members: [{ userId: activeCaseData.clientUserId, role: 'client (room owner)' }, { userId: activeCaseData.meta?.provider || svc.userId, role: 'provider' }, ...(activeCaseData.meta?.assigned_staff || []).filter(s => s !== activeCaseData.meta?.provider).map(s => ({ userId: s, role: 'assigned ' + T.staff_term.toLowerCase() }))],
+    extra: [{ label: 'Ownership', value: 'The client owns this bridge room (power level 100). Shared data is encrypted and only visible to room members.' }, { label: 'Transfer status', value: activeCaseData.transferable ? 'Transferable \u2014 case can be reassigned to another ' + T.staff_term.toLowerCase() : 'Transfer locked \u2014 only the current provider can access' }]
   })), orgRoom && (orgRole === 'admin' || orgRole === 'case_manager') && staff.length > 1 && /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       setTransferModal(activeCaseData);
@@ -33732,7 +34247,7 @@ const ProviderApp = ({
         fontSize: 10,
         color: 'var(--tx-2)'
       }
-    }, "+", assignment.staff.length - 1, " additional staff with access"), assignment?.transferred_from && /*#__PURE__*/React.createElement("span", {
+    }, "+", assignment.staff.length - 1, " additional ", T.staff_term_plural.toLowerCase(), " with access"), assignment?.transferred_from && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 9.5,
         color: 'var(--tx-2)',
@@ -34790,7 +35305,7 @@ const ProviderApp = ({
     encLabel: "Megolm E2EE",
     label: "Org Settings",
     members: staff.map(s => ({ userId: s.userId, role: s.role })),
-    extra: [{ label: 'Org room', value: 'Organization metadata, roster, opacity settings, terminology, and email verification config are stored as state events in this shared org room.' }, { label: 'Access', value: 'All org staff members can read. Only admins can modify settings.' }]
+    extra: [{ label: 'Org room', value: 'Organization metadata, roster, opacity settings, terminology, and email verification config are stored as state events in this shared org room.' }, { label: 'Access', value: 'All org ' + T.staff_term_plural.toLowerCase() + ' can read. Only admins can modify settings.' }]
   }), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
@@ -34818,7 +35333,7 @@ const ProviderApp = ({
     l: 'Languages',
     v: (orgMeta.languages || []).join(', ') || '—'
   }, {
-    l: 'Staff',
+    l: T.staff_term_plural,
     v: `${staff.length} members`
   }, {
     l: 'Room',
@@ -34860,7 +35375,7 @@ const ProviderApp = ({
     style: {
       marginBottom: 0
     }
-  }, "TERMINOLOGY"), (T.client_term !== 'Client' || T.provider_term !== 'Provider') && /*#__PURE__*/React.createElement("span", {
+  }, "TERMINOLOGY"), (T.client_term !== 'Client' || T.provider_term !== 'Provider' || T.staff_term !== 'Team Member') && /*#__PURE__*/React.createElement("span", {
     className: "tag tag-gold",
     style: {
       fontSize: 8
@@ -34888,7 +35403,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Customize what your organization calls its service recipients and service providers. These terms appear throughout the interface for all staff in your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Customize what your organization calls its service recipients and service providers. These terms appear throughout the interface for all ", T.staff_term_plural.toLowerCase(), " in your organization."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -34944,7 +35459,7 @@ const ProviderApp = ({
       fontSize: 11,
       color: 'var(--tx-2)'
     }
-  }, "Plural: ", T.provider_term_plural))), (T.client_term !== 'Client' || T.provider_term !== 'Provider') && /*#__PURE__*/React.createElement("div", {
+  }, "Plural: ", T.provider_term_plural))), (T.client_term !== 'Client' || T.provider_term !== 'Provider' || T.staff_term !== 'Team Member') && /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 10,
       padding: '8px 12px',
@@ -34960,7 +35475,7 @@ const ProviderApp = ({
     n: "alert",
     s: 12,
     c: "var(--gold)"
-  }), "Custom terminology active \u2014 staff will see \"", T.client_term, "\" and \"", T.provider_term, "\" instead of the defaults.")), /*#__PURE__*/React.createElement("div", {
+  }), "Custom terminology active \u2014 ", T.staff_term_plural.toLowerCase(), " will see \"", T.client_term, "\" and \"", T.provider_term, "\" instead of the defaults.")), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
@@ -35060,7 +35575,7 @@ const ProviderApp = ({
       lineHeight: 1.5,
       marginLeft: 18
     }
-  }, OPACITY_DESCRIPTIONS[level]), /*#__PURE__*/React.createElement("div", {
+  }, (OPACITY_DESCRIPTIONS[level] || '').replace(/staff member/gi, T.staff_term.toLowerCase())), /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8,
       marginLeft: 18,
@@ -35132,7 +35647,7 @@ const ProviderApp = ({
       marginBottom: 12,
       lineHeight: 1.6
     }
-  }, "Control which staff roles can read and respond to messages sent to your organization from other organizations."), /*#__PURE__*/React.createElement("div", {
+  }, "Control which ", T.staff_term_plural.toLowerCase(), " roles can read and respond to messages sent to your organization from other organizations."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -35164,7 +35679,7 @@ const ProviderApp = ({
     style: {
       fontSize: 9
     }
-  }, ORG_ROLE_LABELS[r] || r)), (!orgMsgAccess.read || orgMsgAccess.read.length === 0) && /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[r] || r)), (!orgMsgAccess.read || orgMsgAccess.read.length === 0) && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: 'var(--tx-3)',
@@ -35196,7 +35711,7 @@ const ProviderApp = ({
     style: {
       fontSize: 9
     }
-  }, ORG_ROLE_LABELS[r] || r)), (!orgMsgAccess.respond || orgMsgAccess.respond.length === 0) && /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[r] || r)), (!orgMsgAccess.respond || orgMsgAccess.respond.length === 0) && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: 'var(--tx-3)',
@@ -35405,7 +35920,7 @@ const ProviderApp = ({
       lineHeight: 1.6,
       marginBottom: 8
     }
-  }, "Staff members must verify their identity via email before accessing cases. Verification confirms they control an email address at an approved domain."), emailVerifyConfig.required_domains?.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, T.staff_term_plural, " must verify their identity via email before accessing cases. Verification confirms they control an email address at an approved domain."), emailVerifyConfig.required_domains?.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 8
     }
@@ -35451,7 +35966,7 @@ const ProviderApp = ({
     style: {
       fontSize: 9
     }
-  }, ORG_ROLE_LABELS[r] || r)))), /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoleLabels[r] || r)))), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       color: 'var(--tx-3)'
@@ -35462,7 +35977,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       lineHeight: 1.6
     }
-  }, "Email verification is disabled. Enable it to require staff members to confirm their identity with an organization email address before accessing cases."))), view === 'staff' && orgRoom && /*#__PURE__*/React.createElement("div", {
+  }, "Email verification is disabled. Enable it to require ", T.staff_term_plural.toLowerCase(), " to confirm their identity with an organization email address before accessing cases."))), view === 'staff' && orgRoom && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
     style: {
       maxWidth: 820,
@@ -35481,23 +35996,23 @@ const ProviderApp = ({
       fontSize: 22,
       fontWeight: 700
     }
-  }, "Staff Roster"), /*#__PURE__*/React.createElement("p", {
+  }, T.staff_term_plural, " Roster"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Manage staff membership and roles. Each role determines case access level."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, "Manage ", T.staff_term_plural.toLowerCase(), " membership and roles. Each role determines case access level."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     roomId: orgRoom,
     encrypted: true,
     encLabel: "Megolm E2EE",
-    label: "Staff Roster",
+    label: T.staff_term_plural + ' Roster',
     members: staff.map(s => ({ userId: s.userId, role: s.role })),
-    extra: [{ label: 'Storage', value: 'Staff roster is stored as a state event in the shared organization room. All org members can read the roster; only admins can modify it.' }]
+    extra: [{ label: 'Storage', value: T.staff_term_plural + ' roster is stored as a state event in the shared organization room. All org members can read the roster; only admins can modify it.' }]
   })), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setInviteModal(true),
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -35506,40 +36021,107 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "plus",
     s: 14
-  }), "Invite Staff")), /*#__PURE__*/React.createElement("div", {
+  }), "Invite ", T.staff_term)), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
     }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "ROLE DEFINITIONS"), /*#__PURE__*/React.createElement("div", {
+  }, "ROLE DEFINITIONS"), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAddRoleModal(true),
+    className: "b-gho b-xs",
+    style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 10 }), "Add Role")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
       gap: 8,
       marginTop: 6
     }
-  }, ORG_ROLES.map(r => /*#__PURE__*/React.createElement("div", {
-    key: r,
+  }, orgRolesConfig.map(rc => /*#__PURE__*/React.createElement("div", {
+    key: rc.key,
     style: {
       padding: '8px 12px',
       background: 'var(--bg-3)',
-      borderRadius: 'var(--r)'
+      borderRadius: 'var(--r)',
+      position: 'relative'
     }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "tag tag-blue",
-    style: {
-      fontSize: 9,
-      marginBottom: 4
-    }
-  }, ORG_ROLE_LABELS[r]), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 10.5,
-      color: 'var(--tx-2)',
-      marginTop: 2
-    }
-  }, r === 'admin' ? 'Full access. Manage staff, see all cases, configure schema.' : r === 'case_manager' ? 'Assigned cases only. Full read/write on assigned bridges.' : r === 'field_worker' ? 'Assigned cases. Record encounters. Limited to own observations.' : r === 'intake_coordinator' ? 'Create new bridges. Run intake assessments. Route to case managers.' : 'View aggregate dashboards only. No PII access.'))))), /*#__PURE__*/React.createElement("div", {
+  }, editingRole?.key === rc.key ? /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+    /*#__PURE__*/React.createElement("input", {
+      value: editingRole.label,
+      onChange: e => setEditingRole({ ...editingRole, label: e.target.value }),
+      style: { fontSize: 11, padding: '4px 6px' },
+      placeholder: "Role name"
+    }),
+    /*#__PURE__*/React.createElement("input", {
+      value: editingRole.description,
+      onChange: e => setEditingRole({ ...editingRole, description: e.target.value }),
+      style: { fontSize: 10, padding: '4px 6px' },
+      placeholder: "Description"
+    }),
+    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 4 } },
+      /*#__PURE__*/React.createElement("button", {
+        onClick: handleSaveRoleEdit,
+        className: "b-pri b-xs",
+        style: { fontSize: 9 }
+      }, "Save"),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setEditingRole(null),
+        className: "b-gho b-xs",
+        style: { fontSize: 9 }
+      }, "Cancel"))
+  ) : /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+      /*#__PURE__*/React.createElement("span", {
+        className: `tag ${rc.protected ? 'tag-gold' : 'tag-blue'}`,
+        style: { fontSize: 9, marginBottom: 4 }
+      }, rc.label),
+      orgRole === 'admin' && /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 2 } },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => setEditingRole({ key: rc.key, label: rc.label, description: rc.description }),
+          className: "b-gho b-xs",
+          title: "Edit role",
+          style: { padding: 2, lineHeight: 1 }
+        }, /*#__PURE__*/React.createElement(I, { n: "edit", s: 10 })),
+        !rc.protected && /*#__PURE__*/React.createElement("button", {
+          onClick: () => handleDeleteRole(rc.key),
+          className: "b-gho b-xs",
+          title: "Delete role",
+          style: { padding: 2, lineHeight: 1, color: 'var(--red)' }
+        }, /*#__PURE__*/React.createElement(I, { n: "trash", s: 10 })))),
+    /*#__PURE__*/React.createElement("p", {
+      style: { fontSize: 10.5, color: 'var(--tx-2)', marginTop: 2 }
+    }, rc.description || 'Custom role.')))))), addRoleModal && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: { marginBottom: 16 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "ADD NEW ROLE"), /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 } },
+    /*#__PURE__*/React.createElement("input", {
+      value: newRoleDraft.label,
+      onChange: e => setNewRoleDraft({ ...newRoleDraft, label: e.target.value }),
+      placeholder: "Role name (e.g. Volunteer, Intern)",
+      style: { fontSize: 12 }
+    }),
+    /*#__PURE__*/React.createElement("input", {
+      value: newRoleDraft.description,
+      onChange: e => setNewRoleDraft({ ...newRoleDraft, description: e.target.value }),
+      placeholder: "Description (e.g. Limited access for volunteers)",
+      style: { fontSize: 12 }
+    }),
+    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
+      /*#__PURE__*/React.createElement("button", {
+        onClick: handleAddRole,
+        disabled: !newRoleDraft.label.trim(),
+        className: "b-pri b-xs",
+        style: { fontSize: 11 }
+      }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), " Create Role"),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => { setAddRoleModal(false); setNewRoleDraft({ label: '', description: '' }); },
+        className: "b-gho b-xs",
+        style: { fontSize: 11 }
+      }, "Cancel")))), /*#__PURE__*/React.createElement("div", {
     className: "card"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -35550,7 +36132,7 @@ const ProviderApp = ({
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "CURRENT STAFF (", staff.length, ")"), emailVerifyConfig.enabled && /*#__PURE__*/React.createElement("span", {
+  }, "CURRENT ", T.staff_term_plural.toUpperCase(), " (", staff.length, ")"), emailVerifyConfig.enabled && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: 'var(--tx-3)'
@@ -35623,7 +36205,7 @@ const ProviderApp = ({
       style: {
         fontSize: 9
       }
-    }, ORG_ROLE_LABELS[s.role]), isMe && needsVerify && ev?.status !== 'verified' && /*#__PURE__*/React.createElement("button", {
+    }, activeOrgRoleLabels[s.role]), isMe && needsVerify && ev?.status !== 'verified' && /*#__PURE__*/React.createElement("button", {
       onClick: openEmailVerifyModal,
       className: "b-pri b-xs",
       style: {
@@ -35681,7 +36263,7 @@ const ProviderApp = ({
       lineHeight: 1.6,
       marginBottom: 10
     }
-  }, "Your organization requires email verification for your role (", ORG_ROLE_LABELS[orgRole], "). Verify your identity with an approved email address", emailVerifyConfig.required_domains?.length > 0 ? ` (${emailVerifyConfig.required_domains.map(d => '@' + d).join(', ')})` : '', "."), /*#__PURE__*/React.createElement("button", {
+  }, "Your organization requires email verification for your role (", activeOrgRoleLabels[orgRole], "). Verify your identity with an approved email address", emailVerifyConfig.required_domains?.length > 0 ? ` (${emailVerifyConfig.required_domains.map(d => '@' + d).join(', ')})` : '', "."), /*#__PURE__*/React.createElement("button", {
     onClick: openEmailVerifyModal,
     className: "b-pri",
     style: {
@@ -36376,7 +36958,7 @@ const ProviderApp = ({
     }
   }, " \u2014 change in Org Settings"))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setComposeOrgModal(true),
-    className: "b-pri",
+    className: "b-pri b-sm",
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -36404,7 +36986,7 @@ const ProviderApp = ({
     i: 'eyeOff'
   }, {
     l: 'Your Role',
-    v: ORG_ROLE_LABELS[orgRole] || orgRole,
+    v: activeOrgRoleLabels[orgRole] || orgRole,
     c: 'blue',
     i: 'user'
   }].map((s, i) => /*#__PURE__*/React.createElement("div", {
@@ -36758,7 +37340,7 @@ const ProviderApp = ({
         fontSize: 11.5,
         color: 'var(--gold)'
       }
-    }, "Your role (", ORG_ROLE_LABELS[orgRole] || orgRole, ") does not have permission to respond to org messages. Contact your admin."))));
+    }, "Your role (", activeOrgRoleLabels[orgRole] || orgRole, ") does not have permission to respond to org messages. Contact your admin."))));
   })())), view === 'resources' && !activeCase && /*#__PURE__*/React.createElement(ResourcesTableView, {
     resourceTypes: resourceTypes,
     resourceRelations: resourceRelations,
@@ -36797,8 +37379,6 @@ const ProviderApp = ({
   }), view === 'activity' && /*#__PURE__*/React.createElement(ActivityStream, {
     session: session
   }), view === 'transparency' && /*#__PURE__*/React.createElement(TransparencyPage, {
-    onBack: () => setView('dashboard')
-  }), view === 'eo-graph' && /*#__PURE__*/React.createElement(EOGraphView, {
     onBack: () => setView('dashboard')
   }))), /*#__PURE__*/React.createElement(Modal, {
     open: discoverModal,
@@ -37036,7 +37616,7 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement(I, {
       n: g.type === 'role' ? 'users' : 'user',
       s: 9
-    }), g.type === 'role' ? ORG_ROLE_LABELS[g.id] || g.id : g.id, /*#__PURE__*/React.createElement("span", {
+    }), g.type === 'role' ? activeOrgRoleLabels[g.id] || g.id : g.id, /*#__PURE__*/React.createElement("span", {
       onClick: () => {
         const updated = [...grants];
         updated.splice(gi, 1);
@@ -37101,10 +37681,10 @@ const ProviderApp = ({
       }
     }, /*#__PURE__*/React.createElement("option", {
       value: ""
-    }, "Add..."), ORG_ROLES.map(r => /*#__PURE__*/React.createElement("option", {
+    }, "Add..."), activeOrgRoles.map(r => /*#__PURE__*/React.createElement("option", {
       key: r,
       value: `role:${r}`
-    }, ORG_ROLE_LABELS[r])), staff.filter(s => !grants.some(g => g.type === 'user' && g.id === s.userId)).map(s => /*#__PURE__*/React.createElement("option", {
+    }, activeOrgRoleLabels[r])), staff.filter(s => !grants.some(g => g.type === 'user' && g.id === s.userId)).map(s => /*#__PURE__*/React.createElement("option", {
       key: s.userId,
       value: `user:${s.userId}`
     }, s.userId)))));
@@ -37398,7 +37978,7 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement(I, {
       n: g.type === 'role' ? 'users' : 'user',
       s: 10
-    }), g.type === 'role' ? ORG_ROLE_LABELS[g.id] || g.id : g.id, /*#__PURE__*/React.createElement("span", {
+    }), g.type === 'role' ? activeOrgRoleLabels[g.id] || g.id : g.id, /*#__PURE__*/React.createElement("span", {
       onClick: () => handleRemovePermGrant(ability, gi),
       style: {
         cursor: 'pointer',
@@ -37438,12 +38018,12 @@ const ProviderApp = ({
       value: ""
     }, "Add role or user..."), /*#__PURE__*/React.createElement("optgroup", {
       label: "Roles"
-    }, ORG_ROLES.map(r => /*#__PURE__*/React.createElement("option", {
+    }, activeOrgRoles.map(r => /*#__PURE__*/React.createElement("option", {
       key: r,
       value: `role:${r}`,
       disabled: grants.some(g => g.type === 'role' && g.id === r)
-    }, ORG_ROLE_LABELS[r]))), /*#__PURE__*/React.createElement("optgroup", {
-      label: "Staff Members"
+    }, activeOrgRoleLabels[r]))), /*#__PURE__*/React.createElement("optgroup", {
+      label: T.staff_term_plural
     }, staff.map(s => /*#__PURE__*/React.createElement("option", {
       key: s.userId,
       value: `user:${s.userId}`,
@@ -37475,7 +38055,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Create an organization to manage staff, cases across your team, and participate in networks. You'll be the admin."), /*#__PURE__*/React.createElement("div", {
+  }, "Create an organization to manage ", T.staff_term_plural.toLowerCase(), ", cases across your team, and participate in networks. You'll be the admin."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -37540,7 +38120,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.6
     }
-  }, "This creates an encrypted Matrix room for your organization. You'll be the admin. Staff can be invited with specific roles. Your provider account gains org context \u2014 you can manage staff, cases, and networks from your dashboard."), /*#__PURE__*/React.createElement("button", {
+  }, "This creates an encrypted Matrix room for your organization. You'll be the admin. ", T.staff_term_plural, " can be invited with specific roles. Your provider account gains org context \u2014 you can manage ", T.staff_term_plural.toLowerCase(), ", cases, and networks from your dashboard."), /*#__PURE__*/React.createElement("button", {
     onClick: handleCreateOrg,
     className: "b-pri",
     disabled: !setupData.name.trim(),
@@ -37582,7 +38162,7 @@ const ProviderApp = ({
   }, "Join Organization")), /*#__PURE__*/React.createElement(Modal, {
     open: inviteModal,
     onClose: () => setInviteModal(false),
-    title: "Invite Staff Member"
+    title: 'Invite ' + T.staff_term
   }, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 12,
@@ -37590,7 +38170,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Invite a provider to your organization. They'll receive access to cases based on their assigned role."), /*#__PURE__*/React.createElement("div", {
+  }, "Invite a ", T.staff_term.toLowerCase(), " to your organization. They'll receive access to cases based on their assigned role."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -37609,10 +38189,10 @@ const ProviderApp = ({
   }, "ROLE"), /*#__PURE__*/React.createElement("select", {
     value: inviteRole,
     onChange: e => setInviteRole(e.target.value)
-  }, ORG_ROLES.map(r => /*#__PURE__*/React.createElement("option", {
+  }, activeOrgRoles.map(r => /*#__PURE__*/React.createElement("option", {
     key: r,
     value: r
-  }, ORG_ROLE_LABELS[r])))), /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoleLabels[r])))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--blue-dim)',
       border: '1px solid rgba(91,156,245,.15)',
@@ -37622,7 +38202,7 @@ const ProviderApp = ({
       fontSize: 11.5,
       color: 'var(--tx-1)'
     }
-  }, "Role determines which cases and data the staff member can access. Admins see everything; read-only users see only aggregate dashboards."), /*#__PURE__*/React.createElement("button", {
+  }, "Role determines which cases and data the ", T.staff_term.toLowerCase(), " can access. Admins see everything; read-only users see only aggregate dashboards."), /*#__PURE__*/React.createElement("button", {
     onClick: handleInviteStaff,
     className: "b-pri",
     style: {
@@ -37792,6 +38372,66 @@ const ProviderApp = ({
       width: '100%'
     }
   }, "Record ", T.provider_term, " Observation"))), /*#__PURE__*/React.createElement(Modal, {
+    open: shareContactModal,
+    onClose: () => setShareContactModal(false),
+    title: "Share My Details",
+    w: 420
+  },
+  orgRoom && /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 0, marginBottom: 16, background: 'var(--bg-1)', borderRadius: 'var(--r-lg)', border: '1px solid var(--border-1)', padding: 3 }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShareAsOrg(false),
+    style: { flex: 1, padding: '8px 12px', borderRadius: 'var(--r)', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all .2s', background: !shareAsOrg ? 'var(--gold-dim)' : 'transparent', color: !shareAsOrg ? 'var(--gold)' : 'var(--tx-2)', border: !shareAsOrg ? '1px solid var(--gold)' : '1px solid transparent' }
+  }, /*#__PURE__*/React.createElement(I, { n: "user", s: 13, c: !shareAsOrg ? 'var(--gold)' : 'var(--tx-3)' }), " Individual"),
+  /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShareAsOrg(true),
+    style: { flex: 1, padding: '8px 12px', borderRadius: 'var(--r)', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all .2s', background: shareAsOrg ? 'var(--blue-dim)' : 'transparent', color: shareAsOrg ? 'var(--blue)' : 'var(--tx-2)', border: shareAsOrg ? '1px solid var(--blue)' : '1px solid transparent' }
+  }, /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 13, c: shareAsOrg ? 'var(--blue)' : 'var(--tx-3)' }), " ", orgMeta?.name || 'Organization')),
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-lg)', padding: '14px 16px', marginBottom: 16 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 15, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 4 }
+  }, providerProfile.display_name || svc.userId?.split(':')[0]?.replace('@', '') || T.provider_term),
+  shareAsOrg && providerProfile.title && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: 'var(--tx-1)', marginBottom: 2 }
+  }, providerProfile.title),
+  shareAsOrg && orgMeta?.name && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: 'var(--blue)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }
+  }, /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 12, c: "var(--blue)" }), orgMeta.name),
+  shareAsOrg && providerProfile.credentials && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11, color: 'var(--tx-2)', marginBottom: 2 }
+  }, providerProfile.credentials),
+  shareAsOrg && myVerification?.status === 'verified' && myVerification.email && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: 'var(--tx-1)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 6 }
+  }, /*#__PURE__*/React.createElement(I, { n: "mail", s: 12, c: "var(--tx-2)" }), myVerification.email),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginTop: 6 }
+  }, svc.userId)),
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', gap: 8, marginBottom: 16 }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: copyContact,
+    style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', cursor: 'pointer', color: copiedField === 'contact' ? 'var(--green)' : 'var(--tx-1)', fontSize: 12, fontWeight: 600, transition: 'all .2s' }
+  }, /*#__PURE__*/React.createElement(I, { n: copiedField === 'contact' ? "check" : "copy", s: 14 }), copiedField === 'contact' ? 'Copied!' : 'Copy'),
+  /*#__PURE__*/React.createElement("button", {
+    onClick: shareContactViaSMS,
+    style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--tx-1)', fontSize: 12, fontWeight: 600, transition: 'all .2s' }
+  }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 14 }), "Text"),
+  /*#__PURE__*/React.createElement("button", {
+    onClick: shareContactViaEmail,
+    style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', cursor: 'pointer', color: 'var(--tx-1)', fontSize: 12, fontWeight: 600, transition: 'all .2s' }
+  }, /*#__PURE__*/React.createElement(I, { n: "mail", s: 14 }), "Email")),
+
+  /*#__PURE__*/React.createElement("button", {
+    onClick: () => { setShareContactModal(false); openProfileModal(); },
+    style: { width: '100%', background: 'transparent', border: 'none', color: 'var(--tx-2)', fontSize: 12, cursor: 'pointer', padding: '6px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'color .2s' },
+    onMouseEnter: e => e.currentTarget.style.color = 'var(--gold)',
+    onMouseLeave: e => e.currentTarget.style.color = 'var(--tx-2)'
+  }, /*#__PURE__*/React.createElement(I, { n: "settings", s: 13 }), "Edit Profile")),
+
+  /*#__PURE__*/React.createElement(Modal, {
     open: profileModal,
     onClose: () => setProfileModal(false),
     title: `${T.provider_term} Profile`,
@@ -37803,7 +38443,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Your profile is stored in your roster room and broadcast to all bridge rooms. ", T.client_term_plural, " see your name, title, credentials, and organization membership."), /*#__PURE__*/React.createElement("div", {
+  }, "Your profile is stored in your roster room and synced to your bridge rooms. ", T.client_term_plural, " see your name, title, credentials, and organization membership."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -37917,7 +38557,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.6
     }
-  }, /*#__PURE__*/React.createElement("strong", null, orgMeta.name), " \xB7 ", ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type, /*#__PURE__*/React.createElement("br", null), "Role: ", /*#__PURE__*/React.createElement("strong", null, ORG_ROLE_LABELS[orgRole] || orgRole), orgMeta.service_area && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "Service Area: ", orgMeta.service_area), myVerification?.status === 'verified' && myVerification.email && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "Verified email: ", /*#__PURE__*/React.createElement("strong", null, myVerification.email))), emailVerifyConfig.enabled && myVerification?.status !== 'verified' ? /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("strong", null, orgMeta.name), " \xB7 ", ORG_TYPE_LABELS[orgMeta.type] || orgMeta.type, /*#__PURE__*/React.createElement("br", null), "Role: ", /*#__PURE__*/React.createElement("strong", null, activeOrgRoleLabels[orgRole] || orgRole), orgMeta.service_area && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "Service Area: ", orgMeta.service_area), myVerification?.status === 'verified' && myVerification.email && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), "Verified email: ", /*#__PURE__*/React.createElement("strong", null, myVerification.email))), emailVerifyConfig.enabled && myVerification?.status !== 'verified' ? /*#__PURE__*/React.createElement("div", {
     style: {
       marginTop: 8
     }
@@ -38171,7 +38811,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Configure email verification requirements for your organization. When enabled, staff members must verify they control an email at an approved domain before accessing cases."), /*#__PURE__*/React.createElement("div", {
+  }, "Configure email verification requirements for your organization. When enabled, ", T.staff_term_plural.toLowerCase(), " must verify they control an email at an approved domain before accessing cases."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -38208,7 +38848,7 @@ const ProviderApp = ({
       fontSize: 11,
       color: 'var(--tx-2)'
     }
-  }, "Staff must verify their email before full access")))), emailConfigDraft.enabled && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, T.staff_term_plural, " must verify their email before full access")))), emailConfigDraft.enabled && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -38241,7 +38881,7 @@ const ProviderApp = ({
       gap: 6,
       marginTop: 4
     }
-  }, ORG_ROLES.map(r => {
+  }, activeOrgRoles.map(r => {
     const active = (emailConfigDraft.require_for_roles || []).includes(r);
     return /*#__PURE__*/React.createElement("label", {
       key: r,
@@ -38270,7 +38910,7 @@ const ProviderApp = ({
         width: 12,
         height: 12
       }
-    }), ORG_ROLE_LABELS[r]);
+    }), activeOrgRoleLabels[r]);
   }))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
@@ -38293,7 +38933,7 @@ const ProviderApp = ({
       display: 'block',
       marginTop: 4
     }
-  }, "Time before unverified staff lose access. 0 = immediate.")), /*#__PURE__*/React.createElement("div", {
+  }, "Time before unverified ", T.staff_term_plural.toLowerCase(), " lose access. 0 = immediate.")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--gold-dim)',
       border: '1px solid var(--gold-mid)',
@@ -38308,7 +38948,7 @@ const ProviderApp = ({
     style: {
       color: 'var(--gold)'
     }
-  }, "Note:"), " Enabling verification will prompt all existing staff in the selected roles to verify their email. Currently ", staff.filter(s => s.email_verification?.status === 'verified').length, " of ", staff.length, " staff are verified.")), /*#__PURE__*/React.createElement("button", {
+  }, "Note:"), " Enabling verification will prompt all existing ", T.staff_term_plural.toLowerCase(), " in the selected roles to verify their email. Currently ", staff.filter(s => s.email_verification?.status === 'verified').length, " of ", staff.length, " ", T.staff_term_plural.toLowerCase(), " are verified.")), /*#__PURE__*/React.createElement("button", {
     onClick: handleSaveEmailVerifyConfig,
     className: "b-pri",
     style: {
@@ -38610,7 +39250,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Customize the terms your organization uses for service recipients and service providers. These labels will appear throughout the interface for all staff at your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Customize the terms your organization uses for service recipients and service providers. These labels will appear throughout the interface for all ", T.staff_term_plural.toLowerCase(), " at your organization."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -38750,6 +39390,76 @@ const ProviderApp = ({
     }
   }, t)))), /*#__PURE__*/React.createElement("div", {
     style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "users",
+    s: 14,
+    c: "var(--blue)"
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700
+    }
+  }, "Roster / Staff Term"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 10,
+      color: 'var(--tx-3)'
+    }
+  }, "(default: Team Member)")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "SINGULAR"), /*#__PURE__*/React.createElement("input", {
+    value: terminologyDraft.staff_term,
+    onChange: e => setTerminologyDraft({
+      ...terminologyDraft,
+      staff_term: e.target.value
+    }),
+    placeholder: "e.g. Team Member, Staff, Employee"
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "section-label"
+  }, "PLURAL"), /*#__PURE__*/React.createElement("input", {
+    value: terminologyDraft.staff_term_plural,
+    onChange: e => setTerminologyDraft({
+      ...terminologyDraft,
+      staff_term_plural: e.target.value
+    }),
+    placeholder: "e.g. Team Members, Staff, Employees"
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 4,
+      flexWrap: 'wrap',
+      marginTop: 8
+    }
+  }, ['Team Member', 'Staff', 'Employee', 'Worker', 'Colleague', 'Personnel'].map(t => /*#__PURE__*/React.createElement("span", {
+    key: t,
+    onClick: () => setTerminologyDraft({
+      ...terminologyDraft,
+      staff_term: t,
+      staff_term_plural: t.endsWith('f') ? t.slice(0, -1) + 'ves' : t.endsWith('s') || t.endsWith('x') || t.endsWith('ch') || t.endsWith('sh') ? t + 'es' : t + 's'
+    }),
+    className: `tag ${terminologyDraft.staff_term === t ? 'tag-blue' : 'tag-blue'}`,
+    style: {
+      fontSize: 9,
+      cursor: 'pointer',
+      transition: 'all .15s',
+      opacity: terminologyDraft.staff_term === t ? 1 : 0.5
+    }
+  }, t)))), /*#__PURE__*/React.createElement("div", {
+    style: {
       background: 'var(--bg-3)',
       borderRadius: 'var(--r)',
       padding: '12px 14px',
@@ -38769,7 +39479,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.8
     }
-  }, /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.provider_term || 'Provider', " Dashboard\" \xB7 \"My ", terminologyDraft.client_term_plural || 'Clients', "\" \xB7 \"New ", terminologyDraft.client_term || 'Client', " Record\""), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", null, "\"Anonymous ", terminologyDraft.client_term || 'Client', "\" \xB7 \"", terminologyDraft.provider_term || 'Provider', " Observation\" \xB7 \"", terminologyDraft.provider_term || 'Provider', " Profile\""))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.provider_term || 'Provider', " Dashboard\" \xB7 \"My ", terminologyDraft.client_term_plural || 'Clients', "\" \xB7 \"New ", terminologyDraft.client_term || 'Client', " Record\""), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", null, "\"", terminologyDraft.staff_term_plural || 'Team Members', " Roster\" \xB7 \"Invite ", terminologyDraft.staff_term || 'Team Member', "\" \xB7 \"Current ", terminologyDraft.staff_term_plural || 'Team Members', "\""))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8
@@ -38784,7 +39494,7 @@ const ProviderApp = ({
   }, "Reset to Defaults"), /*#__PURE__*/React.createElement("button", {
     onClick: handleSaveTerminology,
     className: "b-pri",
-    disabled: !terminologyDraft.client_term?.trim() || !terminologyDraft.client_term_plural?.trim() || !terminologyDraft.provider_term?.trim() || !terminologyDraft.provider_term_plural?.trim(),
+    disabled: !terminologyDraft.client_term?.trim() || !terminologyDraft.client_term_plural?.trim() || !terminologyDraft.provider_term?.trim() || !terminologyDraft.provider_term_plural?.trim() || !terminologyDraft.staff_term?.trim() || !terminologyDraft.staff_term_plural?.trim(),
     style: {
       flex: 1,
       padding: 10,
@@ -39168,7 +39878,7 @@ const ProviderApp = ({
       fontSize: 12,
       color: 'var(--tx-1)'
     }
-  }, orgOpacity === 'transparent' ? `${providerProfile.display_name || 'Staff Name'} from ${orgMeta.name || 'Your Org'}` : orgOpacity === 'translucent' ? orgMeta.name || 'Your Org' : 'An organization'))), /*#__PURE__*/React.createElement("div", {
+  }, orgOpacity === 'transparent' ? `${providerProfile.display_name || T.staff_term + ' Name'} from ${orgMeta.name || 'Your Org'}` : orgOpacity === 'translucent' ? orgMeta.name || 'Your Org' : 'An organization'))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
@@ -39214,7 +39924,7 @@ const ProviderApp = ({
     /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
       /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 600, display: 'block' } }, c.displayName),
       /*#__PURE__*/React.createElement("div", { style: { marginTop: 3 } },
-        /*#__PURE__*/React.createElement(ConnectionBadges, { userType: "provider", teamName: c.teamName, orgName: orgMeta?.name, role: c.role, size: "xs" }))),
+        /*#__PURE__*/React.createElement(ConnectionBadges, { userType: "provider", teamName: c.teamName, teamColors: teamColorsList, orgName: orgMeta?.name, role: c.role, size: "xs" }))),
     c.hasDM && /*#__PURE__*/React.createElement("span", { className: "tag tag-green", style: { fontSize: 8 } }, "DM exists"))))),
   newDMTarget && /*#__PURE__*/React.createElement("button", {
     onClick: () => startTeamDM(newDMTarget.userId, newDMTarget.displayName, newDMTarget.teamName, newDMTarget.teamRoomId),
@@ -39232,7 +39942,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Control which staff roles in your organization can read and respond to inter-org messages. Only roles listed under \"Respond\" can send messages on behalf of your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Control which roles in your organization can read and respond to inter-org messages. Only roles listed under \"Respond\" can send messages on behalf of your organization."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -39250,7 +39960,7 @@ const ProviderApp = ({
       flexDirection: 'column',
       gap: 4
     }
-  }, ORG_ROLES.map(role => /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoles.map(role => /*#__PURE__*/React.createElement("div", {
     key: role,
     onClick: () => {
       setMsgAccessDraft(prev => ({
@@ -39294,7 +40004,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       fontWeight: msgAccessDraft.read?.includes(role) ? 600 : 400
     }
-  }, ORG_ROLE_LABELS[role])), /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[role])), /*#__PURE__*/React.createElement("span", {
     className: "tag tag-blue",
     style: {
       fontSize: 8
@@ -39317,7 +40027,7 @@ const ProviderApp = ({
       flexDirection: 'column',
       gap: 4
     }
-  }, ORG_ROLES.map(role => /*#__PURE__*/React.createElement("div", {
+  }, activeOrgRoles.map(role => /*#__PURE__*/React.createElement("div", {
     key: role,
     onClick: () => {
       setMsgAccessDraft(prev => ({
@@ -39361,7 +40071,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       fontWeight: msgAccessDraft.respond?.includes(role) ? 600 : 400
     }
-  }, ORG_ROLE_LABELS[role])), /*#__PURE__*/React.createElement("span", {
+  }, activeOrgRoleLabels[role])), /*#__PURE__*/React.createElement("span", {
     className: "tag tag-gold",
     style: {
       fontSize: 8
@@ -39534,12 +40244,12 @@ const ProviderApp = ({
         color: 'var(--tx-2)',
         fontFamily: 'var(--mono)'
       }
-    }, ORG_ROLE_LABELS[s.role] || s.role)), /*#__PURE__*/React.createElement("span", {
+    }, activeOrgRoleLabels[s.role] || s.role)), /*#__PURE__*/React.createElement("span", {
       className: `tag tag-${s.role === 'admin' ? 'gold' : s.role === 'case_manager' ? 'blue' : 'teal'}`,
       style: {
         fontSize: 8
       }
-    }, (ORG_ROLE_LABELS[s.role] || s.role).toUpperCase()));
+    }, (activeOrgRoleLabels[s.role] || s.role).toUpperCase()));
   }), staff.filter(s => s.userId !== transferModal.meta?.provider).length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 16,
@@ -39547,7 +40257,7 @@ const ProviderApp = ({
       color: 'var(--tx-3)',
       fontSize: 12
     }
-  }, "No other staff available for transfer."))), /*#__PURE__*/React.createElement("div", {
+  }, "No other ", T.staff_term_plural.toLowerCase(), " available for transfer."))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
@@ -39577,375 +40287,6 @@ const ProviderApp = ({
   }), " Transfer Case")))));
 };
 
-/* ═══════════════════ EO HIERARCHICAL NODE VIEW ═══════════════════
- * Operator Manifest:
- *   DES(eo.graph, {hierarchical_node_view}) — existence
- *   CON(eo.graph.edges, {operator_relationships, section_linkage}) — structural
- *   INS(eo.graph.nodes, {triads, operators, sections, functions}) — instantiation
- *   ALT(eo.graph.level, {drill_down, drill_up}) — navigation transitions
- *
- * Triad Summary:
- *   Existence:       DES (graph view purpose), INS (node/edge creation)
- *   Structure:       CON (edges between nodes, hierarchy levels)
- *   Interpretation:  ALT (level transitions on drill-down/up)
- *
- * Interactive SVG-based graph that shows all EO functionality as nodes
- * and edges. Supports hierarchical drill-down through levels:
- *   L0: System overview (3 triads as top-level nodes)
- *   L1: Triad detail (3 operators per triad)
- *   L2: Operator detail (code sections using that operator)
- *   L3: Section detail (functions/components within section)
- * ═══════════════════════════════════════════════════════════ */
-const EOGraphView = ({ onBack }) => {
-  const [level, setLevel] = useState(0);
-  const [path, setPath] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [hoveredNode, setHoveredNode] = useState(null);
-  const [eoSections, setEoSections] = useState([]);
-  const svgRef = useRef(null);
-
-  // Parse source code to extract EO sections
-  useEffect(() => {
-    const scripts = document.querySelectorAll('script:not([src]):not([type])');
-    let code = '';
-    scripts.forEach(s => { if (s.textContent.length > 1000) code = s.textContent; });
-    if (!code) {
-      const allScripts = document.querySelectorAll('script');
-      allScripts.forEach(s => { if (!s.src && s.textContent.length > 1000) code = s.textContent; });
-    }
-    const lines = code.split('\n');
-    const sections = [];
-    const sectionRe = /\/\*\s*═{3,}\s*(.*?)\s*═{3,}\s*\*\//;
-    lines.forEach((line, i) => {
-      const m = line.match(sectionRe);
-      if (m) sections.push({ name: m[1].trim(), line: i + 1, operators: [], triad: {}, definitions: [], emitOpCalls: [], allOps: [] });
-    });
-    const opLineRe = /^\s*\*\s+(NUL|DES|INS|SEG|CON|SYN|ALT|SUP|REC)\(([^)]*)\)\s*—\s*(.*)$/;
-    const triadRe = /^\s*\*\s+(Existence|Structure|Interpretation):\s+(.*)$/;
-    const fnRe = /^(?:async\s+)?function\s+(\w+)/;
-    const constFnRe = /^const\s+(\w+)\s*=\s*(?:\([^)]*\)\s*=>|function|\(?\{)/;
-    const emitOpRe = /emitOp\(\s*\S+,\s*'(NUL|DES|INS|SEG|CON|SYN|ALT|SUP|REC)',\s*dot\(([^)]*)\)/;
-    for (let si = 0; si < sections.length; si++) {
-      const sec = sections[si];
-      const endLine = si < sections.length - 1 ? sections[si + 1].line - 1 : lines.length;
-      const headerEnd = Math.min(sec.line + 30, endLine);
-      for (let li = sec.line - 1; li < headerEnd; li++) {
-        const raw = lines[li] || '';
-        const opMatch = raw.match(opLineRe);
-        if (opMatch) sec.operators.push({ op: opMatch[1], target: opMatch[2].trim(), desc: opMatch[3].trim() });
-        const triadMatch = raw.match(triadRe);
-        if (triadMatch) sec.triad[triadMatch[1]] = triadMatch[2].replace(/^\s*/, '').trim();
-      }
-      for (let li = sec.line - 1; li < endLine; li++) {
-        const raw = lines[li] || '';
-        const fnMatch = raw.match(fnRe);
-        if (fnMatch) sec.definitions.push({ name: fnMatch[1], line: li + 1, type: 'function' });
-        else {
-          const cfnMatch = raw.match(constFnRe);
-          if (cfnMatch) sec.definitions.push({ name: cfnMatch[1], line: li + 1, type: raw.includes('=>') ? 'arrow' : 'component' });
-        }
-        const emitMatch = raw.match(emitOpRe);
-        if (emitMatch) sec.emitOpCalls.push({ op: emitMatch[1], target: emitMatch[2].replace(/'/g, '').trim(), line: li + 1 });
-      }
-      const opSet = new Set(sec.operators.map(o => o.op));
-      sec.emitOpCalls.forEach(c => opSet.add(c.op));
-      sec.allOps = [...opSet];
-    }
-    setEoSections(sections);
-  }, []);
-
-  const TRIADS = [
-    { id: 'existence', label: 'Existence', desc: 'What exists? Creation, naming, and destruction of entities.', color: '#3ecf8e', dimColor: 'rgba(62,207,142,.15)', ops: ['NUL', 'DES', 'INS'] },
-    { id: 'structure', label: 'Structure', desc: 'How do things relate? Segmentation, connection, and synthesis.', color: '#5b9cf5', dimColor: 'rgba(91,156,245,.15)', ops: ['SEG', 'CON', 'SYN'] },
-    { id: 'interpretation', label: 'Interpretation', desc: 'How do things change? Alteration, superposition, and reconciliation.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)', ops: ['ALT', 'SUP', 'REC'] }
-  ];
-  const OP_INFO = {
-    NUL: { label: 'NUL', name: 'Null / Destroy', symbol: '\u2205', desc: 'Absence, void, destruction. Revocation, access removed, capacity destroyed.', triad: 'existence' },
-    DES: { label: 'DES', name: 'Designate', symbol: '\u225d', desc: 'Names or classifies an entity. Labeling, type designation.', triad: 'existence' },
-    INS: { label: 'INS', name: 'Instantiate', symbol: '\u25b3', desc: 'Creates a new entity with a value. First observation, creation.', triad: 'existence' },
-    SEG: { label: 'SEG', name: 'Segment', symbol: '\u22a2', desc: 'Partitions data into structural segments. Boundaries, classification.', triad: 'structure' },
-    CON: { label: 'CON', name: 'Connect', symbol: '\u22c8', desc: 'Links entities together. Provenance chains, allocations, bridges.', triad: 'structure' },
-    SYN: { label: 'SYN', name: 'Synthesize', symbol: '\u2228', desc: 'Merges multiple sources into unified view. Dedup, parallel hydration.', triad: 'structure' },
-    ALT: { label: 'ALT', name: 'Alter', symbol: '\u223f', desc: 'Changes a value within existing frame. Status transitions, field updates.', triad: 'interpretation' },
-    SUP: { label: 'SUP', name: 'Superpose', symbol: '\u29a6', desc: 'Holds multiple valid values simultaneously. Competing interpretations.', triad: 'interpretation' },
-    REC: { label: 'REC', name: 'Reconcile', symbol: '\u21bb', desc: 'Resolves superposition. Schema evolution, governance adaptation.', triad: 'interpretation' }
-  };
-
-  const getTriadForOp = (op) => TRIADS.find(t => t.ops.includes(op));
-  const getTriadById = (id) => TRIADS.find(t => t.id === id);
-  const getSectionsForOp = (op) => eoSections.filter(s => s.allOps.includes(op));
-
-  // Build nodes for current level
-  const getNodesForLevel = () => {
-    if (level === 0) {
-      return TRIADS.map(t => ({
-        id: t.id, label: t.label, desc: t.desc, color: t.color, dimColor: t.dimColor,
-        childCount: t.ops.length, sublabel: t.ops.join(' \xb7 '), type: 'triad'
-      }));
-    }
-    if (level === 1) {
-      const triad = getTriadById(path[0]?.id);
-      if (!triad) return [];
-      return triad.ops.map(op => {
-        const info = OP_INFO[op];
-        const sects = getSectionsForOp(op);
-        return {
-          id: op, label: info.symbol + ' ' + op, desc: info.desc, name: info.name,
-          color: triad.color, dimColor: triad.dimColor,
-          childCount: sects.length, sublabel: info.name, type: 'operator'
-        };
-      });
-    }
-    if (level === 2) {
-      const op = path[1]?.id;
-      const triad = getTriadById(path[0]?.id);
-      if (!op || !triad) return [];
-      return getSectionsForOp(op).map((s, i) => ({
-        id: 'sec-' + i, sectionIndex: i,
-        label: s.name.length > 28 ? s.name.slice(0, 26) + '\u2026' : s.name,
-        fullLabel: s.name,
-        desc: 'Line ' + s.line + ' \xb7 ' + s.definitions.length + ' definitions \xb7 ' + s.allOps.length + ' operators',
-        color: triad.color, dimColor: triad.dimColor,
-        childCount: s.definitions.length, sublabel: s.definitions.length + ' funcs',
-        allOps: s.allOps, operators: s.operators, type: 'section'
-      }));
-    }
-    if (level === 3) {
-      const op = path[1]?.id;
-      const triad = getTriadById(path[0]?.id);
-      const sects = getSectionsForOp(op);
-      const secIdx = path[2]?.sectionIndex;
-      const sec = sects[secIdx];
-      if (!sec || !triad) return [];
-      return sec.definitions.map((d, i) => ({
-        id: 'fn-' + i, label: d.name.length > 24 ? d.name.slice(0, 22) + '\u2026' : d.name,
-        fullLabel: d.name, desc: 'Line ' + d.line + ' \xb7 ' + d.type,
-        color: d.type === 'component' ? triad.color : (d.type === 'arrow' ? '#e5a550' : 'var(--tx-2)'),
-        dimColor: triad.dimColor, childCount: 0, sublabel: d.type, line: d.line, type: 'function'
-      }));
-    }
-    return [];
-  };
-
-  // Build edges
-  const getEdgesForLevel = (nodes) => {
-    if (level === 0) {
-      return [
-        { from: 0, to: 1, label: 'structures' },
-        { from: 1, to: 2, label: 'interprets' },
-        { from: 2, to: 0, label: 'grounds' }
-      ];
-    }
-    if (level === 1) {
-      const edges = [];
-      if (nodes.length >= 2) edges.push({ from: 0, to: 1 });
-      if (nodes.length >= 3) edges.push({ from: 1, to: 2 });
-      if (nodes.length >= 3) edges.push({ from: 0, to: 2, dashed: true });
-      return edges;
-    }
-    if (level === 2) {
-      const edges = [];
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const shared = (nodes[i].allOps || []).filter(o => (nodes[j].allOps || []).includes(o));
-          if (shared.length > 0) edges.push({ from: i, to: j, label: shared.join(','), dashed: shared.length === 1 });
-        }
-      }
-      return edges.slice(0, 20);
-    }
-    if (level === 3) {
-      const edges = [];
-      for (let i = 0; i < nodes.length - 1 && i < 15; i++) edges.push({ from: i, to: i + 1 });
-      return edges;
-    }
-    return [];
-  };
-
-  const drillDown = (node) => {
-    if (node.type === 'function') { setSelected(node); return; }
-    setPath(prev => [...prev, node]);
-    setLevel(prev => prev + 1);
-    setSelected(null);
-  };
-
-  const navigateTo = (depth) => {
-    if (depth < 0) { setLevel(0); setPath([]); setSelected(null); }
-    else { setPath(prev => prev.slice(0, depth + 1)); setLevel(depth + 1); setSelected(null); }
-  };
-
-  // Layout computation
-  const computeLayout = (nodes, edges) => {
-    const count = nodes.length;
-    if (count === 0) return { positions: [], edgePaths: [] };
-    const W = 900, H = Math.max(600, Math.ceil(count / 5) * 120 + 200);
-    const positions = [];
-    if (count <= 3) {
-      if (count === 1) positions.push({ x: W / 2, y: H / 2 });
-      else if (count === 2) { positions.push({ x: W / 3, y: H / 2 }); positions.push({ x: 2 * W / 3, y: H / 2 }); }
-      else { positions.push({ x: W / 2, y: 130 }); positions.push({ x: 180, y: H - 150 }); positions.push({ x: W - 180, y: H - 150 }); }
-    } else if (count <= 9) {
-      const cols = Math.ceil(Math.sqrt(count));
-      const rows = Math.ceil(count / cols);
-      const gapX = W / (cols + 1), gapY = H / (rows + 1);
-      for (let i = 0; i < count; i++) positions.push({ x: gapX * ((i % cols) + 1), y: gapY * (Math.floor(i / cols) + 1) });
-    } else {
-      const cols = Math.min(5, count);
-      const gapX = W / (cols + 1), gapY = Math.min(110, (H - 60) / (Math.ceil(count / cols) + 1));
-      for (let i = 0; i < count; i++) positions.push({ x: gapX * ((i % cols) + 1), y: 80 + gapY * (Math.floor(i / cols) + 1) });
-    }
-    const edgePaths = edges.map(e => {
-      const from = positions[e.from], to = positions[e.to];
-      if (!from || !to) return null;
-      const dx = to.x - from.x, dy = to.y - from.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const nx = dx / dist, ny = dy / dist;
-      const x1 = from.x + nx * 45, y1 = from.y + ny * 35;
-      const x2 = to.x - nx * 45, y2 = to.y - ny * 35;
-      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-      const cx = mx - (y2 - y1) * 0.12, cy = my + (x2 - x1) * 0.12;
-      return { ...e, path: 'M' + x1 + ',' + y1 + ' Q' + cx + ',' + cy + ' ' + x2 + ',' + y2, x1, y1, x2, y2, cx, cy };
-    }).filter(Boolean);
-    return { positions, edgePaths };
-  };
-
-  const nodes = getNodesForLevel();
-  const edges = getEdgesForLevel(nodes);
-  const { positions, edgePaths } = computeLayout(nodes, edges);
-  const levelLabels = ['EO System', 'Triad', 'Operator', 'Section'];
-  const svgH = Math.max(600, Math.ceil(nodes.length / 5) * 120 + 200);
-
-  return React.createElement('div', { className: 'eo-graph-wrap' },
-    // Header + breadcrumb
-    React.createElement('div', { className: 'eo-graph-header' },
-      React.createElement('div', {
-        onClick: onBack, style: { cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--tx-2)', fontSize: 12 }
-      }, React.createElement(I, { n: 'back', s: 14 }), 'Back'),
-      React.createElement('div', { style: { width: 1, height: 20, background: 'var(--border-0)' } }),
-      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-        React.createElement(I, { n: 'graphNodes', s: 18, c: 'var(--teal)' }),
-        React.createElement('h2', { style: { fontSize: 16, fontWeight: 700 } }, 'EO Architecture Graph')),
-      React.createElement('div', { style: { flex: 1 } }),
-      React.createElement('div', { className: 'eo-graph-breadcrumb' },
-        React.createElement('span', { className: 'bc-seg', onClick: () => { setLevel(0); setPath([]); setSelected(null); } }, 'EO System'),
-        path.map((p, i) => React.createElement(React.Fragment, { key: i },
-          React.createElement('span', { className: 'bc-sep' }, ' \u203a '),
-          i < path.length - 1
-            ? React.createElement('span', { className: 'bc-seg', onClick: () => navigateTo(i) }, p.label)
-            : React.createElement('span', { className: 'bc-cur' }, p.label)
-        ))
-      ),
-      React.createElement('span', {
-        style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', padding: '3px 8px', background: 'var(--bg-3)', borderRadius: 'var(--r)' }
-      }, 'L' + level + ' \xb7 ' + (levelLabels[level] || 'Detail'))
-    ),
-    // SVG canvas
-    React.createElement('div', { className: 'eo-graph-canvas' },
-      React.createElement('svg', {
-        ref: svgRef, className: 'eo-graph-svg', viewBox: '0 0 900 ' + svgH, preserveAspectRatio: 'xMidYMid meet'
-      },
-        React.createElement('defs', null,
-          React.createElement('marker', { id: 'eo-arrow', markerWidth: '8', markerHeight: '6', refX: '8', refY: '3', orient: 'auto' },
-            React.createElement('polygon', { points: '0 0, 8 3, 0 6', className: 'eo-edge-arrow' })),
-          React.createElement('filter', { id: 'eo-glow' },
-            React.createElement('feGaussianBlur', { stdDeviation: '3', result: 'coloredBlur' }),
-            React.createElement('feMerge', null,
-              React.createElement('feMergeNode', { in: 'coloredBlur' }),
-              React.createElement('feMergeNode', { in: 'SourceGraphic' })))
-        ),
-        // Edges
-        edgePaths.map((e, i) => React.createElement('g', { key: 'e' + i },
-          React.createElement('path', { d: e.path, className: 'eo-edge', markerEnd: 'url(#eo-arrow)', strokeDasharray: e.dashed ? '6,4' : 'none' }),
-          e.label && React.createElement('text', {
-            x: e.cx || (e.x1 + e.x2) / 2, y: (e.cy || (e.y1 + e.y2) / 2) - 8,
-            textAnchor: 'middle', style: { fontSize: 9, fill: 'var(--tx-3)', fontFamily: 'var(--mono)' }
-          }, e.label)
-        )),
-        // Nodes
-        nodes.map((node, i) => {
-          const pos = positions[i];
-          if (!pos) return null;
-          const isHov = hoveredNode === node.id;
-          const isSel = selected?.id === node.id;
-          const nW = level === 0 ? 200 : (level === 3 ? 160 : 180);
-          const nH = level === 0 ? 100 : (level === 3 ? 60 : 80);
-          return React.createElement('g', {
-            key: node.id, className: 'eo-node',
-            transform: 'translate(' + (pos.x - nW / 2) + ',' + (pos.y - nH / 2) + ')',
-            onClick: () => drillDown(node),
-            onMouseEnter: () => setHoveredNode(node.id),
-            onMouseLeave: () => setHoveredNode(null)
-          },
-            React.createElement('rect', {
-              className: 'eo-node-bg', width: nW, height: nH,
-              fill: node.dimColor || 'var(--bg-2)',
-              stroke: isSel ? node.color : (isHov ? node.color : 'var(--border-1)'),
-              strokeWidth: isSel ? 2.5 : (isHov ? 2 : 1),
-              filter: isHov ? 'url(#eo-glow)' : 'none'
-            }),
-            React.createElement('text', {
-              x: nW / 2, y: level === 3 ? nH / 2 - 4 : nH / 2 - 10, textAnchor: 'middle',
-              style: { fontSize: level === 0 ? 16 : 13, fontWeight: 700, fill: node.color || 'var(--tx-0)' }
-            }, node.label),
-            React.createElement('text', {
-              x: nW / 2, y: level === 3 ? nH / 2 + 12 : nH / 2 + 8, textAnchor: 'middle',
-              style: { fontSize: 10, fill: 'var(--tx-2)', fontFamily: 'var(--mono)' }
-            }, node.sublabel),
-            node.childCount > 0 && React.createElement('g', null,
-              React.createElement('rect', { x: nW - 28, y: 6, width: 22, height: 16, rx: 8, fill: node.color, opacity: 0.2 }),
-              React.createElement('text', { x: nW - 17, y: 17, textAnchor: 'middle', style: { fontSize: 9, fontWeight: 700, fill: node.color } }, node.childCount)),
-            node.childCount > 0 && React.createElement('text', {
-              x: nW / 2, y: nH - 8, textAnchor: 'middle', style: { fontSize: 9, fill: 'var(--tx-3)' }
-            }, 'click to expand \u203a')
-          );
-        })
-      ),
-      // Detail panel
-      selected && React.createElement('div', { className: 'eo-graph-detail' },
-        React.createElement('div', { className: 'detail-head' },
-          React.createElement('div', {
-            style: { width: 28, height: 28, borderRadius: 'var(--r)', background: selected.dimColor || 'var(--bg-3)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: selected.color || 'var(--tx-0)', fontWeight: 700, fontSize: 11, fontFamily: 'var(--mono)' }
-          }, (selected.label || '').slice(0, 3)),
-          React.createElement('div', { style: { flex: 1 } },
-            React.createElement('div', { style: { fontSize: 14, fontWeight: 700 } }, selected.fullLabel || selected.label),
-            React.createElement('div', { style: { fontSize: 10, color: 'var(--tx-2)', fontFamily: 'var(--mono)' } }, selected.sublabel)),
-          React.createElement('div', { onClick: () => setSelected(null), style: { cursor: 'pointer', padding: 4 } },
-            React.createElement(I, { n: 'x', s: 14 }))
-        ),
-        React.createElement('div', { className: 'detail-body' },
-          React.createElement('p', null, selected.desc),
-          selected.line && React.createElement('div', {
-            style: { marginTop: 8, padding: '6px 10px', background: 'var(--bg-3)', borderRadius: 'var(--r)', fontFamily: 'var(--mono)', fontSize: 11 }
-          }, 'Source: line ' + selected.line),
-          selected.allOps && selected.allOps.length > 0 && React.createElement('div', null,
-            React.createElement('div', { style: { fontSize: 10, fontWeight: 600, color: 'var(--tx-2)', marginTop: 10, marginBottom: 4 } }, 'OPERATORS USED'),
-            React.createElement('div', { className: 'detail-ops' },
-              (selected.allOps || []).map(op => {
-                const tr = getTriadForOp(op);
-                return React.createElement('span', { key: op,
-                  style: { padding: '2px 8px', borderRadius: 'var(--r)', fontSize: 10, fontWeight: 700, fontFamily: 'var(--mono)',
-                    background: tr ? tr.dimColor : 'var(--bg-3)', color: tr ? tr.color : 'var(--tx-1)' }
-                }, op);
-              })))
-        )
-      )
-    ),
-    // Legend
-    React.createElement('div', { className: 'eo-graph-legend' },
-      React.createElement(I, { n: 'graphNodes', s: 13 }),
-      React.createElement('span', { style: { fontWeight: 600 } }, 'Legend:'),
-      TRIADS.map(t => React.createElement('div', { key: t.id, style: { display: 'flex', alignItems: 'center', gap: 5 } },
-        React.createElement('div', { className: 'leg-dot', style: { background: t.color } }),
-        React.createElement('span', null, t.label + ' (' + t.ops.join(', ') + ')'))),
-      React.createElement('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 } },
-        React.createElement('span', null, 'Level ' + level),
-        React.createElement('span', null, nodes.length + ' nodes'),
-        React.createElement('span', null, edgePaths.length + ' edges'))
-    )
-  );
-};
-
 /* ═══════════════════ TRANSPARENCY & PRIVACY ═══════════════════
  * Operator Manifest:
  *   DES(transparency.page, {purpose: trust_through_visibility}) — existence
@@ -39971,6 +40312,10 @@ const TransparencyPage = ({ onBack }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCards, setExpandedCards] = useState({});
   const codeRef = useRef(null);
+  const [archLevel, setArchLevel] = useState(0);
+  const [archPath, setArchPath] = useState([]);
+  const [archSelected, setArchSelected] = useState(null);
+  const [archHovered, setArchHovered] = useState(null);
 
   // Read the live source code from the running page
   useEffect(() => {
@@ -40142,7 +40487,7 @@ const TransparencyPage = ({ onBack }) => {
         React.createElement('p', null,
           'The source code of this application is fully visible on this page. Nothing is hidden. You can inspect exactly what the software does, verify the privacy claims, and audit the EO operation logic yourself.'))),
 
-    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 16 } },
+    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 } },
       [
         { icon: 'lock', color: 'green', title: 'End-to-End Encrypted', desc: 'All data in Matrix rooms is encrypted. Only participants with session keys can decrypt.' },
         { icon: 'shield', color: 'teal', title: 'You Own Your Rooms', desc: 'When you claim a room, you become superadmin (power level 100). You can kick anyone — including providers.' },
@@ -40160,7 +40505,7 @@ const TransparencyPage = ({ onBack }) => {
       React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 } },
         React.createElement('span', { className: 'section-label', style: { marginBottom: 0 } }, 'EO OPERATION VOCABULARY'),
         React.createElement('span', { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)' } }, '9 canonical operators × 3 triads')),
-      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 } },
+      React.createElement('div', { className: 'eo-vocab-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 } },
         eoExplainer.map(op => React.createElement('div', {
           key: op.op,
           style: { padding: '10px 12px', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', background: 'var(--bg-1)' }
@@ -40432,7 +40777,396 @@ const TransparencyPage = ({ onBack }) => {
             } }, line || ' '));
         }))));
 
-  return React.createElement('div', { className: 'anim-up', style: { maxWidth: activeTab === 'source' ? 1400 : 1000, margin: '0 auto', transition: 'max-width .3s' } },
+  // ── Architecture Tab ──
+  const ARCH_NODES = [
+    {
+      id: 'vault', label: 'Your Vault', desc: 'Personal encrypted Matrix room that stores all your data. Only you hold the keys.',
+      color: '#3ecf8e', dimColor: 'rgba(62,207,142,.15)', icon: 'lock',
+      children: [
+        { id: 'vault-fields', label: 'Vault Fields', desc: 'Encrypted personal data fields — name, DOB, identifiers, custom fields. Stored as Matrix state events.', color: '#3ecf8e', dimColor: 'rgba(62,207,142,.15)' },
+        { id: 'vault-consent', label: 'Consent Settings', desc: 'Per-field consent flags controlling which data can be shared with providers via bridges.', color: '#3ecf8e', dimColor: 'rgba(62,207,142,.15)' },
+        { id: 'vault-schemas', label: 'Field Schemas', desc: 'Schema definitions that describe the structure and validation rules for vault data fields.', color: '#3ecf8e', dimColor: 'rgba(62,207,142,.15)' },
+        { id: 'vault-oplog', label: 'Operation Log', desc: 'Chronological log of every EO operation performed on vault data — fully auditable.', color: '#3ecf8e', dimColor: 'rgba(62,207,142,.15)' }
+      ],
+      childEdges: [
+        { from: 0, to: 1, label: 'gates sharing' },
+        { from: 2, to: 0, label: 'validates' },
+        { from: 3, to: 0, label: 'records changes' }
+      ]
+    },
+    {
+      id: 'bridge', label: 'Bridge Room', desc: 'Shared encrypted room between you and a provider. Data only flows here with explicit consent.',
+      color: '#5bc0be', dimColor: 'rgba(91,192,190,.15)', icon: 'link',
+      children: [
+        { id: 'bridge-fields', label: 'Shared Fields', desc: 'Vault fields you have explicitly consented to share with this provider.', color: '#5bc0be', dimColor: 'rgba(91,192,190,.15)' },
+        { id: 'bridge-obs', label: 'Observations', desc: 'Clinical or service observations recorded by the provider about this case.', color: '#5bc0be', dimColor: 'rgba(91,192,190,.15)' },
+        { id: 'bridge-msgs', label: 'Messages', desc: 'End-to-end encrypted messages between you and the provider within this bridge.', color: '#5bc0be', dimColor: 'rgba(91,192,190,.15)' },
+        { id: 'bridge-settings', label: 'Bridge Settings', desc: 'Configuration for the bridge — consent state, power levels, room permissions.', color: '#5bc0be', dimColor: 'rgba(91,192,190,.15)' }
+      ],
+      childEdges: [
+        { from: 0, to: 1, label: 'context for' },
+        { from: 0, to: 2, label: 'referenced in' },
+        { from: 3, to: 0, label: 'controls access' }
+      ]
+    },
+    {
+      id: 'provider', label: 'Provider', desc: 'Provider dashboard for managing cases, recording observations, and coordinating care.',
+      color: '#5b9cf5', dimColor: 'rgba(91,156,245,.15)', icon: 'briefcase',
+      children: [
+        { id: 'prov-cases', label: 'Cases', desc: 'Active cases the provider manages — each linked to a bridge room with a client.', color: '#5b9cf5', dimColor: 'rgba(91,156,245,.15)' },
+        { id: 'prov-individuals', label: 'Individuals', desc: 'Client profiles visible to the provider, built from consented shared data.', color: '#5b9cf5', dimColor: 'rgba(91,156,245,.15)' },
+        { id: 'prov-resources', label: 'Resources', desc: 'Services, programs, and referral resources the provider can allocate to cases.', color: '#5b9cf5', dimColor: 'rgba(91,156,245,.15)' },
+        { id: 'prov-metrics', label: 'Metrics', desc: 'Outcome and activity metrics tracked per case and per provider.', color: '#5b9cf5', dimColor: 'rgba(91,156,245,.15)' }
+      ],
+      childEdges: [
+        { from: 0, to: 1, label: 'linked to' },
+        { from: 2, to: 0, label: 'allocated to' },
+        { from: 3, to: 0, label: 'measured from' }
+      ]
+    },
+    {
+      id: 'org', label: 'Organization', desc: 'Org-level coordination — teams, internal channels, schema management, and aggregated metrics.',
+      color: '#e5a550', dimColor: 'rgba(229,165,80,.15)', icon: 'briefcase',
+      children: [
+        { id: 'org-teams', label: 'Teams', desc: 'Provider teams within the organization, with role-based access control.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' },
+        { id: 'org-channels', label: 'Channels', desc: 'Internal encrypted communication channels for org-wide coordination.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' },
+        { id: 'org-schema', label: 'Schema Registry', desc: 'Shared field schemas and observation templates used across the organization.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' },
+        { id: 'org-settings', label: 'Org Settings', desc: 'Organization configuration — branding, consent policies, governance rules.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' }
+      ],
+      childEdges: [
+        { from: 0, to: 1, label: 'communicate via' },
+        { from: 2, to: 0, label: 'shared across' },
+        { from: 3, to: 2, label: 'governs' }
+      ]
+    },
+    {
+      id: 'network', label: 'Network', desc: 'Cross-organization discovery and schema sharing. Enables interoperability between orgs.',
+      color: '#b090d4', dimColor: 'rgba(176,144,212,.15)', icon: 'users',
+      children: [
+        { id: 'net-discovery', label: 'Discovery', desc: 'Find other organizations and their published service catalogs.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)' },
+        { id: 'net-schemas', label: 'Schema Sharing', desc: 'Cross-org schema federation — publish and subscribe to field definitions.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)' },
+        { id: 'net-resources', label: 'Resource Catalog', desc: 'Network-wide directory of available services and resources.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)' }
+      ],
+      childEdges: [
+        { from: 0, to: 2, label: 'finds' },
+        { from: 1, to: 0, label: 'enables' }
+      ]
+    },
+    {
+      id: 'matrix', label: 'Matrix Protocol', desc: 'The underlying open federation protocol. All rooms, events, and encryption happen here.',
+      color: '#6b7385', dimColor: 'rgba(107,115,133,.15)', icon: 'layers',
+      children: [
+        { id: 'mx-rooms', label: 'Rooms', desc: 'Matrix rooms are the containers for all data — vaults, bridges, channels are all rooms.', color: '#6b7385', dimColor: 'rgba(107,115,133,.15)' },
+        { id: 'mx-events', label: 'Events', desc: 'State events and timeline events — every data change is a Matrix event.', color: '#6b7385', dimColor: 'rgba(107,115,133,.15)' },
+        { id: 'mx-e2ee', label: 'E2E Encryption', desc: 'Olm/Megolm encryption ensures only room members with session keys can read data.', color: '#6b7385', dimColor: 'rgba(107,115,133,.15)' },
+        { id: 'mx-federation', label: 'Federation', desc: 'Homeservers federate — data is replicated but encrypted. No single point of control.', color: '#6b7385', dimColor: 'rgba(107,115,133,.15)' }
+      ],
+      childEdges: [
+        { from: 0, to: 1, label: 'contain' },
+        { from: 2, to: 1, label: 'encrypts' },
+        { from: 3, to: 0, label: 'replicates' }
+      ]
+    },
+    {
+      id: 'eo', label: 'EO Layer', desc: 'Epistemic Operations — 9 canonical operators that track every state change with formal semantics.',
+      color: '#e06c75', dimColor: 'rgba(224,108,117,.15)', icon: 'shield',
+      children: [
+        { id: 'eo-nul', label: '\u2205 NUL', desc: 'Null / Destroy — absence, void, revocation. When data or access is removed.', color: '#e06c75', dimColor: 'rgba(224,108,117,.15)', sublabel: 'Existence' },
+        { id: 'eo-des', label: '\u225d DES', desc: 'Designate — names or classifies an entity. Sets the frame for what something IS.', color: '#3ecf8e', dimColor: 'rgba(62,207,142,.15)', sublabel: 'Existence' },
+        { id: 'eo-ins', label: '\u25b3 INS', desc: 'Instantiate — creates a new entity with a value. The moment data comes into being.', color: '#5bc0be', dimColor: 'rgba(91,192,190,.15)', sublabel: 'Existence' },
+        { id: 'eo-seg', label: '\u22a2 SEG', desc: 'Segment — partitions data into structural segments. Creates boundaries between groups.', color: '#5b9cf5', dimColor: 'rgba(91,156,245,.15)', sublabel: 'Structure' },
+        { id: 'eo-con', label: '\u22c8 CON', desc: 'Connect — links entities together. Provenance chains, allocations, bridges.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)', sublabel: 'Structure' },
+        { id: 'eo-syn', label: '\u2228 SYN', desc: 'Synthesize — merges multiple sources into a unified view. Parallel hydration.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)', sublabel: 'Structure' },
+        { id: 'eo-alt', label: '\u223f ALT', desc: 'Alter — changes a value within an existing frame. Status transitions, field updates.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)', sublabel: 'Interpretation' },
+        { id: 'eo-sup', label: '\u29a6 SUP', desc: 'Superpose — holds multiple valid values simultaneously. Competing interpretations.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)', sublabel: 'Interpretation' },
+        { id: 'eo-rec', label: '\u21bb REC', desc: 'Reconcile — resolves superposition into a single value. The final judgment.', color: '#e06c75', dimColor: 'rgba(224,108,117,.15)', sublabel: 'Interpretation' }
+      ],
+      childEdges: [
+        { from: 0, to: 1, label: 'precedes' },
+        { from: 1, to: 2, label: 'precedes' },
+        { from: 3, to: 4, label: 'precedes' },
+        { from: 4, to: 5, label: 'precedes' },
+        { from: 6, to: 7, label: 'precedes' },
+        { from: 7, to: 8, label: 'resolves' }
+      ]
+    }
+  ];
+
+  const ARCH_EDGES = [
+    { from: 0, to: 1, label: 'opt-in sharing' },
+    { from: 1, to: 2, label: 'shared observations' },
+    { from: 2, to: 3, label: 'anonymized metrics' },
+    { from: 3, to: 4, label: 'schema sharing' },
+    { from: 5, to: 0, label: 'encrypted sync' },
+    { from: 5, to: 1, label: 'encrypted sync', dashed: true },
+    { from: 6, to: 0, label: 'tracks changes', dashed: true },
+    { from: 6, to: 1, label: 'tracks changes', dashed: true }
+  ];
+
+  // Map sub-components to source code sections for Level 2 drill-down
+  const SECTION_MAP = {
+    'vault-fields': ['VAULT', 'FIELD', 'CLAIM'],
+    'vault-consent': ['CONSENT', 'BRIDGE'],
+    'vault-schemas': ['SCHEMA', 'FIELD'],
+    'vault-oplog': ['EO FRAMEWORK', 'OPERATION'],
+    'bridge-fields': ['BRIDGE', 'FIELD'],
+    'bridge-obs': ['OBSERVATION'],
+    'bridge-msgs': ['BRIDGE', 'MESSAGE', 'INBOX'],
+    'bridge-settings': ['BRIDGE', 'CONSENT'],
+    'prov-cases': ['CASE', 'PROVIDER'],
+    'prov-individuals': ['INDIVIDUAL', 'CLIENT'],
+    'prov-metrics': ['METRIC', 'DASHBOARD'],
+    'prov-resources': ['RESOURCE'],
+    'org-teams': ['TEAM'],
+    'org-channels': ['CHANNEL', 'ORG'],
+    'org-schema': ['SCHEMA', 'REGISTRY'],
+    'org-settings': ['ORG', 'SETTINGS'],
+    'net-discovery': ['NETWORK', 'DISCOVER'],
+    'net-schemas': ['SCHEMA', 'NETWORK'],
+    'net-resources': ['RESOURCE', 'CATALOG'],
+    'mx-rooms': ['MATRIX', 'ROOM'],
+    'mx-events': ['EVENT', 'STATE'],
+    'mx-e2ee': ['ENCRYPT', 'CRYPTO'],
+    'mx-federation': ['FEDERATION', 'HOMESERVER'],
+    'eo-nul': ['NUL'], 'eo-des': ['DES'], 'eo-ins': ['INS'],
+    'eo-seg': ['SEG'], 'eo-con': ['CON'], 'eo-syn': ['SYN'],
+    'eo-alt': ['ALT'], 'eo-sup': ['SUP'], 'eo-rec': ['REC']
+  };
+
+  const getArchNodes = () => {
+    if (archLevel === 0) {
+      return ARCH_NODES.map(n => ({
+        id: n.id, label: n.label, desc: n.desc, color: n.color, dimColor: n.dimColor,
+        childCount: n.children.length, sublabel: n.children.length + ' components', type: 'system'
+      }));
+    }
+    if (archLevel === 1) {
+      const parent = ARCH_NODES.find(n => n.id === archPath[0]?.id);
+      if (!parent) return [];
+      return parent.children.map(c => ({
+        id: c.id, label: c.label, desc: c.desc, color: c.color, dimColor: c.dimColor,
+        sublabel: c.sublabel || '', type: 'component',
+        childCount: (SECTION_MAP[c.id] || []).length > 0 ? 1 : 0
+      }));
+    }
+    if (archLevel === 2) {
+      const parentNode = ARCH_NODES.find(n => n.id === archPath[0]?.id);
+      const child = parentNode?.children.find(c => c.id === archPath[1]?.id);
+      if (!child) return [];
+      const keywords = SECTION_MAP[child.id] || [];
+      const matched = eoSections.filter(s => keywords.some(k => s.name.toUpperCase().includes(k)));
+      if (matched.length === 0) return [];
+      return matched.map((s, i) => ({
+        id: 'sec-' + i, label: s.name.length > 28 ? s.name.slice(0, 26) + '\u2026' : s.name,
+        fullLabel: s.name,
+        desc: 'Line ' + s.line + ' \xb7 ' + s.definitions.length + ' definitions \xb7 ' + s.allOps.length + ' operators',
+        color: child.color, dimColor: child.dimColor,
+        childCount: 0, sublabel: s.definitions.length + ' funcs',
+        allOps: s.allOps, operators: s.operators, definitions: s.definitions, type: 'section'
+      }));
+    }
+    return [];
+  };
+
+  const getArchEdges = (nodes) => {
+    if (archLevel === 0) return ARCH_EDGES;
+    if (archLevel === 1) {
+      const parent = ARCH_NODES.find(n => n.id === archPath[0]?.id);
+      return parent?.childEdges || [];
+    }
+    if (archLevel === 2) {
+      const edges = [];
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const shared = (nodes[i].allOps || []).filter(o => (nodes[j].allOps || []).includes(o));
+          if (shared.length > 0) edges.push({ from: i, to: j, label: shared.slice(0, 3).join(','), dashed: shared.length === 1 });
+        }
+      }
+      return edges.slice(0, 20);
+    }
+    return [];
+  };
+
+  const archDrillDown = (node) => {
+    if (node.type === 'section') { setArchSelected(node); return; }
+    if (node.childCount === 0) { setArchSelected(node); return; }
+    setArchPath(prev => [...prev, node]);
+    setArchLevel(prev => prev + 1);
+    setArchSelected(null);
+  };
+
+  const archNavigateTo = (depth) => {
+    if (depth < 0) { setArchLevel(0); setArchPath([]); setArchSelected(null); }
+    else { setArchPath(prev => prev.slice(0, depth + 1)); setArchLevel(depth + 1); setArchSelected(null); }
+  };
+
+  const archComputeLayout = (nodes, edges) => {
+    const count = nodes.length;
+    if (count === 0) return { positions: [], edgePaths: [] };
+    const W = 900, H = Math.max(600, Math.ceil(count / 5) * 120 + 200);
+    const positions = [];
+    if (count <= 3) {
+      if (count === 1) positions.push({ x: W / 2, y: H / 2 });
+      else if (count === 2) { positions.push({ x: W / 3, y: H / 2 }); positions.push({ x: 2 * W / 3, y: H / 2 }); }
+      else { positions.push({ x: W / 2, y: 130 }); positions.push({ x: 180, y: H - 150 }); positions.push({ x: W - 180, y: H - 150 }); }
+    } else if (count <= 9) {
+      const cols = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / cols);
+      const gapX = W / (cols + 1), gapY = H / (rows + 1);
+      for (let i = 0; i < count; i++) positions.push({ x: gapX * ((i % cols) + 1), y: gapY * (Math.floor(i / cols) + 1) });
+    } else {
+      const cols = Math.min(5, count);
+      const gapX = W / (cols + 1), gapY = Math.min(110, (H - 60) / (Math.ceil(count / cols) + 1));
+      for (let i = 0; i < count; i++) positions.push({ x: gapX * ((i % cols) + 1), y: 80 + gapY * (Math.floor(i / cols) + 1) });
+    }
+    const edgePaths = edges.map(e => {
+      const from = positions[e.from], to = positions[e.to];
+      if (!from || !to) return null;
+      const dx = to.x - from.x, dy = to.y - from.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const nx = dx / dist, ny = dy / dist;
+      const x1 = from.x + nx * 45, y1 = from.y + ny * 35;
+      const x2 = to.x - nx * 45, y2 = to.y - ny * 35;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      const cx = mx - (y2 - y1) * 0.12, cy = my + (x2 - x1) * 0.12;
+      return { ...e, path: 'M' + x1 + ',' + y1 + ' Q' + cx + ',' + cy + ' ' + x2 + ',' + y2, x1, y1, x2, y2, cx, cy };
+    }).filter(Boolean);
+    return { positions, edgePaths };
+  };
+
+  const levelLabels = ['System', 'Component', 'Sub-component', 'Source'];
+
+  const renderArchitecture = () => {
+    const nodes = getArchNodes();
+    const edges = getArchEdges(nodes);
+    const { positions, edgePaths } = archComputeLayout(nodes, edges);
+    const svgH = Math.max(600, Math.ceil(nodes.length / 5) * 120 + 200);
+
+    return React.createElement('div', { className: 'eo-graph-wrap', style: { height: 'calc(100vh - 220px)', minHeight: 500 } },
+      // Header + breadcrumb
+      React.createElement('div', { className: 'eo-graph-header' },
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          React.createElement(I, { n: 'graphNodes', s: 18, c: 'var(--teal)' }),
+          React.createElement('h3', { style: { fontSize: 16, fontWeight: 700 } }, 'How Khora Works')),
+        React.createElement('div', { style: { flex: 1 } }),
+        React.createElement('div', { className: 'eo-graph-breadcrumb' },
+          React.createElement('span', { className: 'bc-seg', onClick: () => { setArchLevel(0); setArchPath([]); setArchSelected(null); } }, 'System'),
+          archPath.map((p, i) => React.createElement(React.Fragment, { key: i },
+            React.createElement('span', { className: 'bc-sep' }, ' \u203a '),
+            i < archPath.length - 1
+              ? React.createElement('span', { className: 'bc-seg', onClick: () => archNavigateTo(i) }, p.label)
+              : React.createElement('span', { className: 'bc-cur' }, p.label)
+          ))
+        ),
+        React.createElement('span', {
+          style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', padding: '3px 8px', background: 'var(--bg-3)', borderRadius: 'var(--r)' }
+        }, 'L' + archLevel + ' \xb7 ' + (levelLabels[archLevel] || 'Detail'))
+      ),
+      // SVG canvas
+      React.createElement('div', { className: 'eo-graph-canvas' },
+        React.createElement('svg', {
+          className: 'eo-graph-svg', viewBox: '0 0 900 ' + svgH, preserveAspectRatio: 'xMidYMid meet'
+        },
+          React.createElement('defs', null,
+            React.createElement('marker', { id: 'arch-arrow', markerWidth: '8', markerHeight: '6', refX: '8', refY: '3', orient: 'auto' },
+              React.createElement('polygon', { points: '0 0, 8 3, 0 6', className: 'eo-edge-arrow' })),
+            React.createElement('filter', { id: 'arch-glow' },
+              React.createElement('feGaussianBlur', { stdDeviation: '3', result: 'coloredBlur' }),
+              React.createElement('feMerge', null,
+                React.createElement('feMergeNode', { in: 'coloredBlur' }),
+                React.createElement('feMergeNode', { in: 'SourceGraphic' })))
+          ),
+          // Edges
+          edgePaths.map((e, i) => React.createElement('g', { key: 'e' + i },
+            React.createElement('path', { d: e.path, className: 'eo-edge', markerEnd: 'url(#arch-arrow)', strokeDasharray: e.dashed ? '6,4' : 'none' }),
+            e.label && React.createElement('text', {
+              x: e.cx || (e.x1 + e.x2) / 2, y: (e.cy || (e.y1 + e.y2) / 2) - 8,
+              textAnchor: 'middle', style: { fontSize: 9, fill: 'var(--tx-3)', fontFamily: 'var(--mono)' }
+            }, e.label)
+          )),
+          // Nodes
+          nodes.map((node, i) => {
+            const pos = positions[i];
+            if (!pos) return null;
+            const isHov = archHovered === node.id;
+            const isSel = archSelected?.id === node.id;
+            const nW = archLevel === 0 ? 160 : (archLevel === 2 ? 180 : 160);
+            const nH = archLevel === 0 ? 80 : (archLevel === 2 ? 80 : 70);
+            return React.createElement('g', {
+              key: node.id, className: 'eo-node',
+              transform: 'translate(' + (pos.x - nW / 2) + ',' + (pos.y - nH / 2) + ')',
+              onClick: () => archDrillDown(node),
+              onMouseEnter: () => setArchHovered(node.id),
+              onMouseLeave: () => setArchHovered(null)
+            },
+              React.createElement('rect', {
+                className: 'eo-node-bg', width: nW, height: nH,
+                fill: node.dimColor || 'var(--bg-2)',
+                stroke: isSel ? node.color : (isHov ? node.color : 'var(--border-1)'),
+                strokeWidth: isSel ? 2.5 : (isHov ? 2 : 1),
+                filter: isHov ? 'url(#arch-glow)' : 'none'
+              }),
+              React.createElement('text', {
+                x: nW / 2, y: nH / 2 - 8, textAnchor: 'middle',
+                style: { fontSize: archLevel === 0 ? 14 : 12, fontWeight: 700, fill: node.color || 'var(--tx-0)' }
+              }, node.label),
+              React.createElement('text', {
+                x: nW / 2, y: nH / 2 + 8, textAnchor: 'middle',
+                style: { fontSize: 9, fill: 'var(--tx-2)', fontFamily: 'var(--mono)' }
+              }, node.sublabel),
+              node.childCount > 0 && React.createElement('text', {
+                x: nW / 2, y: nH - 6, textAnchor: 'middle', style: { fontSize: 8, fill: 'var(--tx-3)' }
+              }, 'click to expand \u203a')
+            );
+          })
+        ),
+        // Detail panel
+        archSelected && React.createElement('div', { className: 'eo-graph-detail' },
+          React.createElement('div', { className: 'detail-head' },
+            React.createElement('div', {
+              style: { width: 28, height: 28, borderRadius: 'var(--r)', background: archSelected.dimColor || 'var(--bg-3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: archSelected.color || 'var(--tx-0)', fontWeight: 700, fontSize: 11, fontFamily: 'var(--mono)' }
+            }, (archSelected.label || '').slice(0, 3)),
+            React.createElement('div', { style: { flex: 1 } },
+              React.createElement('div', { style: { fontSize: 14, fontWeight: 700 } }, archSelected.fullLabel || archSelected.label),
+              React.createElement('div', { style: { fontSize: 10, color: 'var(--tx-2)', fontFamily: 'var(--mono)' } }, archSelected.sublabel)),
+            React.createElement('div', { onClick: () => setArchSelected(null), style: { cursor: 'pointer', padding: 4 } },
+              React.createElement(I, { n: 'x', s: 14 }))
+          ),
+          React.createElement('div', { className: 'detail-body' },
+            React.createElement('p', null, archSelected.desc),
+            archSelected.allOps && archSelected.allOps.length > 0 && React.createElement('div', null,
+              React.createElement('div', { style: { fontSize: 10, fontWeight: 600, color: 'var(--tx-2)', marginTop: 10, marginBottom: 4 } }, 'OPERATORS USED'),
+              React.createElement('div', { className: 'detail-ops' },
+                (archSelected.allOps || []).map(op => React.createElement('span', { key: op,
+                  style: { padding: '2px 8px', borderRadius: 'var(--r)', fontSize: 10, fontWeight: 700, fontFamily: 'var(--mono)',
+                    background: 'var(--bg-3)', color: 'var(--tx-1)' }
+                }, op)))),
+            archSelected.definitions && archSelected.definitions.length > 0 && React.createElement('div', null,
+              React.createElement('div', { style: { fontSize: 10, fontWeight: 600, color: 'var(--tx-2)', marginTop: 10, marginBottom: 4 } }, 'FUNCTIONS'),
+              archSelected.definitions.map((d, di) => React.createElement('div', { key: di,
+                style: { padding: '4px 8px', marginBottom: 2, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--tx-1)', background: 'var(--bg-3)', borderRadius: 'var(--r)' }
+              }, d.name + ' (line ' + d.line + ')')))
+          )
+        )
+      ),
+      // Legend
+      React.createElement('div', { className: 'eo-graph-legend' },
+        React.createElement(I, { n: 'graphNodes', s: 13 }),
+        React.createElement('span', { style: { fontWeight: 600 } }, 'Architecture:'),
+        ARCH_NODES.slice(0, 4).map(n => React.createElement('div', { key: n.id, style: { display: 'flex', alignItems: 'center', gap: 5 } },
+          React.createElement('div', { className: 'leg-dot', style: { background: n.color } }),
+          React.createElement('span', null, n.label))),
+        React.createElement('div', { style: { marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 } },
+          React.createElement('span', null, 'Level ' + archLevel),
+          React.createElement('span', null, nodes.length + ' nodes'),
+          React.createElement('span', null, edgePaths.length + ' edges'))
+      )
+    );
+  };
+
+  return React.createElement('div', { className: 'anim-up', style: { maxWidth: activeTab === 'source' || activeTab === 'architecture' ? 1400 : 1000, margin: '0 auto', transition: 'max-width .3s' } },
     // Header
     React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 } },
       onBack && React.createElement('button', { onClick: onBack, className: 'b-gho b-sm', style: { display: 'flex', alignItems: 'center', gap: 4 } },
@@ -40443,7 +41177,7 @@ const TransparencyPage = ({ onBack }) => {
           'How Khora works, who has access, and the full source code — nothing hidden'))),
     // Tabs
     React.createElement('div', { className: 'tabs' },
-      [{ id: 'overview', label: 'How It Works' }, { id: 'privacy', label: 'Privacy & Access' }, { id: 'source', label: 'Source Code' }].map(t =>
+      [{ id: 'overview', label: 'How It Works' }, { id: 'privacy', label: 'Privacy & Access' }, { id: 'source', label: 'Source Code' }, { id: 'architecture', label: 'Architecture' }].map(t =>
         React.createElement('div', {
           key: t.id,
           className: 'tab' + (activeTab === t.id ? ' active' : ''),
@@ -40452,7 +41186,8 @@ const TransparencyPage = ({ onBack }) => {
     // Content
     activeTab === 'overview' && renderOverview(),
     activeTab === 'privacy' && renderPrivacy(),
-    activeTab === 'source' && renderSource());
+    activeTab === 'source' && renderSource(),
+    activeTab === 'architecture' && renderArchitecture());
 };
 
 /* ═══════════════════ MAIN APP ═══════════════════ */
@@ -40794,7 +41529,7 @@ const App = () => {
     onLogout: handleLogout,
     showToast: showToast,
     availableContexts: availableContexts,
-    activeContext: activeContext,
+    activeMode: activeContext,
     onSwitchContext: switchContext
   }), toast && /*#__PURE__*/React.createElement(Toast, {
     key: toast.k,
