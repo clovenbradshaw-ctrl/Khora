@@ -304,7 +304,7 @@ const LoginScreen = ({
   onLogin
 }) => {
   const [mode, setMode] = useState('login'); // login | register
-  const [hs, setHs] = useState('matrix.org');
+  const [hs, setHs] = useState('hyphae.social');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [loading, setLoading] = useState(false);

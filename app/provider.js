@@ -2131,7 +2131,7 @@ const ProviderApp = ({
   };
   const getInviteUrl = roomId => `https://matrix.to/#/${roomId}`;
   const getSetupInstructions = roomId => {
-    const hs = svc._baseUrl ? svc._baseUrl.replace(/^https?:\/\//, '') : 'matrix.org';
+    const hs = svc._baseUrl ? svc._baseUrl.replace(/^https?:\/\//, '') : 'hyphae.social';
     const link = getInviteUrl(roomId);
     return `You've been invited to securely manage your information on Khora.\n\nTo get started:\n\n1. Create a free Matrix account:\n   Go to https://${hs} and click "Create Account"\n   (Matrix is a secure, decentralized messaging protocol — your data stays on the server you choose)\n\n2. Download a Matrix client (optional):\n   Web: https://app.element.io\n   Mobile: Search "Element" in your app store\n   Or use any Matrix-compatible app\n\n3. Sign in with your new account\n\n4. Accept the room invitation:\n   The invite should appear automatically in your Matrix client.\n   You can also open this link: ${link}\n   (Note: this is a private room — the invite must be accepted from the account specified above)\n\n5. You will have full control of this room — you can remove anyone from it at any time.\n\nQuestions? Contact your provider for help getting set up.`;
   };
