@@ -30065,7 +30065,7 @@ const UriLibraryBrowser = ({ open, onClose, onSelect, mode = 'select' }) => {
     onClose();
   };
 
-  return React.createElement('div', {
+  return ReactDOM.createPortal(React.createElement('div', {
     className: 'uri-browser-overlay',
     onClick: e => { if (e.target === e.currentTarget) onClose(); }
   },
@@ -30199,7 +30199,7 @@ const UriLibraryBrowser = ({ open, onClose, onSelect, mode = 'select' }) => {
         )
       )
     )
-  );
+  ), document.body);
 };
 
 /* ─── FieldPicker — select a field definition to insert into a form ─── */
@@ -31315,7 +31315,7 @@ const TeamDetailView = ({
     className: "fb-adopt-panel",
     onClick: e => e.stopPropagation(),
     style: {
-      maxWidth: 500
+      maxWidth: 700
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
