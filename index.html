@@ -27857,7 +27857,7 @@ const DatabaseView = ({
     onCellEdit: onCellEdit,
     onAddRow: onAddRow || onCreateClient,
     addRowLabel: `Add ${T?.client_term || 'Individual'}`
-  }), dbTab === 'notes' && /*#__PURE__*/React.createElement(NotesTable, {
+  })), dbTab === 'notes' && /*#__PURE__*/React.createElement(NotesTable, {
     notes: notes,
     individuals: allIndividuals,
     onNoteClick: onNoteClick,
@@ -28012,7 +28012,7 @@ const DatabaseView = ({
             );
           })()
         )
-  )));
+  ));
 };
 
 /* ─── Wikidata definition fetcher ─── */
