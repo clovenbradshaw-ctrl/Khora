@@ -37343,26 +37343,18 @@ const ProviderApp = ({
     moreItems: [
       { id: 'teams', icon: 'users', label: 'Teams' },
       { id: 'schema', icon: 'grid', label: 'Schema' },
-      { id: 'metrics', icon: 'bar', label: 'Metrics' },
+      { id: 'hierarchy', icon: 'globe', label: 'My Network' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' },
       ...(orgRoom ? [{ id: 'org-settings', icon: 'briefcase', label: 'Organization' }] : [])
     ],
     onMoreNavigate: id => { setView(id); setActiveCase(null); setActiveIndividual(null); setActiveResourceProfile(null); }
   },
-    availableContexts && availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", { style: { padding: '8px 0', borderTop: '1px solid var(--border-0)', marginTop: 8, display: 'flex', gap: 4 } },
-      [{id:'provider',label:ROLES.provider.label,icon:'briefcase'},{id:'client',label:ROLES.client.label,icon:'shield'}].filter(opt => availableContexts.includes(opt.id)).map(opt => /*#__PURE__*/React.createElement("button", {
-        key: opt.id, onClick: () => onSwitchContext(opt.id),
-        className: activeMode === opt.id ? 'b-pri b-xs' : 'b-gho b-xs',
-        style: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 'var(--r)', fontSize: 11 }
-      }, /*#__PURE__*/React.createElement(I, { n: opt.icon, s: 11 }), opt.label))
-    ),
-    teams.length > 0 && /*#__PURE__*/React.createElement("div", { style: { padding: '8px 0', borderTop: '1px solid var(--border-0)', marginTop: 4 } },
-      /*#__PURE__*/React.createElement("span", { className: "section-label", style: { fontSize: 9, padding: '0 0 6px' } }, "WORKSPACE"),
+    /*#__PURE__*/React.createElement("div", { style: { padding: '8px 0', borderTop: '1px solid var(--border-0)', marginTop: 4 } },
       /*#__PURE__*/React.createElement("div", { className: "team-ctx-pills" },
         /*#__PURE__*/React.createElement("button", {
-          className: "team-ctx-pill" + (!activeTeamContext ? " active-personal" : ""),
-          onClick: () => switchTeamContext(null)
+          className: "team-ctx-pill",
+          onClick: () => onSwitchContext('client')
         }, /*#__PURE__*/React.createElement(I, { n: "user", s: 10 }), "Personal"),
         teams.map(t => { const _tpActive = activeTeamContext === t.roomId; const _tpColor = `hsl(${t.color_hue || 260}, 60%, 55%)`; return /*#__PURE__*/React.createElement("button", {
           key: t.roomId,
@@ -37612,23 +37604,13 @@ const ProviderApp = ({
       display: 'block'
     }
   }, providerProfile.credentials)))),
-  /* ─── Mode Toggle (sidebar) ─── */
-  availableContexts && availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", {
-    className: "sidebar-mode-toggle"
-  }, [{id:'provider',label:ROLES.provider.label,icon:'briefcase'},{id:'client',label:ROLES.client.label,icon:'shield'}].filter(opt => availableContexts.includes(opt.id)).map(opt => /*#__PURE__*/React.createElement("button", {
-    key: opt.id,
-    onClick: () => onSwitchContext(opt.id),
-    className: activeMode === opt.id ? 'b-pri b-xs' : 'b-gho b-xs',
-    style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 'var(--r)', fontSize: 11 }
-  }, /*#__PURE__*/React.createElement(I, { n: opt.icon, s: 11 }), opt.label))),
-  /* ─── Team Context Switcher (sidebar) ─── */
-  teams.length > 0 && /*#__PURE__*/React.createElement("div", {
+  /* ─── Unified Team / Personal Switcher (sidebar) ─── */
+  /*#__PURE__*/React.createElement("div", {
     className: "team-ctx-wrap"
-  }, /*#__PURE__*/React.createElement("span", { className: "section-label", style: { fontSize: 9, display: 'block', marginBottom: 6 } }, "WORKSPACE"),
-    /*#__PURE__*/React.createElement("div", { className: "team-ctx-pills" },
+  }, /*#__PURE__*/React.createElement("div", { className: "team-ctx-pills" },
       /*#__PURE__*/React.createElement("button", {
-        className: "team-ctx-pill" + (!activeTeamContext ? " active-personal" : ""),
-        onClick: () => switchTeamContext(null)
+        className: "team-ctx-pill",
+        onClick: () => onSwitchContext('client')
       }, /*#__PURE__*/React.createElement(I, { n: "user", s: 10 }), "Personal"),
       teams.map(t => { const _tpActive = activeTeamContext === t.roomId; const _tpColor = `hsl(${t.color_hue || 260}, 60%, 55%)`; return /*#__PURE__*/React.createElement("button", {
         key: t.roomId,
@@ -37673,9 +37655,9 @@ const ProviderApp = ({
       badge: schemaNotifCount,
       badgeClass: 'nav-badge-teal'
     }, {
-      id: 'metrics',
-      icon: 'bar',
-      label: 'Metrics'
+      id: 'hierarchy',
+      icon: 'globe',
+      label: 'My Network'
     }, {
       id: 'activity',
       icon: 'list',
@@ -40394,7 +40376,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "send",
     s: 13
-  }))))), view === 'metrics' && /*#__PURE__*/React.createElement("div", {
+  }))))), view === 'hierarchy' && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
     style: {
       maxWidth: 820,
@@ -40407,246 +40389,103 @@ const ProviderApp = ({
       fontWeight: 700,
       marginBottom: 4
     }
-  }, "Metrics Dashboard"), /*#__PURE__*/React.createElement("p", {
+  }, "My Network"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 12.5,
       marginBottom: 20
     }
-  }, "Anonymized, aggregate data from consenting clients. No PII \u2014 names, DOBs, SSNs, and addresses are never present."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
-    storageType: "matrix",
-    roomId: metricsRoom,
-    encrypted: true,
-    encLabel: "Megolm E2EE",
-    label: "Metrics",
-    members: [{ userId: svc.userId, role: 'metrics owner' }],
-    extra: [{ label: 'Anonymization', value: 'K-anonymity (k=5). PII fields are blocked. Demographics are generalized to ranges. Cohort hashing prevents re-identification.' }, { label: 'Data flow', value: 'Clients consent per-category. Observations are anonymized in the bridge room before flowing to this metrics room.' }]
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))',
-      gap: 10,
-      marginBottom: 20
-    }
-  }, [{
-    l: 'Metric Events',
-    v: metrics.length,
-    c: 'orange'
-  }, {
-    l: 'Unique Cohorts',
-    v: new Set(metrics.map(m => m.cohort_hash)).size,
-    c: 'blue'
-  }, {
-    l: 'Categories',
-    v: Object.keys(metricsByCategory).length,
-    c: 'teal'
-  }].map((s, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    className: "card",
-    style: {
-      padding: 14
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "section-label"
-  }, s.l.toUpperCase()), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 18,
-      fontWeight: 700,
-      color: `var(--${s.c})`
-    }
-  }, s.v)))), Object.keys(metricsByCategory).length === 0 ? /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      textAlign: 'center',
-      padding: '30px',
-      borderStyle: 'dashed'
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "bar",
-    s: 28
-  }), /*#__PURE__*/React.createElement("p", {
-    style: {
-      color: 'var(--tx-3)',
-      marginTop: 8
-    }
-  }, "No metric events yet. Individuals must consent to anonymized reporting. Consent can be requested through the individual\u2019s bridge room settings.")) : Object.entries(metricsByCategory).map(([cat, vals]) => /*#__PURE__*/React.createElement("div", {
-    key: cat,
-    className: "card",
-    style: {
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "section-label"
-  }, cat.toUpperCase()), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 4,
-      marginTop: 6
-    }
-  }, Object.entries(vals).sort((a, b) => b[1] - a[1]).map(([val, count]) => {
-    const max = Math.max(...Object.values(vals));
-    return /*#__PURE__*/React.createElement("div", {
-      key: val,
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11.5,
-        width: 200,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap'
-      }
-    }, val), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1,
-        height: 16,
-        background: 'var(--bg-3)',
-        borderRadius: 3,
-        overflow: 'hidden'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: `${count / max * 100}%`,
-        height: '100%',
-        background: 'var(--teal)',
-        borderRadius: 3,
-        transition: 'width .3s'
-      }
-    })), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        fontFamily: 'var(--mono)',
-        color: 'var(--tx-1)',
-        minWidth: 30,
-        textAlign: 'right'
-      }
-    }, count));
-  })))), (() => {
-    const demoAgg = {};
-    metrics.forEach(m => {
-      if (!m.demographics) return;
-      for (const [k, v] of Object.entries(m.demographics)) {
-        if (!v) continue;
-        if (!demoAgg[k]) demoAgg[k] = {};
-        demoAgg[k][v] = (demoAgg[k][v] || 0) + 1;
-      }
-    });
-    return Object.keys(demoAgg).length > 0 ? /*#__PURE__*/React.createElement("div", {
-      className: "card",
-      style: {
-        marginTop: 12
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: 10
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "section-label",
-      style: {
-        marginBottom: 0
-      }
-    }, "DEMOGRAPHIC RANGES"), /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-green",
-      style: {
-        fontSize: 8
-      }
-    }, /*#__PURE__*/React.createElement(I, {
-      n: "shieldCheck",
-      s: 8
-    }), "NO PII")), /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: 11,
-        color: 'var(--tx-2)',
-        marginBottom: 10
-      }
-    }, "Aggregated from anonymized transforms. Names, DOBs, SSNs, addresses, phones, and emails are cryptographically blocked \u2014 only bucketed ranges appear."), Object.entries(demoAgg).map(([cat, vals]) => /*#__PURE__*/React.createElement("div", {
-      key: cat,
-      style: {
-        marginBottom: 8
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 10.5,
-        fontWeight: 600,
-        color: 'var(--tx-1)',
-        fontFamily: 'var(--mono)',
-        textTransform: 'uppercase',
-        letterSpacing: '.05em'
-      }
-    }, cat), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-        marginTop: 4
-      }
-    }, Object.entries(vals).sort((a, b) => b[1] - a[1]).map(([val, count]) => {
-      const max = Math.max(...Object.values(vals));
-      return /*#__PURE__*/React.createElement("div", {
-        key: val,
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 11,
-          width: 140,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap'
-        }
-      }, val), /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1,
-          height: 14,
-          background: 'var(--bg-3)',
-          borderRadius: 3,
-          overflow: 'hidden'
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: `${count / max * 100}%`,
-          height: '100%',
-          background: 'var(--green)',
-          borderRadius: 3,
-          transition: 'width .3s'
-        }
-      })), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10.5,
-          fontFamily: 'var(--mono)',
-          color: 'var(--tx-1)',
-          minWidth: 24,
-          textAlign: 'right'
-        }
-      }, count));
-    }))))) : null;
-  })(), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: 'var(--teal-dim)',
-      border: '1px solid rgba(62,201,176,.15)',
-      borderRadius: 'var(--r)',
-      padding: '12px 16px',
-      marginTop: 16,
-      fontSize: 11.5,
-      color: 'var(--tx-1)',
-      lineHeight: 1.6
-    }
-  }, /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: 'var(--teal)'
-    }
-  }, "K-anonymity (k=5):"), " Combinations with fewer than 5 matching individuals are suppressed. This data is suitable for compliance reporting and aggregate analysis. PII fields (name, DOB, SSN, address, phone, email) are never present \u2014 only demographic ranges and hashed identifiers.")), view === 'schema' && /*#__PURE__*/React.createElement(SchemaWorkbench, {
+  }, "Teams and organizations you\u2019re part of, shown as a hierarchy."), (() => {
+    /* ─── Build hierarchy tree ─── */
+    const rootTeams = teams.filter(t => !t.hierarchy?.parent_team_id);
+    const renderTeamNode = (team, depth) => {
+      const children = (team.hierarchy?.child_teams || []).map(c => teams.find(t => t.roomId === c.roomId)).filter(Boolean);
+      const govMode = TEAM_CONSENT_MODES[team.schemaRule?.consent_mode || team.governance || 'lead_decides'] || TEAM_CONSENT_MODES.lead_decides;
+      const teamColor = `hsl(${team.color_hue || 260}, 60%, 55%)`;
+      return /*#__PURE__*/React.createElement("div", { key: team.roomId, style: { marginLeft: depth * 20 } },
+        /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+            borderRadius: 'var(--r)', cursor: 'pointer', transition: 'background .15s',
+            borderLeft: `3px solid ${teamColor}`, marginBottom: 4, background: 'var(--bg-2)'
+          },
+          onClick: () => { switchTeamContext(team.roomId); setView('teams'); setActiveTeamDetail(team); },
+          onMouseEnter: e => { e.currentTarget.style.background = 'var(--bg-3)'; },
+          onMouseLeave: e => { e.currentTarget.style.background = 'var(--bg-2)'; }
+        },
+          /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: '50%', background: teamColor, flexShrink: 0 } }),
+          /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+            /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, team.name || 'Unnamed Team'),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 10.5, color: 'var(--tx-2)', marginTop: 1, display: 'flex', gap: 8, flexWrap: 'wrap' } },
+              /*#__PURE__*/React.createElement("span", null, (team.members || []).length, " member", (team.members || []).length !== 1 ? "s" : ""),
+              (team.customTables || []).filter(t => t.status === 'active').length > 0 && /*#__PURE__*/React.createElement("span", null, (team.customTables || []).filter(t => t.status === 'active').length, " table", (team.customTables || []).filter(t => t.status === 'active').length !== 1 ? "s" : ""),
+              children.length > 0 && /*#__PURE__*/React.createElement("span", null, children.length, " sub-team", children.length !== 1 ? "s" : "")
+            )
+          ),
+          /*#__PURE__*/React.createElement("span", {
+            className: `tag tag-${govMode.color}`,
+            style: { fontSize: 8, flexShrink: 0 }
+          }, /*#__PURE__*/React.createElement(I, { n: govMode.icon, s: 8 }), govMode.label)
+        ),
+        children.length > 0 && children.map(c => renderTeamNode(c, depth + 1))
+      );
+    };
+    return /*#__PURE__*/React.createElement(React.Fragment, null,
+      /* ─── Network level ─── */
+      networkRoom && /*#__PURE__*/React.createElement("div", { className: "card", style: { marginBottom: 12 } },
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 } },
+          /*#__PURE__*/React.createElement(I, { n: "globe", s: 16, c: "var(--blue)" }),
+          /*#__PURE__*/React.createElement("span", { className: "section-label", style: { marginBottom: 0 } }, "NETWORK")
+        ),
+        networkMembers.length > 0 ? networkMembers.map((nm, i) => {
+          const isOwnOrg = orgMeta && (nm.name === orgMeta.name || nm.id === orgRoom);
+          return /*#__PURE__*/React.createElement("div", {
+            key: nm.id || i,
+            style: {
+              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', marginLeft: 20,
+              borderLeft: '2px solid var(--border-1)', marginBottom: 2,
+              borderRadius: '0 var(--r) var(--r) 0', background: isOwnOrg ? 'var(--blue-dim)' : 'transparent'
+            }
+          },
+            /*#__PURE__*/React.createElement(I, { n: "briefcase", s: 12, c: isOwnOrg ? "var(--blue)" : "var(--tx-2)" }),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: isOwnOrg ? 600 : 400, flex: 1 } }, nm.name || nm.id || 'Unknown Org'),
+            isOwnOrg && /*#__PURE__*/React.createElement("span", { className: "tag tag-blue", style: { fontSize: 8 } }, "YOU"),
+            nm.role && nm.role !== 'member' && /*#__PURE__*/React.createElement("span", { className: "tag tag-gold", style: { fontSize: 8 } }, nm.role.toUpperCase())
+          );
+        }) : /*#__PURE__*/React.createElement("p", { style: { fontSize: 11, color: 'var(--tx-3)', marginLeft: 20, fontStyle: 'italic' } }, "No member organizations yet")
+      ),
+      /* ─── Organization level ─── */
+      orgRoom && /*#__PURE__*/React.createElement("div", { className: "card", style: { marginBottom: 12 } },
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 } },
+          /*#__PURE__*/React.createElement(I, { n: "briefcase", s: 16, c: "var(--gold)" }),
+          /*#__PURE__*/React.createElement("span", { className: "section-label", style: { marginBottom: 0 } }, "ORGANIZATION"),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: 600, marginLeft: 4 } }, orgMeta?.name || 'My Organization')
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 10, marginBottom: 10, marginLeft: 24 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-2)' } }, (orgStaff || []).length, " staff member", (orgStaff || []).length !== 1 ? "s" : ""),
+          teams.length > 0 && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-2)' } }, teams.length, " team", teams.length !== 1 ? "s" : ""),
+          networkRoom && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-2)' } }, /*#__PURE__*/React.createElement(I, { n: "globe", s: 10 }), " In network")
+        ),
+        /* ─── Teams nested under org ─── */
+        rootTeams.length > 0 ? /*#__PURE__*/React.createElement("div", { style: { marginLeft: 4 } },
+          /*#__PURE__*/React.createElement("span", { className: "section-label", style: { fontSize: 9, marginBottom: 6, display: 'block', marginLeft: 20 } }, "TEAMS"),
+          rootTeams.map(t => renderTeamNode(t, 1))
+        ) : /*#__PURE__*/React.createElement("p", { style: { fontSize: 11, color: 'var(--tx-3)', marginLeft: 24, fontStyle: 'italic' } }, "No teams yet \u2014 create one from the Teams view")
+      ),
+      /* ─── No org fallback: just teams ─── */
+      !orgRoom && /*#__PURE__*/React.createElement("div", { className: "card", style: { marginBottom: 12 } },
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 } },
+          /*#__PURE__*/React.createElement(I, { n: "users", s: 16, c: "var(--gold)" }),
+          /*#__PURE__*/React.createElement("span", { className: "section-label", style: { marginBottom: 0 } }, "YOUR TEAMS")
+        ),
+        rootTeams.length > 0 ? rootTeams.map(t => renderTeamNode(t, 0))
+          : /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center', padding: '20px', borderStyle: 'dashed', border: '1px dashed var(--border-1)', borderRadius: 'var(--r)' } },
+            /*#__PURE__*/React.createElement(I, { n: "users", s: 28 }),
+            /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', marginTop: 8 } }, "No teams yet. Create or join a team to see your hierarchy here.")
+          )
+      )
+    );
+  })()), view === 'schema' && /*#__PURE__*/React.createElement(SchemaWorkbench, {
     isOrg: !!orgRoom,
     orgMeta: orgMeta,
     networkMembers: networkMembers,
