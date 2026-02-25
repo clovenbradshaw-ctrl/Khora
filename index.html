@@ -2677,7 +2677,9 @@ const EVT = {
   MERGE_AUDIT: `${NS}.merge.audit`,
   // Linked records (sub-records linked across record types, Airtable-style)
   LINKED_RECORD: `${NS}.linked.record`,
-  LINKED_RECORD_INDEX: `${NS}.linked.record.index`
+  LINKED_RECORD_INDEX: `${NS}.linked.record.index`,
+  // Trash bin — soft-deleted individuals pending permanent removal
+  ORG_TRASH: `${NS}.org.trash`
 };
 
 /* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */
@@ -17808,7 +17810,8 @@ const RecordProvenance = ({
   roomId,
   entityKey,
   label,
-  session
+  session,
+  onRestore
 }) => {
   const [ops, setOps] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -18235,12 +18238,18 @@ const RecordProvenance = ({
         gap: 2
       }
     }, o.op === 'INS' && o.operand.value != null && /*#__PURE__*/React.createElement("div", {
-      style: { display: 'flex', alignItems: 'center', gap: 4 }
+      style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }
     }, /*#__PURE__*/React.createElement("span", {
       style: { color: 'var(--green)', fontSize: 9, fontWeight: 600 }
     }, "SET"), /*#__PURE__*/React.createElement("span", {
       style: { fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--green-dim)', padding: '1px 6px', borderRadius: 3 }
-    }, String(o.operand.value).slice(0, 60))),
+    }, String(o.operand.value).slice(0, 60)),
+    onRestore && /*#__PURE__*/React.createElement("button", {
+      className: 'b-gho',
+      style: { fontSize: 9.5, padding: '1px 6px', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' },
+      title: 'Restore to: ' + String(o.operand.value).slice(0, 50),
+      onClick: () => onRestore(o.operand.value)
+    }, /*#__PURE__*/React.createElement(I, { n: 'check', s: 9 }), 'Restore')),
     o.op === 'ALT' && o.operand.from != null && o.operand.to != null && /*#__PURE__*/React.createElement("div", {
       style: { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }
     }, /*#__PURE__*/React.createElement("span", {
@@ -18249,7 +18258,13 @@ const RecordProvenance = ({
       style: { color: 'var(--tx-3)', fontSize: 10 }
     }, "\u2192"), /*#__PURE__*/React.createElement("span", {
       style: { fontFamily: 'var(--mono)', fontSize: 10, background: 'var(--green-dim)', padding: '1px 6px', borderRadius: 3 }
-    }, String(o.operand.to).slice(0, 40))),
+    }, String(o.operand.to).slice(0, 40)),
+    onRestore && /*#__PURE__*/React.createElement("button", {
+      className: 'b-gho',
+      style: { fontSize: 9.5, padding: '1px 6px', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' },
+      title: 'Restore to: ' + String(o.operand.to).slice(0, 50),
+      onClick: () => onRestore(o.operand.to)
+    }, /*#__PURE__*/React.createElement(I, { n: 'check', s: 9 }), 'Restore')),
     o.op === 'NUL' && /*#__PURE__*/React.createElement("div", {
       style: { display: 'flex', alignItems: 'center', gap: 4 }
     }, /*#__PURE__*/React.createElement("span", {
@@ -25570,11 +25585,68 @@ const IndividualPanel = ({
   panelTab,
   setPanelTab,
   provenanceField,
-  setProvenanceField
+  setProvenanceField,
+  svc,
+  onRestoreField
 }) => {
   if (!row) return null;
   const indNotes = (notes || []).filter(n => n.indId === row.id);
   const indAllocs = (allocations || []).filter(a => a.indId === row.id);
+
+  // ─── Load field EO change history from bridge room timeline ───
+  const [fieldHistories, setFieldHistories] = React.useState({});
+  React.useEffect(() => {
+    if (!svc || !row.bridgeRoom) { setFieldHistories({}); return; }
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const room = svc.client && svc.client.getRoom(row.bridgeRoom);
+        if (!room) return;
+        // Paginate backwards to capture history
+        for (let i = 0; i < 3; i++) {
+          const token = room.getLiveTimeline().getPaginationToken('b');
+          if (!token) break;
+          try { await svc.client.scrollback(room, 100); } catch (e) { break; }
+        }
+        const events = [];
+        const timelineSets = room.getTimelineSets ? room.getTimelineSets() : [];
+        if (timelineSets.length > 0) {
+          const seen = new Set();
+          for (const ts of timelineSets) {
+            for (const tl of ts.getTimelines()) {
+              for (const ev of tl.getEvents()) {
+                if (!seen.has(ev.getId())) { seen.add(ev.getId()); events.push(ev); }
+              }
+            }
+          }
+        } else {
+          for (const ev of room.getLiveTimeline().getEvents()) events.push(ev);
+        }
+        const hist = {};
+        events.forEach(ev => {
+          if (ev.getType && ev.getType() === EVT.OP) {
+            const c = ev.getContent();
+            if (c.target && c.target.startsWith('org.individuals.') && (c.op === 'ALT' || c.op === 'INS')) {
+              const parts = c.target.split('.');
+              const fieldKey = parts[2];
+              if (fieldKey && fieldKey !== row.id) { // skip individual-level ops (roomId as fieldKey)
+                if (!hist[fieldKey]) hist[fieldKey] = [];
+                hist[fieldKey].push({ eo_op: c.op, from: c.operand?.from, to: c.operand?.to, at: c.ts || ev.getTs(), by: (c.created_by || ev.getSender() || '').split(':')[0]?.replace('@','') || '?' });
+              }
+            }
+          }
+        });
+        // Sort each field history newest-first
+        Object.keys(hist).forEach(k => hist[k].sort((a, b) => (b.at || 0) - (a.at || 0)));
+        if (!cancelled) setFieldHistories(hist);
+      } catch (e) { /* history load failed silently */ }
+    };
+    load();
+    // Also refresh on new EO events
+    const handler = e => { if (e.detail?.roomId === row.bridgeRoom) load(); };
+    window.addEventListener('khora:eo', handler);
+    return () => { cancelled = true; window.removeEventListener('khora:eo', handler); };
+  }, [row.bridgeRoom, svc]);
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     className: "dt-panel-overlay",
     onClick: onClose
@@ -25684,42 +25756,31 @@ const IndividualPanel = ({
       marginTop: 6,
       fontSize: 11
     }
-  }, /*#__PURE__*/React.createElement("strong", null, "Source: "), f.source, " \xB7 ", /*#__PURE__*/React.createElement("strong", null, "Confidence: "), f.confidence), f.history && f.history.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 10,
-      marginBottom: 6
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "section-label"
-  }, "EVENT HISTORY")), [...f.history].reverse().map((evt, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      fontSize: 12,
-      color: 'var(--tx-1)',
-      padding: '4px 0'
-    }
-  }, /*#__PURE__*/React.createElement(DtEo, {
-    op: evt.eo_op
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontWeight: 500,
-      minWidth: 55
-    }
-  }, dtFmtDate(evt.at)), /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--tx-2)'
-    }
-  }, evt.by), /*#__PURE__*/React.createElement("span", {
-    style: {
-      marginLeft: 'auto',
-      fontFamily: 'var(--mono)',
-      fontSize: 10,
-      color: 'var(--tx-3)'
-    }
-  }, evt.type)))))))), panelTab === 'notes' && /*#__PURE__*/React.createElement(React.Fragment, null, (() => {
+  }, /*#__PURE__*/React.createElement("strong", null, "Source: "), f.source, " \xB7 ", /*#__PURE__*/React.createElement("strong", null, "Confidence: "), f.confidence), (() => {
+  const hist = [...(f.history || []), ...(fieldHistories[key] || [])].sort((a, b) => (b.at || 0) - (a.at || 0));
+  if (hist.length === 0) return null;
+  return React.createElement(React.Fragment, null,
+    React.createElement("div", { style: { marginTop: 10, marginBottom: 6 } },
+      React.createElement("span", { className: "section-label" }, "CHANGE HISTORY")),
+    hist.map((evt, i) => React.createElement("div", {
+      key: i,
+      style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--tx-1)', padding: '5px 0', borderBottom: '1px solid var(--border-0)', flexWrap: 'wrap' }
+    },
+      React.createElement(DtEo, { op: evt.eo_op || 'ALT' }),
+      React.createElement("span", { style: { fontWeight: 500, minWidth: 55, flexShrink: 0 } }, dtFmtDate(evt.at)),
+      React.createElement("span", { style: { color: 'var(--tx-2)', fontSize: 11, flexShrink: 0 } }, evt.by || evt.type || ''),
+      (evt.from !== undefined || evt.to !== undefined) && React.createElement("span", {
+        style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--tx-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+      }, evt.from != null ? String(evt.from).slice(0, 24) : '\u2205', ' \u2192 ', evt.to != null ? String(evt.to).slice(0, 24) : '\u2205'),
+      onRestoreField && evt.to != null && React.createElement("button", {
+        className: 'b-gho',
+        style: { fontSize: 10, padding: '2px 7px', marginLeft: 'auto', whiteSpace: 'nowrap', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3 },
+        title: 'Restore to: ' + String(evt.to).slice(0, 50),
+        onClick: e => { e.stopPropagation(); onRestoreField(key, evt.to); }
+      }, React.createElement(I, { n: 'check', s: 9 }), 'Restore')
+    ))
+  );
+})())))))), panelTab === 'notes' && /*#__PURE__*/React.createElement(React.Fragment, null, (() => {
     const shared = indNotes.filter(n => n.type === 'shared');
     const internal = indNotes.filter(n => n.type === 'internal');
     return /*#__PURE__*/React.createElement(React.Fragment, null, shared.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
@@ -27269,7 +27330,10 @@ const DatabaseView = ({
   onCreateLinkedRecord,
   onRemoveLinkedRecord,
   onCreateTable,
-  onOpenTable
+  onOpenTable,
+  trashedIndividuals,
+  onRestoreIndividual,
+  onRestoreField
 }) => {
   const [dbTab, setDbTab] = useState('individuals');
   const [enabledFieldCols, setEnabledFieldCols] = useState([]);
@@ -27327,7 +27391,7 @@ const DatabaseView = ({
     transferable: false,
     _clientRecord: r
   }));
-  const allIndividuals = [...individuals, ...extraClients];
+  const allIndividuals = [...individuals, ...extraClients].filter(row => !(trashedIndividuals || {})[row.id]);
   const IND_COLS = [{
     key: 'name',
     label: 'Individual',
@@ -27698,6 +27762,11 @@ const DatabaseView = ({
     label: 'Tables',
     count: (activeTeamObj?.customTables || []).filter(t => t.status === 'active').length,
     icon: 'database'
+  }, {
+    id: 'trash',
+    label: 'Trash',
+    count: Object.keys(trashedIndividuals || {}).length,
+    icon: 'trash'
   }].map(tab => /*#__PURE__*/React.createElement("button", {
     key: tab.id,
     className: 'db-tab' + (dbTab === tab.id ? ' active' : ''),
@@ -28024,6 +28093,41 @@ const DatabaseView = ({
             );
           })()
         )
+  ),
+  dbTab === 'trash' && React.createElement('div', { className: 'anim-up' },
+    Object.keys(trashedIndividuals || {}).length === 0
+      ? React.createElement('div', { style: { textAlign: 'center', padding: '60px 20px', color: 'var(--tx-3)' } },
+          React.createElement(I, { n: 'trash', s: 32, c: 'var(--border-1)' }),
+          React.createElement('p', { style: { marginTop: 12, fontSize: 13, fontWeight: 500 } }, 'Trash is empty'),
+          React.createElement('p', { style: { fontSize: 11, marginTop: 4, color: 'var(--tx-3)' } }, 'Deleted individuals will appear here and can be restored.'))
+      : React.createElement('div', null,
+          React.createElement('span', { className: 'section-label', style: { display: 'block', marginBottom: 10 } }, 'DELETED INDIVIDUALS — click Restore to recover'),
+          Object.entries(trashedIndividuals || {}).map(([roomId, info]) =>
+            React.createElement('div', {
+              key: roomId,
+              style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 'var(--r)', border: '1px solid var(--border-0)', background: 'var(--bg-2)', marginBottom: 6, gap: 12 }
+            },
+              React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                React.createElement('div', {
+                  style: { width: 28, height: 28, borderRadius: '50%', background: 'var(--border-1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tx-2)', fontSize: 12, fontWeight: 700, flexShrink: 0 }
+                }, (info.name || '?')[0].toUpperCase()),
+                React.createElement('div', null,
+                  React.createElement('div', { style: { fontWeight: 600, fontSize: 13 } }, info.name || 'Unknown'),
+                  React.createElement('div', { style: { fontSize: 11, color: 'var(--tx-3)', marginTop: 2 } },
+                    'Deleted by ', (info.deletedBy || '').split(':')[0]?.replace('@', '') || '?',
+                    ' \u00B7 ', info.deletedAt ? new Date(info.deletedAt).toLocaleDateString() : 'Unknown date'),
+                  React.createElement('div', { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginTop: 2 } }, roomId)
+                )
+              ),
+              React.createElement('button', {
+                className: 'b-gho b-sm',
+                style: { display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' },
+                onClick: () => onRestoreIndividual && onRestoreIndividual(roomId)
+              }, React.createElement(I, { n: 'check', s: 11 }), 'Restore')
+            )
+          )
+        )
+  )
   ));
 };
 
@@ -32182,7 +32286,8 @@ const IndividualProfilePage = ({
     roomId: individual.bridgeRoom,
     entityKey: key,
     label: key.replace(/_/g, ' '),
-    session: null
+    session: null,
+    onRestore: onFieldEdit ? value => onFieldEdit(individual, key, value) : null
   })));
   }))), tab === 'notes' && /*#__PURE__*/React.createElement("div", {
     className: "profile-section"
@@ -33357,7 +33462,9 @@ const IndividualsView = ({
     panelTab: panelTab,
     setPanelTab: setPanelTab,
     provenanceField: provenanceField,
-    setProvenanceField: setProvenanceField
+    setProvenanceField: setProvenanceField,
+    svc: svc,
+    onRestoreField: null
   }));
 };
 
@@ -33771,6 +33878,8 @@ const ProviderApp = ({
   const [inviteRole, setInviteRole] = useState('case_manager');
   // Case assignments — tracks which staff are assigned to which bridges within the org
   const [caseAssignments, setCaseAssignments] = useState({}); // { [bridgeRoomId]: { primary, staff:[], client_name, transferable } }
+  // Trash bin — soft-deleted individuals: { [roomId]: { deletedBy, deletedAt, name } }
+  const [trashedIndividuals, setTrashedIndividuals] = useState({});
   const [transferModal, setTransferModal] = useState(null); // case object to transfer
   const [transferTarget, setTransferTarget] = useState(''); // staff user ID to transfer to
   // Client records — provider-created rooms representing clients
@@ -34050,6 +34159,11 @@ const ProviderApp = ({
       if (assignments?.assignments) setCaseAssignments(assignments.assignments);
       else setCaseAssignments({});
     } catch {}
+    // Reload trash bin
+    try {
+      const trashState = await svc.getState(target.roomId, EVT.ORG_TRASH);
+      setTrashedIndividuals(trashState || {});
+    } catch { setTrashedIndividuals({}); }
     // Reload org channels for the new org
     try {
       const scanned = await svc.scanRooms([EVT.ORG_MSG_CHANNEL]);
@@ -34468,6 +34582,11 @@ const ProviderApp = ({
         } catch (e) {
           console.warn('Assignment load:', e.message);
         }
+        // Load trash bin state from org room
+        try {
+          const trashState = await svc.getState(detectedOrg, EVT.ORG_TRASH);
+          if (trashState) setTrashedIndividuals(trashState);
+        } catch (e) { /* trash may be empty */ }
       }
       // Load teams detected during scan — apply per-user local color overrides
       if (detectedTeams.length > 0) setTeams(detectedTeams.map((t, i) => ({
@@ -34973,35 +35092,38 @@ const ProviderApp = ({
   // ─── Bulk action handler for database table ───
   const handleBulkAction = async (actionId, selectedRows) => {
     if (actionId === 'delete') {
-      if (!window.confirm(`Remove ${selectedRows.length} individual(s) from roster?`)) return;
+      if (!window.confirm(`Move ${selectedRows.length} individual(s) to trash?`)) return;
+      let newTrash = { ...trashedIndividuals };
       for (const rowId of selectedRows) {
         const c = cases.find(c => c.bridgeRoomId === rowId);
         const roomId = rowId;
         try {
-          await emitOp(roomId, 'NUL', dot('org', 'individuals', 'status'), {
+          // EO: NUL(org.individuals.{roomId}, {from: 'active', to: 'deleted', reason: 'user_deleted'}) — individual_trash
+          await emitOp(roomId, 'NUL', dot('org', 'individuals', roomId), {
             from: c ? 'active' : 'created',
-            to: 'removed',
-            edit_source: 'database_bulk'
+            to: 'deleted',
+            reason: 'user_deleted'
           }, {
             type: 'org',
             epistemic: 'MEANT',
             role: orgRole || 'provider'
           });
-          if (orgRoom && caseAssignments[roomId]) {
-            const updatedAssignments = {
-              ...caseAssignments
-            };
-            delete updatedAssignments[roomId];
-            await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, {
-              assignments: updatedAssignments
-            });
-            setCaseAssignments(updatedAssignments);
-          }
+          newTrash[roomId] = {
+            deletedBy: svc.userId,
+            deletedAt: Date.now(),
+            name: c?.sharedData?.full_name || c?.clientUserId || 'Unknown'
+          };
         } catch (e) {
           console.warn('Bulk delete failed for', roomId, e.message);
         }
       }
-      showToast(`${selectedRows.length} individual(s) removed`, 'success');
+      if (orgRoom) {
+        try {
+          await svc.setState(orgRoom, EVT.ORG_TRASH, newTrash);
+        } catch (e) { console.warn('Trash persist failed:', e.message); }
+      }
+      setTrashedIndividuals(newTrash);
+      showToast(`${selectedRows.length} individual(s) moved to trash`, 'warn');
     } else if (actionId === 'assign') {
       const staffList = (staff || []).map(s => s.display_name || s.userId?.split(':')[0]?.replace('@', '') || s.userId);
       const staffName = window.prompt('Assign to ' + T.staff_term.toLowerCase() + (staffList.length > 0 ? ' (' + staffList.join(', ') + ')' : '') + ':');
@@ -35037,6 +35159,31 @@ const ProviderApp = ({
       showToast(`${selectedRows.length} individual(s) assigned to ${staffName}`, 'success');
     } else if (actionId === 'tag') {
       showToast('Tagging is not yet implemented', 'info');
+    }
+  };
+
+  // ─── Restore individual from trash ───
+  const handleRestoreIndividual = async (roomId) => {
+    try {
+      // EO: INS(org.individuals.{roomId}, {from: 'deleted', to: 'active', reason: 'user_restored'}) — individual_restore
+      await emitOp(roomId, 'INS', dot('org', 'individuals', roomId), {
+        from: 'deleted',
+        to: 'active',
+        reason: 'user_restored'
+      }, {
+        type: 'org',
+        epistemic: 'MEANT',
+        role: orgRole || 'provider'
+      });
+      const newTrash = { ...trashedIndividuals };
+      delete newTrash[roomId];
+      if (orgRoom) {
+        await svc.setState(orgRoom, EVT.ORG_TRASH, newTrash);
+      }
+      setTrashedIndividuals(newTrash);
+      showToast('Individual restored', 'success');
+    } catch (e) {
+      showToast('Restore failed: ' + e.message, 'error');
     }
   };
 
@@ -38178,7 +38325,33 @@ const ProviderApp = ({
     },
     resourceTypes: resourceTypes,
     onCreateTable: team => setCreateTableModal({ teamId: team.roomId, teamName: team.name }),
-    onOpenTable: (table, team) => setActiveCustomTable({ table, teamId: team.roomId })
+    onOpenTable: (table, team) => setActiveCustomTable({ table, teamId: team.roomId }),
+    trashedIndividuals: trashedIndividuals,
+    onRestoreIndividual: handleRestoreIndividual,
+    onRestoreField: async (row, fieldKey, pastValue) => {
+      const currentValue = row.fields?.[fieldKey]?.value || row[fieldKey] || '';
+      const roomId = row.bridgeRoom || row.id;
+      try {
+        // EO: ALT(org.individuals.{fieldKey}, {from: current, to: past, reason: 'history_restore'}) — field_restore
+        await emitOp(roomId, 'ALT', dot('org', 'individuals', fieldKey), {
+          from: currentValue,
+          to: pastValue,
+          reason: 'history_restore'
+        }, { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
+        // Persist via same path as handleDbCellEdit
+        if (row._case) {
+          const updatedData = { ...row._case.sharedData, [fieldKey]: pastValue };
+          await svc.setState(roomId, EVT.BRIDGE_REFS, { fields: updatedData });
+        } else if (row._clientRecord) {
+          const updates = { ...row._clientRecord };
+          if (fieldKey === 'name') updates.client_name = pastValue;
+          await svc.setState(row.id, EVT.IDENTITY, updates);
+        }
+        showToast(`Field "${fieldKey.replace(/_/g,' ')}" restored`, 'success');
+      } catch (e) {
+        showToast('Restore failed: ' + e.message, 'error');
+      }
+    }
   }), /*#__PURE__*/React.createElement(NoteCreateModal, {
     open: newNoteModal,
     onClose: () => setNewNoteModal(false),
