@@ -109,6 +109,19 @@
   .link-status .live{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}
   .link-status .off{width:8px;height:8px;border-radius:50%;background:var(--text-faint)}
   @media(max-width:600px){.shell{padding:14px}.factions{opacity:1}.user-bar{flex-wrap:wrap}}
+  /* Pool Bridge */
+  .bridge-card{background:var(--mg-dim);border:1px solid rgba(13,189,139,0.2);border-radius:var(--radius);padding:20px;margin-bottom:14px}
+  .bridge-card h3{font-size:14px;font-weight:700;margin-bottom:6px}
+  .bridge-card p{font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:14px}
+  .bridge-cap-row{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .bridge-cap-row label{margin:0;flex-shrink:0}
+  .bridge-cap-row input[type=number]{width:80px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;outline:none}
+  .bridge-cap-row input[type=number]:focus{border-color:var(--accent)}
+  .bridge-cap-row .unit{font-size:11px;color:var(--text-faint)}
+  .bridge-actions{display:flex;gap:8px}
+  .bridge-status{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:14px;font-size:12px;color:var(--text-dim)}
+  .bridge-status .live{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite;flex-shrink:0}
+  .bridge-status .bridge-info{flex:1;font-family:'IBM Plex Mono',monospace}
 </style>
 </head>
 <body>
@@ -190,6 +203,32 @@
       <div><div class="uname" id="uName">—</div><div class="storage" id="uStorage"></div></div>
       <button class="btn btn-ghost btn-sm logout" onclick="doLogout()">Disconnect</button>
     </div>
+    <!-- Pool Bridge Invitation -->
+    <div id="poolBridgeCard" class="bridge-card hidden">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <div style="font-size:28px">🌐</div>
+        <div>
+          <h3>Help the Network</h3>
+          <div style="font-size:12px;color:var(--text-dim)">Mirror encrypted files so others can fetch when uploaders are offline</div>
+        </div>
+      </div>
+      <p>Your account supports public links. Enable bridge mode to automatically store and serve encrypted blobs for the Khora network. You'll never see the contents — everything arrives pre-encrypted.</p>
+      <div class="bridge-cap-row">
+        <label style="margin-top:0">CAPACITY</label>
+        <input type="number" id="bridgeCapacityInput" value="5" min="1" max="100" step="1">
+        <span class="unit">GB of <span id="bridgeAvailable">—</span> available</span>
+      </div>
+      <div class="bridge-actions">
+        <button class="btn btn-primary btn-sm" onclick="enableBridge()">Enable Bridge</button>
+        <button class="btn btn-ghost btn-sm" onclick="dismissBridgeCard()">Not Now</button>
+      </div>
+    </div>
+    <!-- Pool Bridge Status -->
+    <div id="poolBridgeStatus" class="bridge-status hidden">
+      <div class="live"></div>
+      <div class="bridge-info"><strong>Pool Bridge active</strong> · <span id="bridgeFileCount">0</span> files mirrored · <span id="bridgeStorageUsed">0 B</span> used</div>
+      <button class="btn btn-ghost btn-sm" onclick="disableBridge()" style="margin-left:auto;flex-shrink:0">Disable</button>
+    </div>
     <div class="card">
       <div class="toolbar">
         <div class="breadcrumb" id="breadcrumb"></div>
@@ -218,7 +257,7 @@ const CHUNK=1048576;
 const APP_SALT='khora-matrix-backup-bridge-v1';
 const te=new TextEncoder(),td=new TextDecoder();
 
-let S={apiKey:null,masterKeys:[],baseFolderUUID:null,email:null,matrixId:null,curDir:null,pathStack:[],filenPassword:null};
+let S={apiKey:null,masterKeys:[],baseFolderUUID:null,email:null,matrixId:null,curDir:null,pathStack:[],filenPassword:null,canCreateLinks:false,maxStorage:0,usedStorage:0};
 let curFolders=[],curFiles=[];
 
 const hex=b=>Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -312,7 +351,7 @@ async function tryLogin(email,rawPassword){
     S.apiKey=lr.data.apiKey;S.email=email;S.masterKeys=[masterKey];
     try{const emk=await metaEnc(masterKey,masterKey);const mkr=await apiPost('/user/masterKeys',{masterKeys:emk});if(mkr.status&&mkr.data?.keys){const dk=await metaDec(mkr.data.keys,masterKey);if(dk)S.masterKeys=dk.split('|').filter(Boolean);}}catch{}
     const bf=await apiGet('/user/baseFolder');if(!bf.status)throw new Error('Base folder failed');S.baseFolderUUID=bf.data.uuid;
-    try{const acc=await apiGet('/user/account');if(acc.status)document.getElementById('uStorage').textContent=`${fmtSize(acc.data.storageUsed||0)} / ${fmtSize(acc.data.maxStorage||0)}`;}catch{}
+    try{const acc=await apiGet('/user/account');if(acc.status){const used=acc.data.storageUsed||0,max=acc.data.maxStorage||0;document.getElementById('uStorage').textContent=`${fmtSize(used)} / ${fmtSize(max)}`;S.maxStorage=max;S.usedStorage=used;S.canCreateLinks=max>11*1024*1024*1024;}}catch{}
     return true;
   }catch{return false;}
 }
@@ -399,18 +438,27 @@ function clearCreds(){try{localStorage.removeItem('backup_creds');localStorage.r
 function hasSeenRecovery(){try{return localStorage.getItem('backup_seen')==='1';}catch{return false;}}
 function markRecoverySeen(){try{localStorage.setItem('backup_seen','1');}catch{}}
 
+// ═══ POOL BRIDGE SETTINGS ═══
+function savePoolBridgeSettings(enabled,capacityGB){try{localStorage.setItem('backup_bridge',JSON.stringify({enabled,capacity_gb:capacityGB,enabled_at:enabled?new Date().toISOString():null,ts:Date.now()}));}catch{}}
+function loadPoolBridgeSettings(){try{return JSON.parse(localStorage.getItem('backup_bridge'));}catch{return null;}}
+function isBridgeDismissed(){try{return localStorage.getItem('backup_bridge_dismissed')==='1';}catch{return false;}}
+function markBridgeDismissed(){try{localStorage.setItem('backup_bridge_dismissed','1');}catch{}}
+
 function switchToBrowser(displayId){
   S.curDir=S.baseFolderUUID;S.pathStack=[{uuid:S.baseFolderUUID,name:'Backup'}];
   document.getElementById('setupView').classList.add('hidden');document.getElementById('browserView').classList.remove('hidden');
   document.getElementById('uName').textContent=displayId;
   document.getElementById('uAvatar').textContent=(displayId[0]==='@'?displayId[1]:displayId[0]).toUpperCase();
   loadDir(S.baseFolderUUID);
+  setTimeout(()=>checkBridgeEligibility(),1000);
 }
 function doLogout(){
-  S={apiKey:null,masterKeys:[],baseFolderUUID:null,email:null,matrixId:null,curDir:null,pathStack:[],filenPassword:null};
+  S={apiKey:null,masterKeys:[],baseFolderUUID:null,email:null,matrixId:null,curDir:null,pathStack:[],filenPassword:null,canCreateLinks:false,maxStorage:0,usedStorage:0};
   curFiles=[];curFolders=[];clearCreds();
   document.getElementById('setupView').classList.remove('hidden');document.getElementById('browserView').classList.add('hidden');
-  document.getElementById('autoBar').classList.add('hidden');goStep(1);toast('Disconnected','success');
+  document.getElementById('autoBar').classList.add('hidden');
+  document.getElementById('poolBridgeCard').classList.add('hidden');document.getElementById('poolBridgeStatus').classList.add('hidden');
+  goStep(1);toast('Disconnected','success');
 }
 
 async function autoConnect(){
@@ -419,6 +467,42 @@ async function autoConnect(){
   document.getElementById('inMatrixId').value=creds.matrixId;document.getElementById('inSetupEmail').value=creds.email;
   try{const fp=await deriveFilenPassword(creds.matrixId);const ok=await tryLogin(creds.email,fp);if(ok){S.matrixId=creds.matrixId;S.filenPassword=fp;bar.classList.add('hidden');switchToBrowser(creds.matrixId);return;}}catch{}
   bar.classList.add('hidden');toast('Auto-connect failed — sign in manually','info');
+}
+
+// ═══ POOL BRIDGE LOGIC ═══
+function checkBridgeEligibility(){
+  const card=document.getElementById('poolBridgeCard'),bar=document.getElementById('poolBridgeStatus');
+  if(!S.canCreateLinks){card.classList.add('hidden');bar.classList.add('hidden');return;}
+  const settings=loadPoolBridgeSettings();
+  if(settings&&settings.enabled){card.classList.add('hidden');bar.classList.remove('hidden');updateBridgeStatus();return;}
+  if(isBridgeDismissed()){card.classList.add('hidden');bar.classList.add('hidden');return;}
+  const avail=S.maxStorage-S.usedStorage;
+  document.getElementById('bridgeAvailable').textContent=fmtSize(avail);
+  card.classList.remove('hidden');bar.classList.add('hidden');
+}
+function enableBridge(){
+  const inp=document.getElementById('bridgeCapacityInput');
+  const cap=Math.max(1,Math.min(100,parseInt(inp.value)||5));
+  savePoolBridgeSettings(true,cap);
+  document.getElementById('poolBridgeCard').classList.add('hidden');
+  document.getElementById('poolBridgeStatus').classList.remove('hidden');
+  updateBridgeStatus();
+  toast('Pool Bridge enabled — you\'re helping the network','success',6000);
+  window.dispatchEvent(new CustomEvent('khora-bridge-ready',{detail:{capacity_gb:cap,maxStorage:S.maxStorage,usedStorage:S.usedStorage}}));
+}
+function dismissBridgeCard(){
+  markBridgeDismissed();
+  document.getElementById('poolBridgeCard').classList.add('hidden');
+}
+function disableBridge(){
+  savePoolBridgeSettings(false,0);
+  document.getElementById('poolBridgeStatus').classList.add('hidden');
+  toast('Pool Bridge disabled','info');
+  window.dispatchEvent(new CustomEvent('khora-bridge-stopped'));
+}
+function updateBridgeStatus(){
+  const settings=loadPoolBridgeSettings();if(!settings||!settings.enabled)return;
+  document.getElementById('bridgeStorageUsed').textContent=fmtSize(S.usedStorage);
 }
 
 // ═══ FILE BROWSER ═══
@@ -588,6 +672,37 @@ window.backupConnect=async function(matrixId,email){
   const reg=await tryRegister(email,fp);
   if(reg==='registered'||reg==='exists_unconfirmed')return'needs_confirmation';
   throw new Error(reg);
+};
+
+// ═══ POOL BRIDGE API ═══
+window.backupCanBridge=()=>!!S.canCreateLinks;
+window.backupGetCapacity=()=>({total:S.maxStorage||0,used:S.usedStorage||0,available:Math.max(0,(S.maxStorage||0)-(S.usedStorage||0))});
+
+window.backupDeleteFile=async function(folder,filename){
+  if(!S.apiKey)throw new Error('Not connected');
+  const folderUUID=folder?await ensureFolder(folder):S.baseFolderUUID;
+  const r=await apiPost('/dir/content',{uuid:folderUUID});
+  if(!r.status)throw new Error(r.message||'Folder not found');
+  for(const u of(r.data.uploads||[])){const m=await decMeta(u.metadata);if(m&&m.name===filename){const tr=await apiPost('/file/trash',{uuid:u.uuid});if(!tr.status)throw new Error(tr.message||'Trash failed');return true;}}
+  return false;
+};
+
+window.backupUploadBufferAndLink=async function(buffer,filename,folder){
+  if(!S.apiKey)throw new Error('Not connected');
+  const file=new File([buffer],filename,{type:'application/octet-stream',lastModified:Date.now()});
+  return window.backupUploadAndLink(file,folder);
+};
+
+window.backupBridgeSettings=()=>loadPoolBridgeSettings();
+window.backupEnableBridge=function(capacityGB){
+  if(!S.canCreateLinks)throw new Error('Account does not support public links');
+  const cap=Math.max(1,Math.min(100,capacityGB||5));
+  savePoolBridgeSettings(true,cap);checkBridgeEligibility();
+  window.dispatchEvent(new CustomEvent('khora-bridge-ready',{detail:{capacity_gb:cap,maxStorage:S.maxStorage,usedStorage:S.usedStorage}}));
+};
+window.backupDisableBridge=function(){
+  savePoolBridgeSettings(false,0);checkBridgeEligibility();
+  window.dispatchEvent(new CustomEvent('khora-bridge-stopped'));
 };
 
 // Key handlers
