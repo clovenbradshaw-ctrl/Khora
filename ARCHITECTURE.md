@@ -23,7 +23,7 @@ The core architectural idea is **client data sovereignty**: the person being ser
 7. [Networks](#7-networks)
 8. [Schema System](#8-schema-system)
 9. [Governance](#9-governance)
-10. [The GIVEN/MEANT Divide](#10-the-givenmeant-divide)
+10. [The GIVEN/FRAMEWORK/MEANT Architecture](#10-the-given--framework--meant-architecture)
 11. [Epistemic Operations (EO)](#11-epistemic-operations-eo)
 12. [Encryption & Security Model](#12-encryption--security-model)
 13. [Metrics & Anonymization](#13-metrics--anonymization)
@@ -282,7 +282,7 @@ The hash salt enables **deterministic matching tokens** — different organizati
 
 ## 8. Schema System
 
-The schema system is organized around two layers that mirror the GIVEN/MEANT divide: **forms** (structured GIVEN data collection) and **interpretations** (frameworks that create MEANT from GIVEN). It operates at three levels: network, organization, and client.
+The schema system is organized around the GIVEN/FRAMEWORK/MEANT architecture: **forms** (structured GIVEN data collection) and **interpretations** (frameworks that create MEANT from GIVEN). It operates at three levels: network, organization, and client.
 
 ### Forms — GIVEN Data Collection
 
@@ -416,42 +416,74 @@ Every governance decision is traced through EO operations:
 
 ---
 
-## 10. The GIVEN/MEANT Divide
+## 10. The GIVEN / FRAMEWORK / MEANT Architecture
 
-This is Khora's core conceptual innovation. Every piece of data in the system exists in one of two **epistemic frames**:
+This is Khora's core conceptual innovation. Every piece of data in the system exists in one of three **epistemic layers**:
 
-- **GIVEN** — What actually happened. The client's direct observation, unmediated by institutional interpretation. ("I slept in my car last night.")
-- **MEANT** — What an institution classifies that observation as. The institutional meaning derived from the GIVEN via framework bindings. ("Under HUD 24 CFR 578.3, this person is Literally Homeless, Category 1.")
+- **GIVEN** — What actually happened. The raw observation, unmediated by institutional interpretation. ("I slept in my car last night.") Givens are append-only and can never be edited or deleted. They always belong to the person or observer who provided them.
+- **FRAMEWORK** — Who's looking, under what rules. The interpretive context: which agency, which definitions, which eligibility criteria. Different frameworks read the same fact through different lenses — different mandates, different thresholds, different rules for what counts. Frameworks nest: narrower frameworks inherit from broader ones. In the technical architecture, a framework is represented by a K Frame.
+- **MEANT** — What it gets classified as. The institutional interpretation, produced when a specific framework is applied to raw observations. Every Meant-classification is traceable to the framework that produced it and the Givens it was derived from.
 
 ### Why This Matters
 
 The same ground-truth observation produces **different institutional classifications** depending on which framework interprets it. A person sleeping in a vehicle is:
 
-- **HUD**: Literally Homeless (Category 1) — eligible for CoC-funded services
-- **CoC Local Policy**: Priority 1 — immediate outreach required
-- **VA**: May not qualify under VA-specific homelessness criteria
+- **HUD Framework**: Literally Homeless (Category 1) — eligible for CoC-funded services
+- **CoC Local Policy Framework**: Priority 1 — immediate outreach required
+- **VA Framework**: May not qualify under VA-specific homelessness criteria
 
-Without the GIVEN/MEANT divide, these classifications are invisible. The system just records "homeless" without tracing which definition of "homeless" was applied, or that the client's actual statement was about sleeping in a car.
+Most systems collapse all three layers into one — they record the classification and throw away both the original observation and the framework that produced it. Khora keeps all three. Switch frameworks, and the classifications update. Stack frameworks, and you see where they converge and where they diverge — and exactly what structural difference between them produces each disagreement.
 
 ### Visualization
 
-The UI renders a three-column layout:
+The UI renders a three-column layout with Framework as the crossing:
 
 ```
-┌─────────────────┬────────────┬───────────────────────┐
-│     GIVEN       │  CROSSING  │        MEANT          │
-│                 │            │                       │
-│ Where did you   │  CON, SYN  │ Framework: HUD        │
-│ sleep last      │     →      │ → Literally Homeless  │
-│ night?          │            │                       │
-│                 │            │ Framework: CoC        │
-│ Answer: Vehicle │            │ → Priority 1 Outreach │
-└─────────────────┴────────────┴───────────────────────┘
+┌─────────────────┬────────────────┬───────────────────────┐
+│     GIVEN       │   FRAMEWORK    │        MEANT          │
+│                 │                │                       │
+│ Where did you   │  HUD CoC 2024  │ → Literally Homeless  │
+│ sleep last      │   CON, SYN →   │   (Category 1)        │
+│ night?          │                │                       │
+│                 │  CoC Local     │ → Priority 1 Outreach │
+│ Answer: Vehicle │   CON, SYN →   │                       │
+└─────────────────┴────────────────┴───────────────────────┘
 ```
 
-The center column shows which EO operators connect the GIVEN to each MEANT, making the interpretive chain explicit and auditable.
+The center column shows which framework produced each classification and which EO operators connect the GIVEN to each MEANT, making the interpretive chain explicit and auditable.
 
-When frameworks **disagree** about the same observation, a **SUP (superposition)** badge appears — explicitly marking epistemic divergence.
+When frameworks **agree**, a convergence indicator (● green) appears. When they **disagree**, a divergence indicator (◐ split) marks the divergence with a tap-to-expand detail showing the structural source of each disagreement.
+
+### Technical Mapping
+
+The mapping from the formal Experience Engine spec to Khora domain language:
+
+| Formal (Experience Engine) | Khora (Domain) | What it is |
+|---|---|---|
+| Given-Log (*G*) | Given | Append-only observation record |
+| Horizon-Lattice (*H*) | Framework | Perspectival context with nesting |
+| Meant-Graph (*M*) | Meant | Interpretation/classification graph |
+| Horizon Gate (Γ_h) | Framework filter | What's visible from a given framework |
+| Availability function (γ) | Framework scope | Which observations a framework considers |
+| Supersession function (σ) | Framework-local priority | What overrides what, per framework |
+| K Frame (κ) | K Frame | Portable serialization of a Framework |
+| Refinement (⊑) | Framework nesting | Narrower frameworks inherit from broader ones |
+
+The Nine Rules map to three conformance levels:
+
+| Level | Rules | Khora guarantee |
+|---|---|---|
+| Given-conformant | 1–3 | Raw observations protected from fabrication and erasure |
+| Framework-conformant | 4–6 | Perspectival access is structurally sound |
+| Meant-conformant | 7–9 | Interpretations are grounded, contextual, and revisable |
+
+### Design System
+
+Framework gets its own accent color (indigo) — distinct from Given (teal) and Meant (gold). The three colors map to three conceptual zones, giving every component a clear structural identity:
+
+- **Teal** (`--teal`) — Given: observations, raw data, client-owned
+- **Indigo** (`--indigo`) — Framework: interpretive context, selectors, nesting, comparison
+- **Gold** (`--gold`) — Meant: classifications, institutional outputs
 
 ---
 
@@ -650,7 +682,7 @@ The import engine connects to an n8n webhook endpoint for external data sources 
    → CoC Policy: Priority_1 → "Immediate Outreach"
    ↓
 4. PROVIDER sees the case update
-   GIVEN/MEANT divide shows the original answer alongside
+   GIVEN/FRAMEWORK/MEANT architecture shows the original answer alongside
    every institutional interpretation, with EO operators
    connecting them (CON, SYN)
    ↓

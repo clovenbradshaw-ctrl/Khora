@@ -58,6 +58,7 @@ try {
   --green:#3dd68c;--green-dim:rgba(61,214,140,0.10);
   --red:#e85d5d;--red-dim:rgba(232,93,93,0.10);
   --blue:#5b9cf5;--blue-dim:rgba(91,156,245,0.10);
+  --indigo:#6778e8;--indigo-dim:rgba(103,120,232,0.10);--indigo-mid:rgba(103,120,232,0.22);
   --teal:#3ec9b0;--teal-dim:rgba(62,201,176,0.10);
   --orange:#e0943a;--orange-dim:rgba(224,148,58,0.10);
   --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.10);
@@ -73,6 +74,7 @@ html.light {
   --green:#177a4a;--green-dim:rgba(23,122,74,0.10);
   --red:#c03030;--red-dim:rgba(192,48,48,0.10);
   --blue:#2563b0;--blue-dim:rgba(37,99,176,0.10);
+  --indigo:#4a5abf;--indigo-dim:rgba(74,90,191,0.10);--indigo-mid:rgba(74,90,191,0.18);
   --teal:#137a6a;--teal-dim:rgba(19,122,106,0.10);
   --orange:#a0600a;--orange-dim:rgba(160,96,10,0.10);
   --purple:#6938c0;--purple-dim:rgba(105,56,192,0.10);
@@ -83,7 +85,7 @@ html.light .b-grn{border-color:rgba(23,122,74,.22)}
 html.light .toggle-knob{box-shadow:0 1px 3px rgba(0,0,0,.15);border:1px solid var(--border-1)}
 html.light ::-webkit-scrollbar-thumb{background:var(--border-2)}
 html.light .grid-bg{background-image:radial-gradient(circle at 20% 20%,rgba(138,109,30,.05) 0%,transparent 50%),radial-gradient(circle at 80% 80%,rgba(37,99,176,.04) 0%,transparent 50%),linear-gradient(var(--border-0) 1px,transparent 1px),linear-gradient(90deg,var(--border-0) 1px,transparent 1px);}
-html.light .gm-crossing{background:linear-gradient(135deg,rgba(19,122,106,.10) 0%,rgba(138,109,30,.10) 100%);border-left-color:rgba(19,122,106,.25);border-right-color:rgba(138,109,30,.25)}
+html.light .gm-crossing{background:linear-gradient(135deg,rgba(19,122,106,.10) 0%,rgba(74,90,191,.10) 50%,rgba(138,109,30,.10) 100%);border-left-color:rgba(19,122,106,.25);border-right-color:rgba(138,109,30,.25)}
 html.light .gm-crossing::before{background:repeating-linear-gradient(180deg,transparent,transparent 8px,rgba(138,109,30,.06) 8px,rgba(138,109,30,.06) 16px)}
 html.light .gm-divergence{background:rgba(138,109,30,.08)}
 html.light .gm-obs-field{background:var(--teal-dim);border-color:rgba(19,122,106,.20)}
@@ -113,6 +115,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .tag-red{background:var(--red-dim);color:var(--red)}.tag-blue{background:var(--blue-dim);color:var(--blue)}
 .tag-teal{background:var(--teal-dim);color:var(--teal)}.tag-orange{background:var(--orange-dim);color:var(--orange)}
 .tag-purple{background:var(--purple-dim);color:var(--purple)}
+.tag-indigo{background:var(--indigo-dim);color:var(--indigo)}
 .card{background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r-lg);padding:20px}
 .card-h{background:var(--bg-2);border:1px solid var(--border-0);border-radius:var(--r-lg);padding:20px;transition:border-color .2s,transform .2s;cursor:pointer}
 .card-h:hover{border-color:var(--gold);transform:translateY(-2px)}
@@ -224,7 +227,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
   .note-card{padding:16px}
   .note-title{font-size:15px}
   .note-body{font-size:13.5px;-webkit-line-clamp:2}
-  /* GIVEN/MEANT viz: stack */
+  /* GIVEN/FRAMEWORK/MEANT viz: stack */
   .gm-container{flex-direction:column}
   .gm-given{flex:none;min-width:auto}
   .gm-crossing{min-width:auto;min-height:40px}
@@ -249,21 +252,21 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
   .eo-vocab-grid{grid-template-columns:1fr!important}
 }
 
-/* ═══ GIVEN/MEANT Divide Visualization ═══ */
+/* ═══ GIVEN/FRAMEWORK/MEANT Architecture Visualization ═══ */
 @keyframes crossingPulse{0%,100%{opacity:.6}50%{opacity:1}}
 @keyframes flowRight{from{background-position:0 0}to{background-position:20px 0}}
 .gm-container{display:flex;gap:0;border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--border-0);background:var(--bg-1);min-height:200px}
 .gm-given{flex:0 0 340px;min-width:280px;background:var(--bg-2);padding:20px;border-right:none;position:relative}
 .gm-given::after{content:'';position:absolute;top:0;right:0;bottom:0;width:2px;background:var(--teal);opacity:.3}
 .gm-crossing{flex:0 0 56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-  background:linear-gradient(135deg,rgba(62,201,176,.08) 0%,rgba(201,163,82,.08) 100%);
+  background:linear-gradient(135deg,rgba(62,201,176,.08) 0%,rgba(103,120,232,.08) 50%,rgba(201,163,82,.08) 100%);
   border-left:1px solid rgba(62,201,176,.2);border-right:1px solid rgba(201,163,82,.2);position:relative;padding:12px 4px}
 .gm-crossing::before{content:'';position:absolute;top:0;bottom:0;left:0;right:0;
   background:repeating-linear-gradient(180deg,transparent,transparent 8px,rgba(201,163,82,.04) 8px,rgba(201,163,82,.04) 16px);pointer-events:none}
 .gm-crossing-arrow{width:24px;height:24px;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,var(--teal),var(--gold));border-radius:50%;color:var(--bg-0);font-size:11px;font-weight:800;flex-shrink:0}
+  background:linear-gradient(135deg,var(--teal),var(--indigo),var(--gold));border-radius:50%;color:var(--bg-0);font-size:11px;font-weight:800;flex-shrink:0}
 .gm-crossing-label{writing-mode:vertical-rl;text-orientation:mixed;font-family:var(--mono);font-size:10px;
-  font-weight:600;letter-spacing:.1em;background:linear-gradient(180deg,var(--teal),var(--gold));
+  font-weight:600;letter-spacing:.1em;background:linear-gradient(180deg,var(--teal),var(--indigo),var(--gold));
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .gm-crossing-op{padding:3px 6px;border-radius:8px;font-size:10px;font-family:var(--mono);font-weight:700;
   background:var(--bg-3);color:var(--tx-1);border:1px solid var(--border-1);flex-shrink:0}
@@ -278,6 +281,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .gm-fw-card[data-accent="orange"]::before{background:var(--orange)}
 .gm-fw-card[data-accent="green"]::before{background:var(--green)}
 .gm-fw-card[data-accent="purple"]::before{background:var(--purple)}
+.gm-fw-card[data-accent="indigo"]::before{background:var(--indigo)}
 .gm-divergence{background:rgba(201,163,82,.06);border:1px dashed var(--gold);border-radius:var(--r);padding:10px 14px;
   display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--tx-1)}
 .gm-obs-field{font-family:var(--mono);font-size:14px;font-weight:500;color:var(--teal);padding:10px 14px;
@@ -298,6 +302,64 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .gm-sankey-line{position:absolute;pointer-events:none}
 .gm-sup-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:10px;
   font-size:11px;font-family:var(--mono);font-weight:600;background:var(--gold-dim);color:var(--gold);border:1px solid rgba(201,163,82,.2)}
+
+/* ═══ Framework Architecture Components ═══ */
+.fw-selector{display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--border-0);
+  border-radius:var(--r-lg);background:var(--bg-2);cursor:pointer;transition:all .15s}
+.fw-selector:hover{border-color:var(--indigo);background:var(--indigo-dim)}
+.fw-selector.active{border-color:var(--indigo);box-shadow:0 0 0 3px var(--indigo-dim)}
+.fw-selector-label{font-size:10px;font-family:var(--mono);font-weight:600;color:var(--indigo);
+  letter-spacing:.08em;text-transform:uppercase}
+.fw-selector-value{font-size:13px;font-weight:600;color:var(--tx-0)}
+.fw-selector-none{font-size:12px;color:var(--tx-3);font-style:italic}
+.fw-detail-panel{border:1px solid var(--border-0);border-radius:var(--r-lg);background:var(--bg-1);overflow:hidden}
+.fw-detail-header{padding:16px 20px;border-bottom:1px solid var(--border-0);background:var(--bg-2);
+  display:flex;align-items:center;justify-content:space-between}
+.fw-detail-section{padding:14px 20px;border-bottom:1px solid var(--border-0)}
+.fw-detail-section:last-child{border-bottom:none}
+.fw-detail-section-title{font-size:10px;font-family:var(--mono);font-weight:700;color:var(--indigo);
+  letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.fw-detail-row{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;font-size:12.5px}
+.fw-detail-row-label{color:var(--tx-2);min-width:100px;font-weight:500}
+.fw-detail-row-value{color:var(--tx-0);flex:1}
+.fw-compare-container{display:flex;flex-direction:column;gap:12px}
+.fw-compare-row{display:flex;align-items:stretch;gap:12px}
+.fw-compare-indicator{width:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.fw-compare-converge{color:var(--green);font-size:18px}
+.fw-compare-diverge{color:var(--gold);font-size:18px}
+.fw-compare-card{flex:1;padding:12px 16px;border:1px solid var(--border-0);border-radius:var(--r);background:var(--bg-2)}
+.fw-compare-card-label{font-size:10px;font-family:var(--mono);font-weight:600;letter-spacing:.06em;margin-bottom:4px}
+.fw-compare-card-value{font-size:14px;font-weight:600;color:var(--tx-0)}
+.fw-compare-detail{padding:10px 14px;background:var(--bg-3);border-radius:var(--r);font-size:11.5px;
+  color:var(--tx-1);line-height:1.6;border-left:3px solid var(--gold)}
+.fw-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:10px;
+  font-size:10px;font-family:var(--mono);font-weight:600;background:var(--indigo-dim);color:var(--indigo);
+  border:1px solid rgba(103,120,232,.2)}
+.fw-badge-client{background:rgba(224,148,58,.08);color:var(--orange);border-color:rgba(224,148,58,.2)}
+.fw-given-lock{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:8px;
+  font-size:9px;font-family:var(--mono);font-weight:600;color:var(--teal);background:var(--teal-dim);
+  border:1px solid rgba(62,201,176,.15);cursor:help}
+.fw-nesting-tree{display:flex;flex-direction:column;gap:4px;padding-left:16px;
+  border-left:2px solid var(--indigo-dim)}
+.fw-nesting-node{padding:8px 12px;border:1px solid var(--border-0);border-radius:var(--r);
+  background:var(--bg-2);font-size:12px;cursor:pointer;transition:all .15s}
+.fw-nesting-node:hover{border-color:var(--indigo);background:var(--indigo-dim)}
+.fw-nesting-node.active{border-color:var(--indigo);border-left:3px solid var(--indigo)}
+.fw-empty{padding:40px 20px;text-align:center;border:1px dashed var(--border-1);
+  border-radius:var(--r);color:var(--tx-3)}
+.fw-empty-title{font-size:15px;font-weight:600;color:var(--tx-1);margin-top:10px}
+.fw-empty-body{font-size:12px;color:var(--tx-2);margin-top:6px;max-width:360px;margin-left:auto;margin-right:auto;line-height:1.6}
+.fw-onboarding{position:relative;padding:16px 20px;border:1px solid var(--indigo);border-radius:var(--r-lg);
+  background:var(--indigo-dim);margin-bottom:16px}
+.fw-onboarding-close{position:absolute;top:10px;right:12px;background:none;border:none;
+  color:var(--tx-3);cursor:pointer;padding:4px}
+.fw-onboarding-close:hover{color:var(--tx-0)}
+.fw-onboarding-header{font-size:14px;font-weight:700;color:var(--indigo);margin-bottom:6px}
+.fw-onboarding-body{font-size:12px;color:var(--tx-1);line-height:1.6}
+.fw-glossary-entry{padding:16px 20px;border-bottom:1px solid var(--border-0)}
+.fw-glossary-entry:last-child{border-bottom:none}
+.fw-glossary-term{font-size:14px;font-weight:700;color:var(--tx-0);margin-bottom:6px;font-family:var(--serif)}
+.fw-glossary-def{font-size:12.5px;color:var(--tx-1);line-height:1.7}
 
 /* ═══ Form Builder / Schema Builder UX ═══ */
 /* fb-canvas, fb-header, fb-header-title, fb-header-meta removed — now inline */
@@ -1834,7 +1896,10 @@ const I = ({
     edit: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }), /*#__PURE__*/React.createElement("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" })),
     database: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("ellipse", { cx: "12", cy: "5", rx: "9", ry: "3" }), /*#__PURE__*/React.createElement("path", { d: "M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" }), /*#__PURE__*/React.createElement("path", { d: "M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" })),
     'arr-l': /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("polyline", { points: "15 18 9 12 15 6" })),
-    'arr-r': /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("polyline", { points: "9 18 15 12 9 6" }))
+    'arr-r': /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("polyline", { points: "9 18 15 12 9 6" })),
+    book: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", { d: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20" }), /*#__PURE__*/React.createElement("path", { d: "M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" })),
+    info: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "12", r: "10" }), /*#__PURE__*/React.createElement("line", { x1: "12", y1: "16", x2: "12", y2: "12" }), /*#__PURE__*/React.createElement("line", { x1: "12", y1: "8", x2: "12.01", y2: "8" })),
+    chevD: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("polyline", { points: "6 9 12 15 18 9" }))
   };
   return /*#__PURE__*/React.createElement("span", {
     style: {
@@ -10440,9 +10505,9 @@ const GovernanceCalendar = ({
   }
 }, r.frequency, " \xB7 ", r.duration_days, " day window \xB7 ", r.participants))))));
 
-/* ═══════════════════ GIVEN/MEANT DIVIDE VISUALIZATION ═══════════════════ */
+/* ═══════════════════ GIVEN/FRAMEWORK/MEANT ARCHITECTURE VISUALIZATION ═══════════════════ */
 
-// Core visualization: observation on the left, crossing in the middle, frameworks on the right
+// Core visualization: observation on the left, framework crossing in the middle, classifications on the right
 const GivenMeantDivide = ({
   observation,
   compact = false
@@ -10496,7 +10561,7 @@ const GivenMeantDivide = ({
     style: {
       fontSize: 9
     }
-  }, "GIVEN"), /*#__PURE__*/React.createElement("span", {
+  }, "GIVEN"), /*#__PURE__*/React.createElement(GivenLockIndicator, null), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       fontFamily: 'var(--mono)',
@@ -10520,14 +10585,14 @@ const GivenMeantDivide = ({
       color: 'var(--tx-2)',
       lineHeight: 1.5
     }
-  }, "This is ground truth. The observation just ", /*#__PURE__*/React.createElement("em", null, "is"), ". Everything to the right is what it ", /*#__PURE__*/React.createElement("em", null, "means"), ", according to whom.")), /*#__PURE__*/React.createElement("div", {
+  }, "This is a Given \u2014 a raw observation. It just ", /*#__PURE__*/React.createElement("em", null, "is"), ". The framework determines ", /*#__PURE__*/React.createElement("em", null, "who\u2019s looking"), ", and the Meant is what they classify it as.")), /*#__PURE__*/React.createElement("div", {
     className: "gm-crossing"
   }, /*#__PURE__*/React.createElement("div", {
     className: "gm-crossing-arrow",
     title: "Epistemic crossing: observation becomes interpretation"
   }, "\u2192"), /*#__PURE__*/React.createElement("div", {
     className: "gm-crossing-label"
-  }, "GIVEN \u2192 MEANT"), [...crossingOps].map(op => /*#__PURE__*/React.createElement("div", {
+  }, "GIVEN \u2192 FRAMEWORK \u2192 MEANT"), [...crossingOps].map(op => /*#__PURE__*/React.createElement("div", {
     key: op,
     className: "gm-crossing-op",
     style: {
@@ -10558,7 +10623,8 @@ const GivenMeantDivide = ({
       fontFamily: 'var(--mono)',
       color: 'var(--tx-3)'
     }
-  }, "FRAMEWORK INTERPRETATIONS (", frameworks?.length || 0, ")")), hasDivergence && /*#__PURE__*/React.createElement("div", {
+  }, "CLASSIFICATIONS (", frameworks?.length || 0, " FRAMEWORKS)")),
+  hasDivergence ? /*#__PURE__*/React.createElement("div", {
     className: "gm-divergence"
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -10567,7 +10633,7 @@ const GivenMeantDivide = ({
       fontSize: 13,
       lineHeight: 1
     }
-  }, "\u25C6"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", {
+  }, "\u25D0"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("strong", {
     style: {
       color: 'var(--gold)',
       fontSize: 11
@@ -10579,7 +10645,13 @@ const GivenMeantDivide = ({
       color: 'var(--tx-2)',
       marginTop: 2
     }
-  }, uniqueClassifications.length, " distinct classifications from the same observation. This is SUP made visible \u2014 the value exists in superposition across frameworks."))), (frameworks || []).map((fw, i) => {
+  }, uniqueClassifications.length, " distinct classifications from the same observation. Tap any framework to see why.")))
+  : (frameworks && frameworks.length > 1) && /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+      background: 'rgba(61,214,140,.06)', border: '1px solid rgba(61,214,140,.15)', borderRadius: 'var(--r)' }
+  }, /*#__PURE__*/React.createElement("span", { style: { color: 'var(--green)', fontSize: 14 } }, "\u25CF"),
+    /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--green)', fontWeight: 600 } }, "All frameworks agree")
+  ), (frameworks || []).map((fw, i) => {
     const fwColor = FRAMEWORK_COLORS[fw.authority_id] || {
       accent: 'purple',
       label: '?'
@@ -10619,7 +10691,11 @@ const GivenMeantDivide = ({
         fontSize: 12,
         fontWeight: 600
       }
-    }, fw.authority_name)), /*#__PURE__*/React.createElement("div", {
+    }, fw.authority_name),
+    fw.date_applied && /*#__PURE__*/React.createElement(FrameworkBadge, {
+      frameworkName: fw.authority_org || fw.authority_name,
+      dateApplied: fw.date_applied
+    })), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 14,
         fontWeight: 700,
@@ -10706,26 +10782,10 @@ const GivenMeantDivide = ({
         color: `var(--${OP_COLORS[step.op] || 'blue'})`
       }
     }, step.op, "(", step.desc, ")"))))));
-  }), (!frameworks || frameworks.length === 0) && /*#__PURE__*/React.createElement("div", {
-    className: "gm-wb-empty"
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "grid",
-    s: 24
-  }), /*#__PURE__*/React.createElement("p", {
-    style: {
-      marginTop: 8,
-      fontSize: 12
-    }
-  }, "No frameworks bound"), /*#__PURE__*/React.createElement("p", {
-    style: {
-      fontSize: 10.5,
-      color: 'var(--tx-3)',
-      marginTop: 4
-    }
-  }, "This observation is recorded but not yet interpreted."))));
+  }), (!frameworks || frameworks.length === 0) && /*#__PURE__*/React.createElement(FrameworkEmptyState, { type: "no-framework" })));
 };
 
-// Record-level GIVEN/MEANT display for a specific client observation
+// Record-level GIVEN/FRAMEWORK/MEANT display for a specific client observation
 const RecordGivenMeant = ({
   promptKey,
   value,
@@ -10982,6 +11042,475 @@ const FrameworkTogglePanel = ({
   })))));
 };
 
+/* ═══════════════════ FRAMEWORK ARCHITECTURE COMPONENTS ═══════════════════
+ * These components implement the Given/Framework/Meant triad UI:
+ *   - FrameworkSelector: sidebar/top-bar framework picker
+ *   - FrameworkDetailPanel: expanded framework view (Identity, Definitions, Scope, Derivation)
+ *   - FrameworkComparisonView: side-by-side comparison with convergence/divergence indicators
+ *   - FrameworkBadge: record-level badge showing framework + date
+ *   - GivenLockIndicator: immutability indicator for Given entries
+ *   - FrameworkNestingTree: hierarchy view for nested frameworks
+ *   - ClientSelfReportBadge: client's own framework badge
+ *   - FrameworkOnboarding: coach mark for first-time framework encounter
+ *   - FrameworkEmptyState: empty states for no-framework and no-divergence
+ *   - FrameworkGlossary: glossary panel with Given/Framework/Meant/K Frame definitions
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Copy Constants ── */
+const FRAMEWORK_COPY = {
+  selector: {
+    label: 'Active Framework',
+    tooltip: 'The framework determines which definitions, eligibility rules, and assessment criteria are applied to raw observations. Different frameworks can produce different classifications from the same information.'
+  },
+  comparison: {
+    label: 'Compare Frameworks',
+    tooltip: 'View the same observations through multiple frameworks simultaneously. Convergences and divergences are highlighted, with the structural source of each disagreement identified.'
+  },
+  onboarding: {
+    header: 'Same facts, different readings.',
+    body: 'Every classification in Khora is produced by a framework \u2014 a set of definitions, rules, and criteria applied by a specific agency or program. Switching frameworks lets you see how the same observation is interpreted differently depending on who\u2019s looking and under what mandate. No framework overrides another. All are preserved.'
+  },
+  givenLock: 'This is a Given \u2014 a raw observation recorded as it happened. Givens cannot be edited or deleted. They belong to the person or observer who provided them.',
+  clientSelfReport: 'The client\u2019s own understanding of their situation. This is an interpretation produced from the client\u2019s own perspective \u2014 not weighted the same as institutional classifications for reporting purposes, but preserved as a first-class reading. When it diverges from institutional frameworks, the divergence is visible and documented.',
+  emptyNoFramework: {
+    header: 'Select a framework to see classifications.',
+    body: 'Raw observations are always visible. Classifications appear when you choose the framework that produces them. Each framework applies its own definitions and criteria to the same set of observations.'
+  },
+  emptyNoDivergence: {
+    header: 'All active frameworks agree.',
+    body: 'The current frameworks produce the same classification from the available observations. This can change as new observations are recorded or framework definitions are updated.'
+  },
+  nestingTooltip: 'Frameworks nest. Narrower frameworks inherit the rules of broader ones but may apply additional local criteria. A narrower framework can never see more than the broader one it sits inside \u2014 only the same or less.'
+};
+
+/* ── Glossary Definitions ── */
+const FRAMEWORK_GLOSSARY = [
+  {
+    term: 'Given',
+    definition: 'A raw observation recorded as it happened \u2014 what someone said, what was directly observed, what was measured. Givens are append-only: they accumulate over time and can never be edited or deleted. The Given always belongs to the person or observer who provided it.'
+  },
+  {
+    term: 'Framework',
+    definition: 'The interpretive context that turns raw observations into classifications. A framework includes: the agency or program applying it, the definitions it uses, the eligibility criteria it applies, and the jurisdiction in which it operates. Different frameworks can produce different classifications from the same Givens. Frameworks nest \u2014 narrower frameworks operate within and inherit from broader ones. In Khora\u2019s technical architecture, a framework is represented by a K\u00a0Frame.'
+  },
+  {
+    term: 'Meant',
+    definition: 'A classification or interpretation produced when a specific framework is applied to raw observations. Every Meant-classification is traceable to the framework that produced it and the Givens it was derived from. Meant-classifications can be superseded by newer readings \u2014 but what supersedes what depends on which framework you\u2019re looking from.'
+  },
+  {
+    term: 'K Frame',
+    definition: 'The portable, structured record that travels with every classification. A K\u00a0Frame documents when the classification was made, who made it, which framework produced it, which definitions were active, and what the classification was derived from. K\u00a0Frames are the technical implementation of Frameworks \u2014 the data structure that makes every interpretation traceable.'
+  },
+  {
+    term: 'Framework Comparison',
+    definition: 'Viewing the same observations through multiple frameworks simultaneously. Convergences (where frameworks agree) and divergences (where they disagree) are highlighted, with the structural source of each disagreement identified. Framework comparison is the primary tool for coordination across agencies, programs, and mandates.'
+  }
+];
+
+/* ── Framework Selector ── */
+const FrameworkSelector = ({
+  frameworks = [],
+  activeFrameworkId,
+  onSelect,
+  compact = false
+}) => {
+  const [open, setOpen] = useState(false);
+  const active = frameworks.find(f => f.id === activeFrameworkId);
+
+  return /*#__PURE__*/React.createElement("div", { style: { position: 'relative' } },
+    /*#__PURE__*/React.createElement("div", {
+      className: `fw-selector${open ? ' active' : ''}`,
+      onClick: () => setOpen(!open),
+      title: FRAMEWORK_COPY.selector.tooltip
+    },
+      /*#__PURE__*/React.createElement(I, { n: "layers", s: 14, c: "var(--indigo)" }),
+      /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+        /*#__PURE__*/React.createElement("div", { className: "fw-selector-label" }, FRAMEWORK_COPY.selector.label),
+        active
+          ? /*#__PURE__*/React.createElement("div", { className: "fw-selector-value" }, active.name)
+          : /*#__PURE__*/React.createElement("div", { className: "fw-selector-none" }, "None selected")
+      ),
+      /*#__PURE__*/React.createElement(I, { n: open ? "chevD" : "chevR", s: 12, c: "var(--tx-3)" })
+    ),
+    open && /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 100,
+        background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-lg)',
+        boxShadow: '0 8px 32px rgba(0,0,0,.25)', maxHeight: 260, overflow: 'auto'
+      }
+    },
+      frameworks.length === 0
+        ? /*#__PURE__*/React.createElement("div", {
+            style: { padding: '20px 16px', textAlign: 'center', color: 'var(--tx-3)', fontSize: 12 }
+          }, "No frameworks available")
+        : frameworks.map(fw => /*#__PURE__*/React.createElement("div", {
+            key: fw.id,
+            onClick: () => { onSelect(fw.id); setOpen(false); },
+            style: {
+              padding: '10px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+              background: fw.id === activeFrameworkId ? 'var(--indigo-dim)' : 'transparent',
+              borderLeft: fw.id === activeFrameworkId ? '3px solid var(--indigo)' : '3px solid transparent',
+              transition: 'all .12s'
+            },
+            onMouseEnter: e => { if (fw.id !== activeFrameworkId) e.currentTarget.style.background = 'var(--bg-3)'; },
+            onMouseLeave: e => { if (fw.id !== activeFrameworkId) e.currentTarget.style.background = 'transparent'; }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, fw.name),
+              fw.agency && /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 10.5, color: 'var(--tx-2)', marginTop: 2 }
+              }, fw.agency)
+            ),
+            fw.id === activeFrameworkId && /*#__PURE__*/React.createElement(I, { n: "check", s: 14, c: "var(--indigo)" })
+          ))
+    )
+  );
+};
+
+/* ── Framework Detail Panel ── */
+const FrameworkDetailPanel = ({
+  framework,
+  onClose,
+  givenEntries = []
+}) => {
+  if (!framework) return null;
+
+  return /*#__PURE__*/React.createElement("div", { className: "fw-detail-panel" },
+    /* Header */
+    /*#__PURE__*/React.createElement("div", { className: "fw-detail-header" },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        /*#__PURE__*/React.createElement("span", { className: "tag tag-indigo", style: { fontSize: 9 } }, "FRAMEWORK"),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700 } }, framework.name)
+      ),
+      onClose && /*#__PURE__*/React.createElement("button", {
+        onClick: onClose,
+        style: { background: 'none', border: 'none', color: 'var(--tx-3)', cursor: 'pointer', padding: 4 }
+      }, /*#__PURE__*/React.createElement(I, { n: "x", s: 16 }))
+    ),
+
+    /* Identity */
+    /*#__PURE__*/React.createElement("div", { className: "fw-detail-section" },
+      /*#__PURE__*/React.createElement("div", { className: "fw-detail-section-title" }, "Identity"),
+      /*#__PURE__*/React.createElement("div", { className: "fw-detail-row" },
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-label" }, "Name"),
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-value" }, framework.name)
+      ),
+      framework.agency && /*#__PURE__*/React.createElement("div", { className: "fw-detail-row" },
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-label" }, "Agency"),
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-value" }, framework.agency)
+      ),
+      framework.jurisdiction && /*#__PURE__*/React.createElement("div", { className: "fw-detail-row" },
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-label" }, "Jurisdiction"),
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-value" }, framework.jurisdiction)
+      ),
+      framework.dateRange && /*#__PURE__*/React.createElement("div", { className: "fw-detail-row" },
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-label" }, "Active"),
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-value" }, framework.dateRange)
+      )
+    ),
+
+    /* Definitions */
+    framework.definitions && framework.definitions.length > 0 && /*#__PURE__*/React.createElement("div", { className: "fw-detail-section" },
+      /*#__PURE__*/React.createElement("div", { className: "fw-detail-section-title" }, "Definitions"),
+      framework.definitions.map((def, i) => /*#__PURE__*/React.createElement("div", {
+        key: i, className: "fw-detail-row", style: { alignItems: 'flex-start' }
+      },
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-label", style: { fontWeight: 600, fontStyle: 'italic' } }, def.term),
+        /*#__PURE__*/React.createElement("span", { className: "fw-detail-row-value" },
+          def.text,
+          def.citation && /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', display: 'block', marginTop: 2 }
+          }, def.citation)
+        )
+      ))
+    ),
+
+    /* What This Framework Can See */
+    framework.scope && /*#__PURE__*/React.createElement("div", { className: "fw-detail-section" },
+      /*#__PURE__*/React.createElement("div", { className: "fw-detail-section-title" }, "What This Framework Can See"),
+      framework.scope.includes && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 8 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10.5, color: 'var(--green)', fontWeight: 600, marginBottom: 4 } }, "CONSIDERS"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: 'var(--tx-1)', lineHeight: 1.6 } }, framework.scope.includes)
+      ),
+      framework.scope.excludes && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 8 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10.5, color: 'var(--red)', fontWeight: 600, marginBottom: 4 } }, "DOES NOT WEIGHT"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: 'var(--tx-1)', lineHeight: 1.6 } }, framework.scope.excludes)
+      ),
+      framework.scope.differs && /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10.5, color: 'var(--gold)', fontWeight: 600, marginBottom: 4 } }, "DIFFERS FROM OTHER FRAMEWORKS"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: 'var(--tx-1)', lineHeight: 1.6 } }, framework.scope.differs)
+      )
+    ),
+
+    /* Derivation */
+    givenEntries.length > 0 && /*#__PURE__*/React.createElement("div", { className: "fw-detail-section" },
+      /*#__PURE__*/React.createElement("div", { className: "fw-detail-section-title" }, "Derivation"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11.5, color: 'var(--tx-2)', marginBottom: 8 } },
+        "This classification was derived from ", givenEntries.length, " Given ", givenEntries.length === 1 ? 'entry' : 'entries', ":"
+      ),
+      givenEntries.map((entry, i) => /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', marginBottom: 4,
+          background: 'var(--teal-dim)', border: '1px solid rgba(62,201,176,.15)',
+          borderRadius: 'var(--r)', fontSize: 12
+        }
+      },
+        /*#__PURE__*/React.createElement(I, { n: "lock", s: 10, c: "var(--teal)" }),
+        /*#__PURE__*/React.createElement("span", { style: { color: 'var(--teal)', fontWeight: 600 } }, entry.prompt || entry.field),
+        /*#__PURE__*/React.createElement("span", { style: { color: 'var(--tx-1)' } }, "\u2192 ", entry.value),
+        entry.timestamp && /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginLeft: 'auto' }
+        }, new Date(entry.timestamp).toLocaleDateString())
+      )),
+      framework.confidence && /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 8, fontSize: 11, color: 'var(--tx-2)' }
+      }, "Confidence: ", framework.confidence),
+      framework.clientAlignment && /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 4, fontSize: 11, color: framework.clientAlignment === 'aligns' ? 'var(--green)' : 'var(--gold)' }
+      }, "Client self-report ", framework.clientAlignment === 'aligns' ? 'aligns' : 'diverges')
+    )
+  );
+};
+
+/* ── Framework Comparison View ── */
+const FrameworkComparisonView = ({
+  observation,
+  frameworks = [],
+  compact = false
+}) => {
+  const [expandedDivergence, setExpandedDivergence] = useState(null);
+  if (!observation || frameworks.length < 2) return null;
+
+  // Group by classification result
+  const classificationMap = {};
+  frameworks.forEach(fw => {
+    const cls = fw.classification || 'Unclassified';
+    if (!classificationMap[cls]) classificationMap[cls] = [];
+    classificationMap[cls].push(fw);
+  });
+  const classifications = Object.keys(classificationMap);
+  const allAgree = classifications.length === 1;
+
+  return /*#__PURE__*/React.createElement("div", { className: "fw-compare-container" },
+    /* Header */
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }
+    },
+      /*#__PURE__*/React.createElement("span", { className: "tag tag-indigo", style: { fontSize: 9 } }, "COMPARE"),
+      /*#__PURE__*/React.createElement("span", {
+        style: { fontSize: 12, fontWeight: 600, color: 'var(--tx-0)' }
+      }, FRAMEWORK_COPY.comparison.label),
+      /*#__PURE__*/React.createElement("span", {
+        style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginLeft: 'auto' }
+      }, frameworks.length, " frameworks")
+    ),
+
+    /* Observation reference */
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: '8px 12px', background: 'var(--teal-dim)', border: '1px solid rgba(62,201,176,.15)',
+        borderRadius: 'var(--r)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6
+      }
+    },
+      /*#__PURE__*/React.createElement("span", { className: "tag tag-teal", style: { fontSize: 8 } }, "GIVEN"),
+      /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, observation.prompt),
+      /*#__PURE__*/React.createElement("span", { style: { color: 'var(--tx-1)' } }, "\u2192 ", observation.valueLabel || observation.value)
+    ),
+
+    /* Convergence / Divergence */
+    allAgree
+      ? /*#__PURE__*/React.createElement("div", {
+          style: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px',
+            background: 'rgba(61,214,140,.06)', border: '1px solid rgba(61,214,140,.15)',
+            borderRadius: 'var(--r)' }
+        },
+          /*#__PURE__*/React.createElement("span", { className: "fw-compare-converge" }, "\u25CF"),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: 'var(--green)' } },
+              FRAMEWORK_COPY.emptyNoDivergence.header),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)', marginTop: 2 } },
+              FRAMEWORK_COPY.emptyNoDivergence.body)
+          )
+        )
+      : classifications.map((cls, ci) => /*#__PURE__*/React.createElement("div", { key: ci },
+          /*#__PURE__*/React.createElement("div", { className: "fw-compare-row" },
+            /*#__PURE__*/React.createElement("div", { className: "fw-compare-indicator" },
+              classifications.length > 1
+                ? /*#__PURE__*/React.createElement("span", {
+                    className: "fw-compare-diverge",
+                    style: { cursor: 'pointer' },
+                    onClick: () => setExpandedDivergence(expandedDivergence === ci ? null : ci),
+                    title: "Frameworks diverge \u2014 tap to see why"
+                  }, "\u25D0")
+                : /*#__PURE__*/React.createElement("span", { className: "fw-compare-converge" }, "\u25CF")
+            ),
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
+              /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 14, fontWeight: 700, color: 'var(--gold)', marginBottom: 4 }
+              }, cls),
+              /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+                classificationMap[cls].map(fw => /*#__PURE__*/React.createElement("span", {
+                  key: fw.id,
+                  className: "fw-badge"
+                }, fw.authority_org || fw.name))
+              )
+            )
+          ),
+          expandedDivergence === ci && ci > 0 && /*#__PURE__*/React.createElement("div", {
+            className: "fw-compare-detail", style: { marginLeft: 48, marginTop: 6 }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, marginBottom: 4, color: 'var(--gold)' } },
+              "Why these frameworks diverge:"),
+            classificationMap[cls].map(fw => /*#__PURE__*/React.createElement("div", {
+              key: fw.id, style: { marginBottom: 6 }
+            },
+              /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, fw.authority_org || fw.name, ": "),
+              /*#__PURE__*/React.createElement("span", null, fw.classification),
+              fw.provision && /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--tx-3)', marginTop: 2 }
+              }, fw.provision)
+            ))
+          )
+        ))
+  );
+};
+
+/* ── Framework Badge (record-level) ── */
+const FrameworkBadge = ({
+  frameworkName,
+  dateApplied,
+  onClick,
+  isClientSelfReport = false
+}) => {
+  return /*#__PURE__*/React.createElement("span", {
+    className: `fw-badge${isClientSelfReport ? ' fw-badge-client' : ''}`,
+    onClick: onClick,
+    style: onClick ? { cursor: 'pointer' } : {},
+    title: isClientSelfReport
+      ? FRAMEWORK_COPY.clientSelfReport
+      : `Framework: ${frameworkName}. Tap for details.`
+  },
+    isClientSelfReport && /*#__PURE__*/React.createElement(I, { n: "user", s: 9, c: "var(--orange)" }),
+    /*#__PURE__*/React.createElement("span", null, frameworkName),
+    dateApplied && /*#__PURE__*/React.createElement(React.Fragment, null,
+      /*#__PURE__*/React.createElement("span", { style: { color: isClientSelfReport ? 'var(--orange)' : 'var(--tx-3)' } }, "\u00B7"),
+      /*#__PURE__*/React.createElement("span", null, dateApplied)
+    )
+  );
+};
+
+/* ── Given Lock Indicator ── */
+const GivenLockIndicator = () => {
+  return /*#__PURE__*/React.createElement("span", {
+    className: "fw-given-lock",
+    title: FRAMEWORK_COPY.givenLock
+  },
+    /*#__PURE__*/React.createElement(I, { n: "lock", s: 9, c: "var(--teal)" }),
+    "GIVEN"
+  );
+};
+
+/* ── Framework Nesting Tree ── */
+const FrameworkNestingTree = ({
+  frameworks = [],
+  activeId,
+  onSelect
+}) => {
+  // frameworks is a nested array: [{ id, name, agency, children: [...] }]
+  const renderNode = (node, depth = 0) => /*#__PURE__*/React.createElement("div", {
+    key: node.id,
+    style: { paddingLeft: depth > 0 ? 16 : 0 }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      className: `fw-nesting-node${node.id === activeId ? ' active' : ''}`,
+      onClick: () => onSelect && onSelect(node.id),
+      style: { marginBottom: 4 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+        /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, node.name),
+        node.agency && /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 10, color: 'var(--tx-3)' }
+        }, node.agency)
+      )
+    ),
+    node.children && node.children.length > 0 && /*#__PURE__*/React.createElement("div", {
+      className: "fw-nesting-tree"
+    }, node.children.map(child => renderNode(child, depth + 1)))
+  );
+
+  return /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }
+    },
+      /*#__PURE__*/React.createElement("span", { className: "tag tag-indigo", style: { fontSize: 9 } }, "HIERARCHY"),
+      /*#__PURE__*/React.createElement("span", {
+        style: { fontSize: 12, fontWeight: 600 }
+      }, "Framework Hierarchy"),
+      /*#__PURE__*/React.createElement(I, {
+        n: "info", s: 12, c: "var(--tx-3)",
+        title: FRAMEWORK_COPY.nestingTooltip
+      })
+    ),
+    frameworks.map(fw => renderNode(fw))
+  );
+};
+
+/* ── Framework Onboarding Tooltip ── */
+const FrameworkOnboarding = ({
+  onDismiss
+}) => {
+  return /*#__PURE__*/React.createElement("div", { className: "fw-onboarding" },
+    /*#__PURE__*/React.createElement("button", {
+      className: "fw-onboarding-close",
+      onClick: onDismiss
+    }, /*#__PURE__*/React.createElement(I, { n: "x", s: 14 })),
+    /*#__PURE__*/React.createElement("div", { className: "fw-onboarding-header" }, FRAMEWORK_COPY.onboarding.header),
+    /*#__PURE__*/React.createElement("div", { className: "fw-onboarding-body" }, FRAMEWORK_COPY.onboarding.body)
+  );
+};
+
+/* ── Framework Empty States ── */
+const FrameworkEmptyState = ({
+  type = 'no-framework' // 'no-framework' | 'no-divergence'
+}) => {
+  const copy = type === 'no-divergence'
+    ? FRAMEWORK_COPY.emptyNoDivergence
+    : FRAMEWORK_COPY.emptyNoFramework;
+  const icon = type === 'no-divergence' ? 'check' : 'layers';
+  const iconColor = type === 'no-divergence' ? 'var(--green)' : 'var(--indigo)';
+
+  return /*#__PURE__*/React.createElement("div", { className: "fw-empty" },
+    /*#__PURE__*/React.createElement(I, { n: icon, s: 28, c: iconColor }),
+    /*#__PURE__*/React.createElement("div", { className: "fw-empty-title" }, copy.header),
+    /*#__PURE__*/React.createElement("div", { className: "fw-empty-body" }, copy.body)
+  );
+};
+
+/* ── Framework Glossary ── */
+const FrameworkGlossary = ({
+  onClose
+}) => {
+  return /*#__PURE__*/React.createElement("div", { className: "fw-detail-panel" },
+    /*#__PURE__*/React.createElement("div", { className: "fw-detail-header" },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+        /*#__PURE__*/React.createElement(I, { n: "book", s: 16, c: "var(--indigo)" }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700 } }, "Glossary")
+      ),
+      onClose && /*#__PURE__*/React.createElement("button", {
+        onClick: onClose,
+        style: { background: 'none', border: 'none', color: 'var(--tx-3)', cursor: 'pointer', padding: 4 }
+      }, /*#__PURE__*/React.createElement(I, { n: "x", s: 16 }))
+    ),
+    FRAMEWORK_GLOSSARY.map((entry, i) => /*#__PURE__*/React.createElement("div", {
+      key: i, className: "fw-glossary-entry"
+    },
+      /*#__PURE__*/React.createElement("div", { className: "fw-glossary-term" }, entry.term),
+      /*#__PURE__*/React.createElement("div", { className: "fw-glossary-def" }, entry.definition)
+    ))
+  );
+};
+
 /* ═══════════════════ SCHEMA WORKBENCH ═══════════════════ */
 const SWC_DARK = {
   bg: "#07090d",
@@ -10996,6 +11525,8 @@ const SWC_DARK = {
   white: "#edf0f5",
   given: "#2dd4a0",
   givenBorder: "#18694e",
+  framework: "#6778e8",
+  frameworkBorder: "#3a4a9e",
   meant: "#a78bfa",
   meantBorder: "#4a2d8a",
   fw: ["#60a5fa", "#f0abfc", "#fbbf24", "#34d399", "#fb7185"],
@@ -11018,6 +11549,8 @@ const SWC_LIGHT = {
   white: "#111318",
   given: "#137a6a",
   givenBorder: "#0a5c4d",
+  framework: "#4a5abf",
+  frameworkBorder: "#343f8a",
   meant: "#6938c0",
   meantBorder: "#4a2d8a",
   fw: ["#2563b0", "#9333b0", "#8a6d1e", "#177a4a", "#c03050"],
@@ -13333,7 +13866,7 @@ const FormBuilder = ({
       fontSize: 12,
       color: SWC.dim
     }
-  }, "This is an observation (GIVEN). Below are its interpretations across active frameworks (MEANT).")), /*#__PURE__*/React.createElement("div", {
+  }, "This is a raw observation (Given). Below are its classifications, each produced by a different framework (Meant).")), /*#__PURE__*/React.createElement("div", {
     className: "fb-wire-panel-body"
   }, frameworks.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
@@ -19598,7 +20131,7 @@ const LoginScreen = ({
     style: { ...bodyTextStyle, textAlign: 'center', marginTop: 20, fontSize: 12.5, color: 'var(--tx-2)' }
   }, "You don't pick a role at signup. Khora detects it automatically based on the groups you belong to. One account can hold multiple roles at once.")),
 
-  /* ── Section 3: Shared Standards & the GIVEN/MEANT divide ── */
+  /* ── Section 3: Shared Standards & the GIVEN/FRAMEWORK/MEANT architecture ── */
   /*#__PURE__*/React.createElement("div", {
     style: { ...infoSectionStyle, paddingTop: 48, paddingBottom: 48 }
   }, /*#__PURE__*/React.createElement("div", {
@@ -19611,18 +20144,18 @@ const LoginScreen = ({
     style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
   }, "When multiple organizations work together, they need a common language. Khora lets networks define shared forms, definitions, and norms \u2014 then propagate them to every member organization. Everyone collects data the same way, so it actually means the same thing.")),
 
-  /* GIVEN / MEANT explainer */
+  /* GIVEN / FRAMEWORK / MEANT explainer */
   /*#__PURE__*/React.createElement("div", {
     style: { ...infoCardStyle, marginTop: 24 }
   }, /*#__PURE__*/React.createElement("div", {
-    style: { ...sectionLabelStyle, marginBottom: 16, color: 'var(--teal)' }
-  }, "THE GIVEN / MEANT DIVIDE"), /*#__PURE__*/React.createElement("p", {
+    style: { ...sectionLabelStyle, marginBottom: 16, color: 'var(--indigo)' }
+  }, "THE GIVEN / FRAMEWORK / MEANT ARCHITECTURE"), /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, marginBottom: 16 }
-  }, "Here's a problem most systems hide from you: the same piece of information means different things to different institutions. Khora makes this visible."), /*#__PURE__*/React.createElement("div", {
-    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }
+  }, "Here\u2019s a problem most systems hide from you: the same piece of information means different things to different institutions. Khora doesn\u2019t just show you that they disagree \u2014 it shows you ", /*#__PURE__*/React.createElement("em", null, "why"), "."), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }
   },
 
-  /* GIVEN side */
+  /* GIVEN card */
   /*#__PURE__*/React.createElement("div", {
     style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '16px 18px', borderLeft: '3px solid var(--teal)' }
   }, /*#__PURE__*/React.createElement("div", {
@@ -19631,24 +20164,38 @@ const LoginScreen = ({
     style: { fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 6 }
   }, "What actually happened"), /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, fontSize: 12.5 }
-  }, "The raw information, as observed. A client says: \"I slept in my car last night.\" That's the given \u2014 uninterpreted, owned by the person who said it.")),
+  }, "The raw information, as observed. A client says: \u201cI slept in my car last night.\u201d That\u2019s the given \u2014 uninterpreted, owned by the person who said it. It can never be edited or deleted.")),
 
-  /* MEANT side */
+  /* FRAMEWORK card */
+  /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '16px 18px', borderLeft: '3px solid var(--indigo)' }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--indigo)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 8 }
+  }, "FRAMEWORK"), /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 6 }
+  }, "Who\u2019s looking, under what rules"), /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5 }
+  }, "The interpretive context: which agency, which definitions, which eligibility criteria. HUD\u2019s framework and a crisis outreach team\u2019s framework read the same fact through different lenses \u2014 different mandates, different thresholds, different rules for what counts.")),
+
+  /* MEANT card */
   /*#__PURE__*/React.createElement("div", {
     style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '16px 18px', borderLeft: '3px solid var(--gold)' }
   }, /*#__PURE__*/React.createElement("div", {
     style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--gold)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 8 }
   }, "MEANT"), /*#__PURE__*/React.createElement("div", {
     style: { fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 6 }
-  }, "What an institution classifies it as"), /*#__PURE__*/React.createElement("p", {
+  }, "What it gets classified as"), /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, fontSize: 12.5 }
-  }, "The institutional interpretation. One agency calls it \"Literally Homeless, Category 1.\" Another says \"Priority 1 \u2014 immediate outreach.\" A third might not count it at all. Same fact, different meanings."))
+  }, "The institutional interpretation, produced from a specific framework. One framework calls it \u201cLiterally Homeless, Category 1.\u201d Another says \u201cPriority 1 \u2014 immediate outreach.\u201d A third might not count it at all. Same fact, different frameworks, different meanings."))
 
-  ), /* end GIVEN/MEANT grid */
+  ), /* end GIVEN/FRAMEWORK/MEANT grid */
 
   /*#__PURE__*/React.createElement("p", {
+    style: { ...bodyTextStyle, fontSize: 12.5, color: 'var(--tx-2)', marginBottom: 10 }
+  }, "Most systems collapse all three layers into one \u2014 they record the classification and throw away both the original observation and the framework that produced it. Khora keeps all three. The raw information always belongs to the person who provided it. The frameworks are documented as what they are \u2014 lenses, not truths. And the interpretations are traceable back through the framework that made them to the observation they started from."),
+  /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, fontSize: 12.5, color: 'var(--tx-2)' }
-  }, "Most systems collapse this distinction \u2014 they record the classification and throw away the original observation. Khora keeps both, traces which framework turned one into the other, and shows you when frameworks disagree. The raw information always belongs to the person who provided it; the interpretations are documented as exactly that \u2014 interpretations."))),
+  }, "Switch frameworks, and the classifications update. Stack frameworks, and you see where they converge and where they diverge \u2014 and exactly what structural difference between them produces each disagreement."))),
 
   /* ── Section 4: How Security Works ── */
   /*#__PURE__*/React.createElement("div", {
@@ -22738,7 +23285,7 @@ const ClientApp = ({
       width: 24,
       height: 24,
       borderRadius: '50%',
-      background: 'linear-gradient(135deg,var(--teal),var(--gold))',
+      background: 'linear-gradient(135deg,var(--teal),var(--indigo),var(--gold))',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -22754,13 +23301,13 @@ const ClientApp = ({
     }
   }, "What Your Observations Mean"), /*#__PURE__*/React.createElement("span", {
     className: "gm-sup-badge"
-  }, "GIVEN \u2192 MEANT")), /*#__PURE__*/React.createElement("p", {
+  }, "GIVEN \u2192 FRAMEWORK \u2192 MEANT")), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 11,
       color: 'var(--tx-2)',
       marginBottom: 10
     }
-  }, "Your observations are facts. Below you can see how different institutional frameworks interpret those same facts differently."), /*#__PURE__*/React.createElement("div", {
+  }, "Your observations are facts. Below you can see how different frameworks interpret those same facts differently \u2014 each applying its own definitions, rules, and criteria."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -39998,7 +40545,7 @@ const ProviderApp = ({
       width: 24,
       height: 24,
       borderRadius: '50%',
-      background: 'linear-gradient(135deg,var(--teal),var(--gold))',
+      background: 'linear-gradient(135deg,var(--teal),var(--indigo),var(--gold))',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -40012,7 +40559,7 @@ const ProviderApp = ({
       fontSize: 15,
       fontWeight: 700
     }
-  }, "GIVEN / MEANT Divide"), /*#__PURE__*/React.createElement("span", {
+  }, "Given / Framework / Meant"), /*#__PURE__*/React.createElement("span", {
     className: "gm-sup-badge"
   }, "SUP")), /*#__PURE__*/React.createElement("p", {
     style: {
@@ -40020,7 +40567,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       marginBottom: 10
     }
-  }, "Same observations, different institutional meanings. Each framework interprets the data according to its own rules."), /*#__PURE__*/React.createElement("div", {
+  }, "Same observations, different frameworks, different classifications. Each framework applies its own definitions and criteria to the same raw data."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -40063,7 +40610,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       marginBottom: 10
     }
-  }, "Structured assessments and case management observations. Each entry is an EO event in the bridge room with full provenance."), /*#__PURE__*/React.createElement("div", {
+  }, "Structured assessments and case management observations. Each entry is a classification produced by a specific framework, traceable to the Given it was derived from."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))',
