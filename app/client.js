@@ -1547,6 +1547,8 @@ const ClientApp = ({
     await saveSnapshot(updated);
     setEditModal(false);
     showToast('Vault updated', 'success');
+    // Schedule encrypted cloud backup (debounced 30s after last change)
+    KhoraBackup.scheduleVaultBackup(updated, 30000);
     // Propagate to bridges (§8.3)
     for (const prov of providers) {
       const changedShared = Object.keys(editData).filter(k => prov.sharedFields?.[k]);
@@ -1584,6 +1586,8 @@ const ClientApp = ({
     setObsValue('');
     setObsFreeText('');
     showToast(`Observation recorded: ${obsModal.question}`, 'success');
+    // Schedule encrypted cloud backup (debounced 30s after last change)
+    KhoraBackup.scheduleVaultBackup(vaultData, 30000);
     // Emit to metrics if consent
     if (metricsConsent.enabled && obsModal.metrics && metricsConsent.categories?.includes(obsModal.category)) {
       for (const prov of providers) {
@@ -2209,7 +2213,8 @@ const ClientApp = ({
       { id: 'resources', icon: 'layers', label: 'My Resources' },
       { id: 'records', icon: 'shield', label: 'My Records', badge: pendingClaims.length, badgeClass: 'nav-badge-gold' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
-      { id: 'transparency', icon: 'eye', label: 'Transparency' }
+      { id: 'transparency', icon: 'eye', label: 'Transparency' },
+      { id: 'backup', icon: 'cloud', label: 'Backup' }
     ],
     onMoreNavigate: id => { setView(id); setActiveBridge(null); }
   },
@@ -2344,6 +2349,10 @@ const ClientApp = ({
     id: 'transparency',
     icon: 'eye',
     label: 'Transparency'
+  }, {
+    id: 'backup',
+    icon: 'cloud',
+    label: 'Backup'
   }].map(item => /*#__PURE__*/React.createElement("div", {
     key: item.id,
     onClick: () => {
@@ -4850,6 +4859,8 @@ const ClientApp = ({
     session: session
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
+  }), view === 'backup' && !activeBridge && /*#__PURE__*/React.createElement(BackupSettingsView, {
+    showToast: showToast
   })), /*#__PURE__*/React.createElement(Modal, {
     open: !!claimVerifyModal,
     onClose: () => { setClaimVerifyModal(null); setClaimVerifyCode(''); setClaimVerifyError(''); },

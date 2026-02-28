@@ -1712,6 +1712,19 @@ const I = ({
       x2: "12",
       y2: "3"
     })),
+    cloud: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
+      d: "M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"
+    })),
+    cloudUp: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
+      d: "M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 1 0 0-10z"
+    }), /*#__PURE__*/React.createElement("polyline", {
+      points: "16 16 12 12 8 16"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "12",
+      y1: "12",
+      x2: "12",
+      y2: "21"
+    })),
     sun: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", {
       cx: "12",
       cy: "12",
@@ -3730,6 +3743,321 @@ const KhoraAuth = {
     return r.json();
   }
 };
+
+/* ═══════════════════ BACKUP MODULE (Filen-backed encrypted cloud backup) ═══════════════════
+ * Self-contained backup engine — all crypto, Filen API auth, file operations, and Pool Bridge
+ * logic live here. No UI/DOM code; the React views in provider.js and client.js consume this.
+ *
+ * Public interface (stable contract):
+ *   KhoraBackup.isConnected        — boolean, true when authenticated to Filen
+ *   KhoraBackup.identity           — current Matrix ID used for backup, or null
+ *   KhoraBackup.email              — current backup email, or null
+ *   KhoraBackup.storage            — {used, max, available} in bytes
+ *   KhoraBackup.canBridge          — boolean, true if paid account (can create public links)
+ *   KhoraBackup.bridgeSettings     — {enabled, capacity_gb, enabled_at} or null
+ *
+ *   KhoraBackup.connect(matrixId, email)   → true | 'needs_confirmation' | throws
+ *   KhoraBackup.disconnect()               → void
+ *   KhoraBackup.autoConnect()              → true | false (silent, from saved creds)
+ *
+ *   KhoraBackup.uploadFile(file, folder?)  → {uuid, fileKey, bucket, region, chunks}
+ *   KhoraBackup.uploadJSON(data, filename, folder?)  → upload result
+ *   KhoraBackup.uploadAndLink(file, folder?)         → public URL string
+ *   KhoraBackup.uploadBufferAndLink(buffer, filename, folder?) → public URL string
+ *   KhoraBackup.deleteFile(folder, filename)          → true | false
+ *   KhoraBackup.listFolder(folderUUID?)               → {folders:[], files:[]}
+ *   KhoraBackup.downloadFile(uuid)                    → {data: Uint8Array, name, mime}
+ *   KhoraBackup.ensureFolder(name, parent?)           → folderUUID
+ *   KhoraBackup.resendConfirmation()                  → void
+ *
+ *   KhoraBackup.enableBridge(capacityGB)   → void
+ *   KhoraBackup.disableBridge()            → void
+ *
+ *   KhoraBackup.addListener(fn)            → void (called with {event, ...data})
+ *   KhoraBackup.removeListener(fn)         → void
+ *
+ * Operator Manifest:
+ *   INS(backup.session, {filen_auth}) — backup_authentication
+ *   INS(backup.file, {encrypted_upload}) — content_backup
+ *   DES(backup.file, {trash}) — content_deletion
+ *   NUL(backup.session, {disconnect}) — backup_teardown
+ *   ALT(backup.bridge, {enable|disable}) — network_contribution
+ *
+ * Triad Summary:
+ *   Existence:       INS (connect, upload), NUL (disconnect, delete)
+ *   Structure:       —
+ *   Interpretation:  ALT (encrypt/decrypt at rest, bridge toggle)
+ * ═══════════════════════════════════════════════════════════════════════════════ */
+
+const KhoraBackup = (() => {
+  const GW = 'https://gateway.filen.io';
+  const EGEST = ['https://egest.filen.io','https://egest.filen.net','https://egest.filen-1.net','https://egest.filen-2.net','https://egest.filen-3.net','https://egest.filen-4.net','https://egest.filen-5.net','https://egest.filen-6.net'];
+  const INGEST = ['https://ingest.filen.io','https://ingest.filen.net','https://ingest.filen-1.net','https://ingest.filen-2.net','https://ingest.filen-3.net','https://ingest.filen-4.net','https://ingest.filen-5.net','https://ingest.filen-6.net'];
+  const CHUNK = 1048576;
+  const APP_SALT = 'khora-matrix-backup-bridge-v1';
+  const te = new TextEncoder(), td = new TextDecoder();
+  let S = { apiKey: null, masterKeys: [], baseFolderUUID: null, email: null, matrixId: null, filenPassword: null, canCreateLinks: false, maxStorage: 0, usedStorage: 0 };
+  const listeners = [];
+  const hex = b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');
+  const unhex = h => { const a = new Uint8Array(h.length / 2); for (let i = 0; i < h.length; i += 2) a[i / 2] = parseInt(h.substr(i, 2), 16); return a; };
+  const b64e = b => { let s = ''; const a = new Uint8Array(b); for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); };
+  const b64d = s => { const b = atob(s); const a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; };
+  const rHex = n => hex(crypto.getRandomValues(new Uint8Array(n)));
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const fmtSize = b => { if (!b) return '0 B'; const u = ['B','KB','MB','GB','TB']; const i = Math.floor(Math.log(b) / Math.log(1024)); return (b / Math.pow(1024, i)).toFixed(i ? 1 : 0) + ' ' + u[i]; };
+  const emit = data => { for (const fn of listeners) { try { fn(data); } catch (e) { console.warn('KhoraBackup listener error:', e); } } };
+  async function pbkdf2Bits(pw, salt, iter, hash, bits) {
+    const km = await crypto.subtle.importKey('raw', te.encode(pw), 'PBKDF2', false, ['deriveBits']);
+    return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: te.encode(salt), iterations: iter, hash }, km, bits);
+  }
+  async function sha512(s) { return hex(await crypto.subtle.digest('SHA-512', te.encode(s))); }
+  async function deriveFilenPassword(matrixId) { return hex(await pbkdf2Bits(matrixId, APP_SALT, 100000, 'SHA-512', 256)); }
+  async function deriveLoginAndMaster(raw, salt, ver) {
+    if (ver !== 2) throw new Error('Auth v' + ver + ' unsupported');
+    const dk = hex(await pbkdf2Bits(raw, salt, 200000, 'SHA-512', 512));
+    return { masterKey: dk.substring(0, dk.length / 2), loginPassword: await sha512(dk.substring(dk.length / 2)) };
+  }
+  async function aesKey(key, use) {
+    const km = await crypto.subtle.importKey('raw', te.encode(key), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: te.encode(key), iterations: 1, hash: 'SHA-512' }, km, 256);
+    return crypto.subtle.importKey('raw', bits, 'AES-GCM', false, use);
+  }
+  async function metaEnc(data, key) {
+    const k = await aesKey(key, ['encrypt']); const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, tagLength: 128 }, k, te.encode(typeof data === 'string' ? data : JSON.stringify(data)));
+    return '002' + td.decode(iv) + b64e(ct);
+  }
+  async function metaDec(meta, key) {
+    try { if (!meta || meta.startsWith('U2FsdGVk') || meta.substring(0, 3) !== '002') return null;
+    const iv = te.encode(meta.substring(3, 15)); const ct = b64d(meta.substring(15));
+    const k = await aesKey(key, ['decrypt']);
+    return td.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, k, ct)); } catch { return null; }
+  }
+  async function decMeta(meta) {
+    for (let i = S.masterKeys.length - 1; i >= 0; i--) { const r = await metaDec(meta, S.masterKeys[i]); if (r) { try { return JSON.parse(r); } catch { return r; } } } return null;
+  }
+  async function aesKeyFromFileKey(fk, use) {
+    const kb = te.encode(fk); const km = await crypto.subtle.importKey('raw', kb, 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: kb, iterations: 1, hash: 'SHA-512' }, km, 256);
+    return crypto.subtle.importKey('raw', bits, 'AES-GCM', false, use);
+  }
+  async function decryptChunk(buf, fileKey) {
+    const a = new Uint8Array(buf);
+    if (td.decode(a.slice(0, 3)) === '002') { const iv = a.slice(3, 15), ct = a.slice(15); const k = await aesKeyFromFileKey(fileKey, ['decrypt']); return crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, k, ct); }
+    const iv = a.slice(0, 12), ct = a.slice(12); const raw = te.encode(fileKey); const kb = raw.length >= 32 ? raw.slice(0, 32) : raw;
+    const k = await crypto.subtle.importKey('raw', kb, 'AES-GCM', false, ['decrypt']);
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv, tagLength: 128 }, k, ct);
+  }
+  async function encryptChunk(chunk, fileKey) {
+    const iv = crypto.getRandomValues(new Uint8Array(12)); const k = await aesKeyFromFileKey(fileKey, ['encrypt']);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, tagLength: 128 }, k, chunk);
+    const out = new Uint8Array(3 + 12 + ct.byteLength); out.set(te.encode('002'), 0); out.set(iv, 3); out.set(new Uint8Array(ct), 15); return out;
+  }
+  async function apiPost(path, body, auth = true) {
+    const h = { 'Content-Type': 'application/json' }; if (auth && S.apiKey) h['Authorization'] = `Bearer ${S.apiKey}`;
+    return (await fetch(`${GW}/v3${path}`, { method: 'POST', headers: h, body: JSON.stringify(body) })).json();
+  }
+  async function apiGet(path) { const h = {}; if (S.apiKey) h['Authorization'] = `Bearer ${S.apiKey}`; return (await fetch(`${GW}/v3${path}`, { headers: h })).json(); }
+  async function tryLogin(email, rawPassword) {
+    try {
+      const ai = await apiPost('/auth/info', { email }, false); if (!ai.status) return false;
+      const { masterKey, loginPassword } = await deriveLoginAndMaster(rawPassword, ai.data.salt, ai.data.authVersion);
+      const lr = await apiPost('/login', { email, password: loginPassword, twoFactorCode: 'XXXXXX', authVersion: ai.data.authVersion }, false);
+      if (!lr.status) return false;
+      S.apiKey = lr.data.apiKey; S.email = email; S.masterKeys = [masterKey];
+      try { const emk = await metaEnc(masterKey, masterKey); const mkr = await apiPost('/user/masterKeys', { masterKeys: emk }); if (mkr.status && mkr.data?.keys) { const dk = await metaDec(mkr.data.keys, masterKey); if (dk) S.masterKeys = dk.split('|').filter(Boolean); } } catch {}
+      const bf = await apiGet('/user/baseFolder'); if (!bf.status) throw new Error('Base folder failed'); S.baseFolderUUID = bf.data.uuid;
+      try { const acc = await apiGet('/user/account'); if (acc.status) { S.usedStorage = acc.data.storageUsed || 0; S.maxStorage = acc.data.maxStorage || 0; S.canCreateLinks = S.maxStorage > 11 * 1024 * 1024 * 1024; } } catch {}
+      return true;
+    } catch { return false; }
+  }
+  async function tryRegister(email, rawPassword) {
+    try {
+      const salt = rHex(64); const { masterKey, loginPassword } = await deriveLoginAndMaster(rawPassword, salt, 2);
+      const r = await apiPost('/register', { email, password: loginPassword, salt, authVersion: 2 }, false);
+      if (r.status) return 'registered';
+      const msg = (r.message || '').toLowerCase();
+      if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) return 'exists_unconfirmed';
+      return r.message || 'Registration failed';
+    } catch (e) { return e.message; }
+  }
+  function saveCreds(m, e) { try { localStorage.setItem('khora_backup_creds', JSON.stringify({ matrixId: m, email: e, ts: Date.now() })); } catch {} }
+  function loadCreds() { try { return JSON.parse(localStorage.getItem('khora_backup_creds')); } catch { return null; } }
+  function clearCreds() { try { localStorage.removeItem('khora_backup_creds'); localStorage.removeItem('khora_backup_seen'); } catch {} }
+  function hasSeenRecovery() { try { return localStorage.getItem('khora_backup_seen') === '1'; } catch { return false; } }
+  function markRecoverySeen() { try { localStorage.setItem('khora_backup_seen', '1'); } catch {} }
+  function savePoolBridgeSettings(enabled, capacityGB) { try { localStorage.setItem('khora_backup_bridge', JSON.stringify({ enabled, capacity_gb: capacityGB, enabled_at: enabled ? new Date().toISOString() : null, ts: Date.now() })); } catch {} }
+  function loadPoolBridgeSettings() { try { return JSON.parse(localStorage.getItem('khora_backup_bridge')); } catch { return null; } }
+  async function ensureFolderInternal(name, parent) {
+    parent = parent || S.baseFolderUUID; const nh = await sha512(name.toLowerCase());
+    const exists = await apiPost('/dir/exists', { parent, nameHashed: nh });
+    if (exists.status && exists.data?.exists && exists.data?.uuid) return exists.data.uuid;
+    const uuid = crypto.randomUUID(); const lk = S.masterKeys[S.masterKeys.length - 1];
+    const en = await metaEnc({ name }, lk); await apiPost('/dir/create', { uuid, name: en, nameHashed: nh, parent }); return uuid;
+  }
+  async function uploadFileInternal(file, parentUUID) {
+    const uuid = crypto.randomUUID(), fileKey = rHex(32), uploadKey = rHex(32);
+    const total = Math.max(1, Math.ceil(file.size / CHUNK));
+    let bucket = null, region = null;
+    for (let i = 0; i < total; i++) {
+      const raw = new Uint8Array(await file.slice(i * CHUNK, Math.min((i + 1) * CHUNK, file.size)).arrayBuffer());
+      const enc = await encryptChunk(raw, fileKey);
+      const hashHex = hex(await crypto.subtle.digest('SHA-512', enc));
+      const host = pick(INGEST);
+      const r = await (await fetch(`${host}/v3/upload?uuid=${uuid}&index=${i}&uploadKey=${uploadKey}&parent=${parentUUID}&hash=${hashHex}`, { method: 'POST', headers: { 'Authorization': `Bearer ${S.apiKey}` }, body: enc })).json();
+      if (!r.status) throw new Error(r.message || `Chunk ${i} failed`);
+      if (i === 0) { bucket = r.data.bucket; region = r.data.region; }
+    }
+    const lk = S.masterKeys[S.masterKeys.length - 1];
+    const meta = JSON.stringify({ name: file.name, size: file.size, mime: file.type || 'application/octet-stream', key: fileKey, lastModified: file.lastModified || Date.now() });
+    const em = await metaEnc(meta, lk), nh = await sha512(file.name.toLowerCase());
+    const dr = await apiPost('/upload/done', { uuid, name: em, nameHashed: nh, size: String(file.size), chunks: total, mime: em, rm: rHex(32), metadata: em, version: 2, uploadKey });
+    if (!dr.status) throw new Error(dr.message || 'Finalize failed');
+    return { uuid, fileKey, bucket, region, chunks: total };
+  }
+  async function downloadFileInternal(uuid, files) {
+    const f = files.find(x => x.uuid === uuid); if (!f) throw new Error('File not found');
+    const parts = [];
+    for (let i = 0; i < f.chunks; i++) {
+      const host = pick(EGEST);
+      const r = await fetch(`${host}/${f.region}/${f.bucket}/${f.uuid}/${i}`, { headers: { 'Authorization': `Bearer ${S.apiKey}` } });
+      if (!r.ok) throw new Error(`Chunk ${i}: HTTP ${r.status}`);
+      parts.push(new Uint8Array(await decryptChunk(await r.arrayBuffer(), f.key)));
+    }
+    const total = parts.reduce((s, p) => s + p.length, 0); const out = new Uint8Array(total); let off = 0;
+    for (const p of parts) { out.set(p, off); off += p.length; }
+    return { data: out, name: f.name, mime: f.mime };
+  }
+  let backupTimers = {};
+  function scheduleAutoBackup(key, fn, delayMs) {
+    if (backupTimers[key]) clearTimeout(backupTimers[key]);
+    backupTimers[key] = setTimeout(async () => {
+      try { await fn(); } catch (e) { console.warn('KhoraBackup auto-backup failed:', key, e.message); emit({ event: 'error', message: `Auto-backup failed: ${key}` }); }
+    }, delayMs);
+  }
+  const api = {
+    get isConnected() { return !!S.apiKey; },
+    get identity() { return S.matrixId || loadCreds()?.matrixId || null; },
+    get email() { return S.email || loadCreds()?.email || null; },
+    get storage() { return { used: S.usedStorage, max: S.maxStorage, available: Math.max(0, S.maxStorage - S.usedStorage) }; },
+    get canBridge() { return !!S.canCreateLinks; },
+    get bridgeSettings() { return loadPoolBridgeSettings(); },
+    get hasSeenRecovery() { return hasSeenRecovery(); },
+    get savedCreds() { return loadCreds(); },
+    fmtSize,
+    async connect(matrixId, email) {
+      const fp = await deriveFilenPassword(matrixId);
+      const ok = await tryLogin(email, fp);
+      if (ok) { S.matrixId = matrixId; S.filenPassword = fp; saveCreds(matrixId, email); emit({ event: 'connected', matrixId, email }); return true; }
+      const reg = await tryRegister(email, fp);
+      if (reg === 'registered' || reg === 'exists_unconfirmed') { saveCreds(matrixId, email); return 'needs_confirmation'; }
+      throw new Error(reg);
+    },
+    async retryAfterConfirmation() {
+      const creds = loadCreds(); if (!creds) throw new Error('No saved credentials');
+      const fp = await deriveFilenPassword(creds.matrixId);
+      const ok = await tryLogin(creds.email, fp);
+      if (ok) { S.matrixId = creds.matrixId; S.filenPassword = fp; emit({ event: 'connected', matrixId: creds.matrixId, email: creds.email }); return true; }
+      return false;
+    },
+    async resendConfirmation() {
+      const creds = loadCreds(); if (!creds) throw new Error('No email saved');
+      const r = await apiPost('/confirmationSend', { email: creds.email }, false);
+      return !!r.status;
+    },
+    async autoConnect() {
+      const creds = loadCreds(); if (!creds || !creds.matrixId || !creds.email) return false;
+      try {
+        const fp = await deriveFilenPassword(creds.matrixId);
+        const ok = await tryLogin(creds.email, fp);
+        if (ok) { S.matrixId = creds.matrixId; S.filenPassword = fp; emit({ event: 'connected', matrixId: creds.matrixId, email: creds.email }); return true; }
+      } catch {}
+      return false;
+    },
+    disconnect() {
+      S = { apiKey: null, masterKeys: [], baseFolderUUID: null, email: null, matrixId: null, filenPassword: null, canCreateLinks: false, maxStorage: 0, usedStorage: 0 };
+      clearCreds();
+      for (const k of Object.keys(backupTimers)) { clearTimeout(backupTimers[k]); delete backupTimers[k]; }
+      emit({ event: 'disconnected' });
+    },
+    markRecoverySeen,
+    async ensureFolder(name, parent) {
+      if (!S.apiKey) throw new Error('Not connected');
+      return ensureFolderInternal(name, parent);
+    },
+    async uploadFile(file, folder) {
+      if (!S.apiKey) throw new Error('Not connected');
+      const parentUUID = folder ? await ensureFolderInternal(folder) : S.baseFolderUUID;
+      const result = await uploadFileInternal(file, parentUUID);
+      emit({ event: 'upload_complete', filename: file.name, folder: folder || null });
+      return result;
+    },
+    async uploadJSON(data, filename, folder) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const file = new File([blob], filename || `backup-${Date.now()}.json`, { type: 'application/json' });
+      return api.uploadFile(file, folder);
+    },
+    async uploadAndLink(file, folder) {
+      if (!S.apiKey) throw new Error('Not connected');
+      const parentUUID = folder ? await ensureFolderInternal(folder) : S.baseFolderUUID;
+      const info = await uploadFileInternal(file, parentUUID);
+      const linkUUID = crypto.randomUUID();
+      const r = await apiPost('/file/link/edit', { uuid: linkUUID, fileUUID: info.uuid, type: 'enable', expiration: 'never', password: 'empty', passwordHashed: await sha512('empty'), salt: rHex(32), downloadBtn: true });
+      if (!r.status) throw new Error(r.message || 'Link failed');
+      return `https://filen.io/f/${linkUUID}#${info.fileKey}`;
+    },
+    async uploadBufferAndLink(buffer, filename, folder) {
+      const file = new File([buffer], filename, { type: 'application/octet-stream', lastModified: Date.now() });
+      return api.uploadAndLink(file, folder);
+    },
+    async deleteFile(folder, filename) {
+      if (!S.apiKey) throw new Error('Not connected');
+      const folderUUID = folder ? await ensureFolderInternal(folder) : S.baseFolderUUID;
+      const r = await apiPost('/dir/content', { uuid: folderUUID });
+      if (!r.status) throw new Error(r.message || 'Folder not found');
+      for (const u of (r.data.uploads || [])) { const m = await decMeta(u.metadata); if (m && m.name === filename) { const tr = await apiPost('/file/trash', { uuid: u.uuid }); if (!tr.status) throw new Error(tr.message || 'Trash failed'); return true; } }
+      return false;
+    },
+    async listFolder(folderUUID) {
+      if (!S.apiKey) throw new Error('Not connected');
+      const uuid = folderUUID || S.baseFolderUUID;
+      const r = await apiPost('/dir/content', { uuid });
+      if (!r.status) throw new Error(r.message || 'Load failed');
+      const folders = [], files = [];
+      for (const f of (r.data.folders || [])) { if (f.uuid === uuid) continue; const n = await decMeta(f.name); folders.push({ uuid: f.uuid, name: (typeof n === 'object' ? n.name : n) || '[Encrypted]', ts: f.timestamp }); }
+      for (const u of (r.data.uploads || [])) { const m = await decMeta(u.metadata); files.push({ uuid: u.uuid, name: m?.name || '[Encrypted]', size: m?.size || u.size || 0, mime: m?.mime || '', key: m?.key || '', chunks: u.chunks, bucket: u.bucket, region: u.region, version: u.version || 2, ts: u.timestamp }); }
+      return { folders, files };
+    },
+    async downloadFile(uuid) {
+      if (!S.apiKey) throw new Error('Not connected');
+      const listing = await api.listFolder();
+      return downloadFileInternal(uuid, listing.files);
+    },
+    scheduleVaultBackup(vaultData, delayMs) {
+      if (!S.apiKey) return;
+      scheduleAutoBackup('vault', async () => {
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        await api.uploadJSON(vaultData, `vault-${ts}.json`, 'Vault Backups');
+        emit({ event: 'backup_complete', type: 'vault', filename: `vault-${ts}.json` });
+      }, delayMs || 30000);
+    },
+    enableBridge(capacityGB) {
+      if (!S.canCreateLinks) throw new Error('Account does not support public links');
+      const cap = Math.max(1, Math.min(100, capacityGB || 5));
+      savePoolBridgeSettings(true, cap);
+      emit({ event: 'bridge_enabled', capacity_gb: cap });
+      window.dispatchEvent(new CustomEvent('khora-bridge-ready', { detail: { capacity_gb: cap, maxStorage: S.maxStorage, usedStorage: S.usedStorage } }));
+    },
+    disableBridge() {
+      savePoolBridgeSettings(false, 0);
+      emit({ event: 'bridge_disabled' });
+      window.dispatchEvent(new CustomEvent('khora-bridge-stopped'));
+    },
+    addListener(fn) { if (typeof fn === 'function' && !listeners.includes(fn)) listeners.push(fn); },
+    removeListener(fn) { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); }
+  };
+  return api;
+})();
 
 /* ═══════════════════ MATRIX SERVICE ═══════════════════
  * Operator Manifest:
@@ -11761,6 +12089,223 @@ function SwMRow({
     }, "Clear"));
   })());
 }
+
+/* ═══════════════════ BACKUP SETTINGS VIEW ═══════════════════ */
+const BackupSettingsView = ({ showToast }) => {
+  const [phase, setPhase] = useState(() => {
+    if (KhoraBackup.isConnected) return 'connected';
+    const creds = KhoraBackup.savedCreds;
+    if (creds && creds.matrixId && creds.email) return 'auto';
+    return 'setup';
+  });
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [storage, setStorage] = useState(KhoraBackup.storage);
+  const [bridgeSettings, setBridgeSettings] = useState(KhoraBackup.bridgeSettings);
+  const [bridgeCap, setBridgeCap] = useState(5);
+  const [files, setFiles] = useState(null);
+  const [showFiles, setShowFiles] = useState(false);
+  const [lastBackup, setLastBackup] = useState(() => {
+    try { return localStorage.getItem('khora_backup_last'); } catch { return null; }
+  });
+  useEffect(() => {
+    const handler = ev => {
+      if (ev.event === 'connected') { setPhase('connected'); setStorage(KhoraBackup.storage); setBridgeSettings(KhoraBackup.bridgeSettings); }
+      if (ev.event === 'disconnected') { setPhase('setup'); setFiles(null); }
+      if (ev.event === 'backup_complete') { const ts = new Date().toISOString(); setLastBackup(ts); try { localStorage.setItem('khora_backup_last', ts); } catch {} }
+      if (ev.event === 'bridge_enabled') setBridgeSettings(KhoraBackup.bridgeSettings);
+      if (ev.event === 'bridge_disabled') setBridgeSettings(KhoraBackup.bridgeSettings);
+    };
+    KhoraBackup.addListener(handler);
+    return () => KhoraBackup.removeListener(handler);
+  }, []);
+  useEffect(() => {
+    if (phase === 'auto') {
+      setBusy(true);
+      KhoraBackup.autoConnect().then(ok => {
+        setBusy(false);
+        if (ok) { setPhase('connected'); setStorage(KhoraBackup.storage); }
+        else setPhase('setup');
+      }).catch(() => { setBusy(false); setPhase('setup'); });
+    }
+  }, []);
+  const handleSetup = async () => {
+    const matrixId = svc.userId;
+    const em = email.trim();
+    if (!em || !em.includes('@')) { showToast('Enter a valid email address', 'error'); return; }
+    setBusy(true);
+    try {
+      const result = await KhoraBackup.connect(matrixId, em);
+      if (result === true) {
+        if (!KhoraBackup.hasSeenRecovery) setPhase('recovery');
+        else { setPhase('connected'); setStorage(KhoraBackup.storage); showToast('Backup connected', 'success'); }
+      } else if (result === 'needs_confirmation') {
+        setPhase('confirm');
+        showToast('Check your email for a verification link', 'info');
+      }
+    } catch (e) { showToast('Backup setup failed: ' + e.message, 'error'); }
+    setBusy(false);
+  };
+  const handleRetryConfirm = async () => {
+    setBusy(true);
+    try {
+      const ok = await KhoraBackup.retryAfterConfirmation();
+      if (ok) {
+        if (!KhoraBackup.hasSeenRecovery) setPhase('recovery');
+        else { setPhase('connected'); setStorage(KhoraBackup.storage); showToast('Backup connected', 'success'); }
+      } else { showToast('Not ready yet \u2014 check your email for the confirmation link', 'warn'); }
+    } catch (e) { showToast('Connection failed: ' + e.message, 'error'); }
+    setBusy(false);
+  };
+  const handleResend = async () => {
+    try { const ok = await KhoraBackup.resendConfirmation(); showToast(ok ? 'Verification email resent' : 'Could not resend', 'info'); }
+    catch { showToast('Failed to resend', 'error'); }
+  };
+  const handleRecoveryDone = () => {
+    KhoraBackup.markRecoverySeen();
+    setPhase('connected');
+    setStorage(KhoraBackup.storage);
+    showToast('Backup connected', 'success');
+  };
+  const handleDisconnect = () => {
+    KhoraBackup.disconnect();
+    setPhase('setup');
+    setFiles(null);
+    showToast('Backup disconnected', 'info');
+  };
+  const loadFiles = async () => {
+    try { const listing = await KhoraBackup.listFolder(); setFiles(listing); setShowFiles(true); }
+    catch (e) { showToast('Could not load files: ' + e.message, 'error'); }
+  };
+  const handleBridgeEnable = () => {
+    try { KhoraBackup.enableBridge(bridgeCap); showToast('Pool Bridge enabled \u2014 you\'re helping the network', 'success'); }
+    catch (e) { showToast('Bridge error: ' + e.message, 'error'); }
+  };
+  const handleBridgeDisable = () => {
+    KhoraBackup.disableBridge();
+    showToast('Pool Bridge disabled', 'info');
+  };
+  const cardStyle = { background: 'var(--bg-2)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '24px 22px' };
+  const labelStyle = { fontSize: 10.5, fontWeight: 600, color: 'var(--tx-2)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6, display: 'block' };
+  const inputStyle = { width: '100%', background: 'var(--bg-1)', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', padding: '10px 14px', color: 'var(--tx-0)', fontFamily: 'var(--mono)', fontSize: 13, outline: 'none' };
+  if (phase === 'setup') return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 560 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 4 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: 'var(--tx-2)', marginBottom: 20, lineHeight: 1.5 } },
+      "Back up your data to an encrypted cloud vault. Your Matrix ID is your recovery key \u2014 if your server ever goes down, you can recover everything with just your Matrix ID and email."),
+    /*#__PURE__*/React.createElement("div", { style: cardStyle },
+      /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center', marginBottom: 16 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 48, height: 48, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: 'var(--teal)' } },
+          /*#__PURE__*/React.createElement(I, { n: "shield", s: 22 })),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, marginBottom: 4 } }, "Set Up Encrypted Backup"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: 'var(--tx-2)' } }, "Your data \xB7 your keys \xB7 always recoverable")),
+      /*#__PURE__*/React.createElement("label", { style: labelStyle }, "MATRIX ID"),
+      /*#__PURE__*/React.createElement("input", { type: "text", value: svc.userId || '', disabled: true, style: { ...inputStyle, opacity: 0.6, marginBottom: 14 } }),
+      /*#__PURE__*/React.createElement("label", { style: labelStyle }, "RECOVERY EMAIL"),
+      /*#__PURE__*/React.createElement("input", { type: "email", placeholder: "you@example.com", value: email, onChange: e => setEmail(e.target.value), style: { ...inputStyle, marginBottom: 18 }, onKeyDown: e => { if (e.key === 'Enter') handleSetup(); } }),
+      /*#__PURE__*/React.createElement("button", { className: "b-pri", onClick: handleSetup, disabled: busy, style: { width: '100%', justifyContent: 'center' } },
+        busy ? /*#__PURE__*/React.createElement(Spin, { s: 14 }) : /*#__PURE__*/React.createElement(I, { n: "shield", s: 14 }),
+        busy ? ' Setting up\u2026' : ' Enable Backup')));
+  if (phase === 'confirm') return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 560 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 4 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("div", { style: cardStyle },
+      /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center' } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 48, height: 48, borderRadius: '50%', background: 'var(--gold-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: 'var(--gold)' } },
+          /*#__PURE__*/React.createElement(I, { n: "msg", s: 22 })),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, marginBottom: 8 } }, "Confirm Your Email"),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: 'var(--tx-2)', lineHeight: 1.5, marginBottom: 4 } },
+          "We sent a verification link to:"),
+        /*#__PURE__*/React.createElement("div", { style: { fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: 'var(--teal)', marginBottom: 16 } }, KhoraBackup.email || email),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 12, color: 'var(--tx-2)', marginBottom: 18 } },
+          "Click the link in the email, then come back here."),
+        /*#__PURE__*/React.createElement("button", { className: "b-pri", onClick: handleRetryConfirm, disabled: busy, style: { width: '100%', justifyContent: 'center', marginBottom: 10 } },
+          busy ? /*#__PURE__*/React.createElement(Spin, { s: 14 }) : null,
+          busy ? ' Connecting\u2026' : "I've confirmed \u2014 activate backup"),
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8, justifyContent: 'center' } },
+          /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: handleResend }, "Resend email"),
+          /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => setPhase('setup') }, "\u2190 Back")))));
+  if (phase === 'recovery') return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 560 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 4 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("div", { style: cardStyle },
+      /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center' } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 48, height: 48, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: 'var(--teal)' } },
+          /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 22 })),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, marginBottom: 8 } }, "Your Recovery Info"),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: 'var(--tx-2)', lineHeight: 1.5, marginBottom: 16 } },
+          "Save this somewhere safe. If your server ever goes down, this is all you need to recover every file.")),
+      /*#__PURE__*/React.createElement("div", { style: { background: 'var(--bg-1)', border: '2px dashed var(--border-0)', borderRadius: 'var(--r)', padding: 16, textAlign: 'center', marginBottom: 10 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: 'var(--tx-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 } }, "RECOVERY IDENTITY"),
+        /*#__PURE__*/React.createElement("div", { style: { fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--teal)', fontWeight: 600, wordBreak: 'break-all', userSelect: 'all' } }, KhoraBackup.identity)),
+      /*#__PURE__*/React.createElement("div", { style: { background: 'var(--bg-1)', border: '2px dashed var(--border-0)', borderRadius: 'var(--r)', padding: 16, textAlign: 'center', marginBottom: 16 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: 'var(--tx-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 } }, "RECOVERY EMAIL"),
+        /*#__PURE__*/React.createElement("div", { style: { fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--tx-0)', fontWeight: 600, userSelect: 'all' } }, KhoraBackup.email)),
+      /*#__PURE__*/React.createElement("p", { style: { fontSize: 11, color: 'var(--tx-3)', textAlign: 'center', lineHeight: 1.6, marginBottom: 14 } },
+        "That\u2019s it \u2014 those two things. No passwords to remember. Your encryption key is derived automatically from your Matrix ID."),
+      /*#__PURE__*/React.createElement("button", { className: "b-pri", onClick: handleRecoveryDone, style: { width: '100%', justifyContent: 'center' } },
+        /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 14 }), " Got it \u2014 open my backup")));
+  if (phase === 'auto') return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 560 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 16 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("div", { style: { ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 } },
+      /*#__PURE__*/React.createElement(Spin, { s: 18 }),
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: 'var(--tx-2)' } }, "Reconnecting to backup\u2026")));
+  const pct = storage.max > 0 ? Math.min(100, (storage.used / storage.max) * 100) : 0;
+  const isBridgeActive = bridgeSettings && bridgeSettings.enabled;
+  return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 600 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 16 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("div", { style: { ...cardStyle, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 36, height: 36, borderRadius: 9, background: 'linear-gradient(135deg, var(--teal), var(--blue))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14 } },
+          (KhoraBackup.identity || '?')[0] === '@' ? (KhoraBackup.identity || '?')[1].toUpperCase() : (KhoraBackup.identity || '?')[0].toUpperCase()),
+        /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, KhoraBackup.identity),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)', fontFamily: 'var(--mono)' } }, KhoraBackup.fmtSize(storage.used), " / ", KhoraBackup.fmtSize(storage.max))),
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+          /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 6px rgba(0,200,140,0.5)' } }),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--green)', fontWeight: 600 } }, "Connected"))),
+      /*#__PURE__*/React.createElement("div", { style: { height: 4, background: 'var(--bg-4)', borderRadius: 2, overflow: 'hidden', marginBottom: 10 } },
+        /*#__PURE__*/React.createElement("div", { style: { height: '100%', width: pct + '%', background: 'linear-gradient(90deg, var(--teal), var(--blue))', borderRadius: 2, transition: 'width .3s' } })),
+      lastBackup && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)', marginBottom: 10 } },
+        /*#__PURE__*/React.createElement(I, { n: "check", s: 11 }), " Last backup: ", new Date(lastBackup).toLocaleString()),
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => { if (showFiles) { setShowFiles(false); } else loadFiles(); } },
+          /*#__PURE__*/React.createElement(I, { n: showFiles ? "chevronLeft" : "grid", s: 12 }), showFiles ? ' Hide Files' : ' Browse Files'),
+        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", style: { color: 'var(--red)', borderColor: 'rgba(240,96,96,.3)' }, onClick: handleDisconnect },
+          /*#__PURE__*/React.createElement(I, { n: "logout", s: 12 }), " Disconnect"))),
+    showFiles && /*#__PURE__*/React.createElement("div", { style: { ...cardStyle, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 600, marginBottom: 10 } }, "Backup Files"),
+      !files ? /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center', padding: 20 } }, /*#__PURE__*/React.createElement(Spin, { s: 18 }))
+      : (files.folders.length + files.files.length === 0)
+        ? /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center', padding: 20, color: 'var(--tx-2)', fontSize: 12 } }, "No files yet \u2014 backups will appear here automatically")
+        : /*#__PURE__*/React.createElement("div", { style: { maxHeight: 300, overflowY: 'auto' } },
+          files.folders.map(f => /*#__PURE__*/React.createElement("div", { key: f.uuid, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--r)', fontSize: 12.5 } },
+            /*#__PURE__*/React.createElement(I, { n: "grid", s: 14, c: "var(--gold)" }), /*#__PURE__*/React.createElement("span", { style: { flex: 1 } }, f.name),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)' } }, "folder"))),
+          files.files.map(f => /*#__PURE__*/React.createElement("div", { key: f.uuid, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--r)', fontSize: 12.5 } },
+            /*#__PURE__*/React.createElement(I, { n: "file", s: 14 }), /*#__PURE__*/React.createElement("span", { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, f.name),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', whiteSpace: 'nowrap' } }, KhoraBackup.fmtSize(f.size)))))),
+    KhoraBackup.canBridge && !isBridgeActive && /*#__PURE__*/React.createElement("div", { style: { background: 'var(--teal-dim)', border: '1px solid rgba(0,200,140,0.2)', borderRadius: 'var(--r-lg)', padding: 20, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 36, height: 36, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal)' } },
+          /*#__PURE__*/React.createElement(I, { n: "globe", s: 20 })),
+        /*#__PURE__*/React.createElement("div", null,
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, fontWeight: 700 } }, "Help the Network"),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)' } }, "Mirror encrypted files so others can fetch when uploaders are offline"))),
+      /*#__PURE__*/React.createElement("p", { style: { fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.6, marginBottom: 14 } },
+        "Your account supports public links. Enable bridge mode to automatically store and serve encrypted blobs for the Khora network. You\u2019ll never see the contents \u2014 everything arrives pre-encrypted."),
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
+        /*#__PURE__*/React.createElement("span", { style: { ...labelStyle, margin: 0 } }, "CAPACITY"),
+        /*#__PURE__*/React.createElement("input", { type: "number", value: bridgeCap, min: 1, max: 100, onChange: e => setBridgeCap(parseInt(e.target.value) || 5), style: { width: 70, background: 'var(--bg-1)', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', padding: '6px 10px', color: 'var(--tx-0)', fontFamily: 'var(--mono)', fontSize: 12 } }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-3)' } }, "GB of ", KhoraBackup.fmtSize(storage.available), " available")),
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
+        /*#__PURE__*/React.createElement("button", { className: "b-pri b-sm", onClick: handleBridgeEnable },
+          /*#__PURE__*/React.createElement(I, { n: "globe", s: 12 }), " Enable Bridge"),
+        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => {} }, "Not Now"))),
+    isBridgeActive && /*#__PURE__*/React.createElement("div", { style: { background: 'var(--bg-2)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite', flexShrink: 0 } }),
+      /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-2)' } },
+        /*#__PURE__*/React.createElement("strong", { style: { color: 'var(--tx-0)' } }, "Pool Bridge active"),
+        " \xB7 ", bridgeSettings.capacity_gb, " GB allocated"),
+      /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: handleBridgeDisable }, "Disable")));
+};
 
 /* ═══════════════════ FORM BUILDER — Schema Builder UX ═══════════════════
  * The FormBuilder implements the ideated Schema Builder UX with two modes:
@@ -21822,6 +22367,8 @@ const ClientApp = ({
     await saveSnapshot(updated);
     setEditModal(false);
     showToast('Vault updated', 'success');
+    // Schedule encrypted cloud backup (debounced 30s after last change)
+    KhoraBackup.scheduleVaultBackup(updated, 30000);
     // Propagate to bridges (§8.3)
     for (const prov of providers) {
       const changedShared = Object.keys(editData).filter(k => prov.sharedFields?.[k]);
@@ -21859,6 +22406,8 @@ const ClientApp = ({
     setObsValue('');
     setObsFreeText('');
     showToast(`Observation recorded: ${obsModal.question}`, 'success');
+    // Schedule encrypted cloud backup (debounced 30s after last change)
+    KhoraBackup.scheduleVaultBackup(vaultData, 30000);
     // Emit to metrics if consent
     if (metricsConsent.enabled && obsModal.metrics && metricsConsent.categories?.includes(obsModal.category)) {
       for (const prov of providers) {
@@ -22484,7 +23033,8 @@ const ClientApp = ({
       { id: 'resources', icon: 'layers', label: 'My Resources' },
       { id: 'records', icon: 'shield', label: 'My Records', badge: pendingClaims.length, badgeClass: 'nav-badge-gold' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
-      { id: 'transparency', icon: 'eye', label: 'Transparency' }
+      { id: 'transparency', icon: 'eye', label: 'Transparency' },
+      { id: 'backup', icon: 'cloud', label: 'Backup' }
     ],
     onMoreNavigate: id => { setView(id); setActiveBridge(null); }
   },
@@ -22619,6 +23169,10 @@ const ClientApp = ({
     id: 'transparency',
     icon: 'eye',
     label: 'Transparency'
+  }, {
+    id: 'backup',
+    icon: 'cloud',
+    label: 'Backup'
   }].map(item => /*#__PURE__*/React.createElement("div", {
     key: item.id,
     onClick: () => {
@@ -25125,6 +25679,8 @@ const ClientApp = ({
     session: session
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
+  }), view === 'backup' && !activeBridge && /*#__PURE__*/React.createElement(BackupSettingsView, {
+    showToast: showToast
   })), /*#__PURE__*/React.createElement(Modal, {
     open: !!claimVerifyModal,
     onClose: () => { setClaimVerifyModal(null); setClaimVerifyCode(''); setClaimVerifyError(''); },
@@ -38088,6 +38644,7 @@ const ProviderApp = ({
       { id: 'hierarchy', icon: 'globe', label: 'My Network' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' },
+      { id: 'backup', icon: 'cloud', label: 'Backup' },
       ...(orgRoom ? [{ id: 'org-settings', icon: 'briefcase', label: 'Organization' }] : [])
     ],
     onMoreNavigate: id => { setView(id); setActiveCase(null); setActiveIndividual(null); setActiveResourceProfile(null); }
@@ -38410,6 +38967,10 @@ const ProviderApp = ({
       id: 'transparency',
       icon: 'eye',
       label: 'Transparency'
+    }, {
+      id: 'backup',
+      icon: 'cloud',
+      label: 'Backup'
     }].map(item => /*#__PURE__*/React.createElement("div", {
       key: item.id,
       onClick: () => {
@@ -43380,6 +43941,8 @@ const ProviderApp = ({
     session: session
   }), view === 'transparency' && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
+  }), view === 'backup' && /*#__PURE__*/React.createElement(BackupSettingsView, {
+    showToast: showToast
   }))), /*#__PURE__*/React.createElement(Modal, {
     open: discoverModal,
     onClose: () => setDiscoverModal(false),
@@ -47569,6 +48132,8 @@ const App = () => {
       setWelcomed(true);
       try { localStorage.setItem('khora_welcomed', '1'); } catch {}
       await detectContexts();
+      // Silently reconnect encrypted backup if previously set up
+      KhoraBackup.autoConnect().catch(() => {});
     } catch (e) { console.warn('Session restore error:', e?.message); } finally {
       setRestoring(false);
     }
@@ -47580,6 +48145,8 @@ const App = () => {
     setSession(s);
     // Detect contexts + roles from room membership (MVP §Screen 1)
     await detectContexts();
+    // Silently reconnect encrypted backup if previously set up
+    KhoraBackup.autoConnect().catch(() => {});
   };
   if (restoring || detectingRoles) return /*#__PURE__*/React.createElement("div", {
     className: "grid-bg",

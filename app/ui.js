@@ -1680,6 +1680,262 @@ function SwMRow({
   })());
 }
 
+/* ═══════════════════ BACKUP SETTINGS VIEW ═══════════════════
+ * Opt-in encrypted backup via Filen. Shows setup, confirmation, recovery,
+ * and connected states. Pool Bridge for paid accounts.
+ *
+ * Depends on: KhoraBackup (app/backup.js), svc.userId, I (icons)
+ * ═══════════════════════════════════════════════════════════════════ */
+const BackupSettingsView = ({ showToast }) => {
+  const [phase, setPhase] = useState(() => {
+    if (KhoraBackup.isConnected) return 'connected';
+    const creds = KhoraBackup.savedCreds;
+    if (creds && creds.matrixId && creds.email) return 'auto';
+    return 'setup';
+  });
+  const [email, setEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [storage, setStorage] = useState(KhoraBackup.storage);
+  const [bridgeSettings, setBridgeSettings] = useState(KhoraBackup.bridgeSettings);
+  const [bridgeCap, setBridgeCap] = useState(5);
+  const [files, setFiles] = useState(null);
+  const [showFiles, setShowFiles] = useState(false);
+  const [lastBackup, setLastBackup] = useState(() => {
+    try { return localStorage.getItem('khora_backup_last'); } catch { return null; }
+  });
+
+  // Listen for backup events
+  useEffect(() => {
+    const handler = ev => {
+      if (ev.event === 'connected') { setPhase('connected'); setStorage(KhoraBackup.storage); setBridgeSettings(KhoraBackup.bridgeSettings); }
+      if (ev.event === 'disconnected') { setPhase('setup'); setFiles(null); }
+      if (ev.event === 'backup_complete') { const ts = new Date().toISOString(); setLastBackup(ts); try { localStorage.setItem('khora_backup_last', ts); } catch {} }
+      if (ev.event === 'bridge_enabled') setBridgeSettings(KhoraBackup.bridgeSettings);
+      if (ev.event === 'bridge_disabled') setBridgeSettings(KhoraBackup.bridgeSettings);
+    };
+    KhoraBackup.addListener(handler);
+    return () => KhoraBackup.removeListener(handler);
+  }, []);
+
+  // Auto-connect on mount if creds exist
+  useEffect(() => {
+    if (phase === 'auto') {
+      setBusy(true);
+      KhoraBackup.autoConnect().then(ok => {
+        setBusy(false);
+        if (ok) { setPhase('connected'); setStorage(KhoraBackup.storage); }
+        else setPhase('setup');
+      }).catch(() => { setBusy(false); setPhase('setup'); });
+    }
+  }, []);
+
+  const handleSetup = async () => {
+    const matrixId = svc.userId;
+    const em = email.trim();
+    if (!em || !em.includes('@')) { showToast('Enter a valid email address', 'error'); return; }
+    setBusy(true);
+    try {
+      const result = await KhoraBackup.connect(matrixId, em);
+      if (result === true) {
+        if (!KhoraBackup.hasSeenRecovery) setPhase('recovery');
+        else { setPhase('connected'); setStorage(KhoraBackup.storage); showToast('Backup connected', 'success'); }
+      } else if (result === 'needs_confirmation') {
+        setPhase('confirm');
+        showToast('Check your email for a verification link', 'info');
+      }
+    } catch (e) { showToast('Backup setup failed: ' + e.message, 'error'); }
+    setBusy(false);
+  };
+
+  const handleRetryConfirm = async () => {
+    setBusy(true);
+    try {
+      const ok = await KhoraBackup.retryAfterConfirmation();
+      if (ok) {
+        if (!KhoraBackup.hasSeenRecovery) setPhase('recovery');
+        else { setPhase('connected'); setStorage(KhoraBackup.storage); showToast('Backup connected', 'success'); }
+      } else { showToast('Not ready yet — check your email for the confirmation link', 'warn'); }
+    } catch (e) { showToast('Connection failed: ' + e.message, 'error'); }
+    setBusy(false);
+  };
+
+  const handleResend = async () => {
+    try { const ok = await KhoraBackup.resendConfirmation(); showToast(ok ? 'Verification email resent' : 'Could not resend', 'info'); }
+    catch { showToast('Failed to resend', 'error'); }
+  };
+
+  const handleRecoveryDone = () => {
+    KhoraBackup.markRecoverySeen();
+    setPhase('connected');
+    setStorage(KhoraBackup.storage);
+    showToast('Backup connected', 'success');
+  };
+
+  const handleDisconnect = () => {
+    KhoraBackup.disconnect();
+    setPhase('setup');
+    setFiles(null);
+    showToast('Backup disconnected', 'info');
+  };
+
+  const loadFiles = async () => {
+    try { const listing = await KhoraBackup.listFolder(); setFiles(listing); setShowFiles(true); }
+    catch (e) { showToast('Could not load files: ' + e.message, 'error'); }
+  };
+
+  const handleBridgeEnable = () => {
+    try { KhoraBackup.enableBridge(bridgeCap); showToast('Pool Bridge enabled — you\'re helping the network', 'success'); }
+    catch (e) { showToast('Bridge error: ' + e.message, 'error'); }
+  };
+
+  const handleBridgeDisable = () => {
+    KhoraBackup.disableBridge();
+    showToast('Pool Bridge disabled', 'info');
+  };
+
+  const cardStyle = { background: 'var(--bg-2)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '24px 22px' };
+  const labelStyle = { fontSize: 10.5, fontWeight: 600, color: 'var(--tx-2)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 6, display: 'block' };
+  const inputStyle = { width: '100%', background: 'var(--bg-1)', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', padding: '10px 14px', color: 'var(--tx-0)', fontFamily: 'var(--mono)', fontSize: 13, outline: 'none' };
+
+  // ── Setup phase ──
+  if (phase === 'setup') return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 560 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 4 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: 'var(--tx-2)', marginBottom: 20, lineHeight: 1.5 } },
+      "Back up your data to an encrypted cloud vault. Your Matrix ID is your recovery key \u2014 if your server ever goes down, you can recover everything with just your Matrix ID and email."),
+    /*#__PURE__*/React.createElement("div", { style: cardStyle },
+      /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center', marginBottom: 16 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 48, height: 48, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: 'var(--teal)' } },
+          /*#__PURE__*/React.createElement(I, { n: "shield", s: 22 })),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, marginBottom: 4 } }, "Set Up Encrypted Backup"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: 'var(--tx-2)' } }, "Your data \xB7 your keys \xB7 always recoverable")),
+      /*#__PURE__*/React.createElement("label", { style: labelStyle }, "MATRIX ID"),
+      /*#__PURE__*/React.createElement("input", { type: "text", value: svc.userId || '', disabled: true, style: { ...inputStyle, opacity: 0.6, marginBottom: 14 } }),
+      /*#__PURE__*/React.createElement("label", { style: labelStyle }, "RECOVERY EMAIL"),
+      /*#__PURE__*/React.createElement("input", { type: "email", placeholder: "you@example.com", value: email, onChange: e => setEmail(e.target.value), style: { ...inputStyle, marginBottom: 18 }, onKeyDown: e => { if (e.key === 'Enter') handleSetup(); } }),
+      /*#__PURE__*/React.createElement("button", { className: "b-pri", onClick: handleSetup, disabled: busy, style: { width: '100%', justifyContent: 'center' } },
+        busy ? /*#__PURE__*/React.createElement(Spin, { s: 14 }) : /*#__PURE__*/React.createElement(I, { n: "shield", s: 14 }),
+        busy ? ' Setting up\u2026' : ' Enable Backup')));
+
+  // ── Email confirmation phase ──
+  if (phase === 'confirm') return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 560 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 4 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("div", { style: cardStyle },
+      /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center' } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 48, height: 48, borderRadius: '50%', background: 'var(--gold-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: 'var(--gold)' } },
+          /*#__PURE__*/React.createElement(I, { n: "msg", s: 22 })),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, marginBottom: 8 } }, "Confirm Your Email"),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: 'var(--tx-2)', lineHeight: 1.5, marginBottom: 4 } },
+          "We sent a verification link to:"),
+        /*#__PURE__*/React.createElement("div", { style: { fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: 'var(--teal)', marginBottom: 16 } }, KhoraBackup.email || email),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 12, color: 'var(--tx-2)', marginBottom: 18 } },
+          "Click the link in the email, then come back here."),
+        /*#__PURE__*/React.createElement("button", { className: "b-pri", onClick: handleRetryConfirm, disabled: busy, style: { width: '100%', justifyContent: 'center', marginBottom: 10 } },
+          busy ? /*#__PURE__*/React.createElement(Spin, { s: 14 }) : null,
+          busy ? ' Connecting\u2026' : "I've confirmed \u2014 activate backup"),
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8, justifyContent: 'center' } },
+          /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: handleResend }, "Resend email"),
+          /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => setPhase('setup') }, "\u2190 Back")))));
+
+  // ── Recovery info phase ──
+  if (phase === 'recovery') return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 560 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 4 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("div", { style: cardStyle },
+      /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center' } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 48, height: 48, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: 'var(--teal)' } },
+          /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 22 })),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 700, marginBottom: 8 } }, "Your Recovery Info"),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: 'var(--tx-2)', lineHeight: 1.5, marginBottom: 16 } },
+          "Save this somewhere safe. If your server ever goes down, this is all you need to recover every file.")),
+      /*#__PURE__*/React.createElement("div", { style: { background: 'var(--bg-1)', border: '2px dashed var(--border-0)', borderRadius: 'var(--r)', padding: 16, textAlign: 'center', marginBottom: 10 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: 'var(--tx-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 } }, "RECOVERY IDENTITY"),
+        /*#__PURE__*/React.createElement("div", { style: { fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--teal)', fontWeight: 600, wordBreak: 'break-all', userSelect: 'all' } }, KhoraBackup.identity)),
+      /*#__PURE__*/React.createElement("div", { style: { background: 'var(--bg-1)', border: '2px dashed var(--border-0)', borderRadius: 'var(--r)', padding: 16, textAlign: 'center', marginBottom: 16 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: 'var(--tx-3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 } }, "RECOVERY EMAIL"),
+        /*#__PURE__*/React.createElement("div", { style: { fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--tx-0)', fontWeight: 600, userSelect: 'all' } }, KhoraBackup.email)),
+      /*#__PURE__*/React.createElement("p", { style: { fontSize: 11, color: 'var(--tx-3)', textAlign: 'center', lineHeight: 1.6, marginBottom: 14 } },
+        "That\u2019s it \u2014 those two things. No passwords to remember. Your encryption key is derived automatically from your Matrix ID."),
+      /*#__PURE__*/React.createElement("button", { className: "b-pri", onClick: handleRecoveryDone, style: { width: '100%', justifyContent: 'center' } },
+        /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 14 }), " Got it \u2014 open my backup")));
+
+  // ── Auto-reconnecting ──
+  if (phase === 'auto') return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 560 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 16 } }, "Encrypted Backup"),
+    /*#__PURE__*/React.createElement("div", { style: { ...cardStyle, display: 'flex', alignItems: 'center', gap: 12 } },
+      /*#__PURE__*/React.createElement(Spin, { s: 18 }),
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: 'var(--tx-2)' } }, "Reconnecting to backup\u2026")));
+
+  // ── Connected phase ──
+  const pct = storage.max > 0 ? Math.min(100, (storage.used / storage.max) * 100) : 0;
+  const isBridgeActive = bridgeSettings && bridgeSettings.enabled;
+  return /*#__PURE__*/React.createElement("div", { style: { padding: 20, maxWidth: 600 } },
+    /*#__PURE__*/React.createElement("h2", { style: { fontSize: 18, fontWeight: 700, marginBottom: 16 } }, "Encrypted Backup"),
+
+    // ── Status card ──
+    /*#__PURE__*/React.createElement("div", { style: { ...cardStyle, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 36, height: 36, borderRadius: 9, background: 'linear-gradient(135deg, var(--teal), var(--blue))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 14 } },
+          (KhoraBackup.identity || '?')[0] === '@' ? (KhoraBackup.identity || '?')[1].toUpperCase() : (KhoraBackup.identity || '?')[0].toUpperCase()),
+        /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 600 } }, KhoraBackup.identity),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)', fontFamily: 'var(--mono)' } }, KhoraBackup.fmtSize(storage.used), " / ", KhoraBackup.fmtSize(storage.max))),
+        /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+          /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 6px rgba(0,200,140,0.5)' } }),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--green)', fontWeight: 600 } }, "Connected"))),
+      // Storage bar
+      /*#__PURE__*/React.createElement("div", { style: { height: 4, background: 'var(--bg-4)', borderRadius: 2, overflow: 'hidden', marginBottom: 10 } },
+        /*#__PURE__*/React.createElement("div", { style: { height: '100%', width: pct + '%', background: 'linear-gradient(90deg, var(--teal), var(--blue))', borderRadius: 2, transition: 'width .3s' } })),
+      // Last backup
+      lastBackup && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)', marginBottom: 10 } },
+        /*#__PURE__*/React.createElement(I, { n: "check", s: 11 }), " Last backup: ", new Date(lastBackup).toLocaleString()),
+      // Actions row
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => { if (showFiles) { setShowFiles(false); } else loadFiles(); } },
+          /*#__PURE__*/React.createElement(I, { n: showFiles ? "chevronLeft" : "grid", s: 12 }), showFiles ? ' Hide Files' : ' Browse Files'),
+        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", style: { color: 'var(--red)', borderColor: 'rgba(240,96,96,.3)' }, onClick: handleDisconnect },
+          /*#__PURE__*/React.createElement(I, { n: "logout", s: 12 }), " Disconnect"))),
+
+    // ── File browser ──
+    showFiles && /*#__PURE__*/React.createElement("div", { style: { ...cardStyle, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 600, marginBottom: 10 } }, "Backup Files"),
+      !files ? /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center', padding: 20 } }, /*#__PURE__*/React.createElement(Spin, { s: 18 }))
+      : (files.folders.length + files.files.length === 0)
+        ? /*#__PURE__*/React.createElement("div", { style: { textAlign: 'center', padding: 20, color: 'var(--tx-2)', fontSize: 12 } }, "No files yet \u2014 backups will appear here automatically")
+        : /*#__PURE__*/React.createElement("div", { style: { maxHeight: 300, overflowY: 'auto' } },
+          files.folders.map(f => /*#__PURE__*/React.createElement("div", { key: f.uuid, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--r)', fontSize: 12.5 } },
+            /*#__PURE__*/React.createElement(I, { n: "grid", s: 14, c: "var(--gold)" }), /*#__PURE__*/React.createElement("span", { style: { flex: 1 } }, f.name),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)' } }, "folder"))),
+          files.files.map(f => /*#__PURE__*/React.createElement("div", { key: f.uuid, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--r)', fontSize: 12.5 } },
+            /*#__PURE__*/React.createElement(I, { n: "file", s: 14 }), /*#__PURE__*/React.createElement("span", { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, f.name),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', whiteSpace: 'nowrap' } }, KhoraBackup.fmtSize(f.size)))))),
+
+    // ── Pool Bridge ──
+    KhoraBackup.canBridge && !isBridgeActive && /*#__PURE__*/React.createElement("div", { style: { background: 'var(--teal-dim)', border: '1px solid rgba(0,200,140,0.2)', borderRadius: 'var(--r-lg)', padding: 20, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 36, height: 36, borderRadius: '50%', background: 'var(--teal-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal)' } },
+          /*#__PURE__*/React.createElement(I, { n: "globe", s: 20 })),
+        /*#__PURE__*/React.createElement("div", null,
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, fontWeight: 700 } }, "Help the Network"),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)' } }, "Mirror encrypted files so others can fetch when uploaders are offline"))),
+      /*#__PURE__*/React.createElement("p", { style: { fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.6, marginBottom: 14 } },
+        "Your account supports public links. Enable bridge mode to automatically store and serve encrypted blobs for the Khora network. You\u2019ll never see the contents \u2014 everything arrives pre-encrypted."),
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
+        /*#__PURE__*/React.createElement("span", { style: { ...labelStyle, margin: 0 } }, "CAPACITY"),
+        /*#__PURE__*/React.createElement("input", { type: "number", value: bridgeCap, min: 1, max: 100, onChange: e => setBridgeCap(parseInt(e.target.value) || 5), style: { width: 70, background: 'var(--bg-1)', border: '1px solid var(--border-0)', borderRadius: 'var(--r)', padding: '6px 10px', color: 'var(--tx-0)', fontFamily: 'var(--mono)', fontSize: 12 } }),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-3)' } }, "GB of ", KhoraBackup.fmtSize(storage.available), " available")),
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
+        /*#__PURE__*/React.createElement("button", { className: "b-pri b-sm", onClick: handleBridgeEnable },
+          /*#__PURE__*/React.createElement(I, { n: "globe", s: 12 }), " Enable Bridge"),
+        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => {} }, "Not Now"))),
+
+    // ── Bridge active status ──
+    isBridgeActive && /*#__PURE__*/React.createElement("div", { style: { background: 'var(--bg-2)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite', flexShrink: 0 } }),
+      /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-2)' } },
+        /*#__PURE__*/React.createElement("strong", { style: { color: 'var(--tx-0)' } }, "Pool Bridge active"),
+        " \xB7 ", bridgeSettings.capacity_gb, " GB allocated"),
+      /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: handleBridgeDisable }, "Disable")));
+};
+
 /* ═══════════════════ FORM BUILDER — Schema Builder UX ═══════════════════
  * The FormBuilder implements the ideated Schema Builder UX with two modes:
  *

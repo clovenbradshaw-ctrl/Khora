@@ -342,6 +342,19 @@ const I = ({
       x2: "12",
       y2: "3"
     })),
+    cloud: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
+      d: "M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"
+    })),
+    cloudUp: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("path", {
+      d: "M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 1 0 0-10z"
+    }), /*#__PURE__*/React.createElement("polyline", {
+      points: "16 16 12 12 8 16"
+    }), /*#__PURE__*/React.createElement("line", {
+      x1: "12",
+      y1: "12",
+      x2: "12",
+      y2: "21"
+    })),
     sun: /*#__PURE__*/React.createElement("svg", p, /*#__PURE__*/React.createElement("circle", {
       cx: "12",
       cy: "12",
