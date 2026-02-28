@@ -1104,6 +1104,10 @@ const ClientApp = ({
   const [initError, setInitError] = useState(null);
   const [claimedRooms, setClaimedRooms] = useState([]);
   const [pendingClaims, setPendingClaims] = useState([]);
+  const [claimVerifyModal, setClaimVerifyModal] = useState(null); // record being claimed
+  const [claimVerifyCode, setClaimVerifyCode] = useState('');
+  const [claimVerifyError, setClaimVerifyError] = useState('');
+  const [claimVerifying, setClaimVerifying] = useState(false);
   const [customFieldDefs, setCustomFieldDefs] = useState([]); // [{key,label,category,sensitive}]
   const [addFieldModal, setAddFieldModal] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState('');
@@ -1857,6 +1861,56 @@ const ClientApp = ({
     } catch (e) {
       showToast('Claim failed: ' + e.message, 'error');
     }
+  };
+
+  // DES(claim.identity, {attestation: code_match}) — verified_claim — validates 6-digit code then transfers ownership
+  const handleVerifiedClaim = async () => {
+    if (!claimVerifyModal) return;
+    const record = claimVerifyModal;
+    setClaimVerifying(true);
+    try {
+      // Ensure we've joined the room first
+      try { await svc.joinRoom(record.roomId); } catch {}
+      // Fetch the verification challenge from room state
+      const challenge = await svc.getState(record.roomId, EVT.CLAIM_VERIFICATION);
+      if (!challenge || !challenge.code_hash) {
+        setClaimVerifyError('No verification code has been generated for this record yet. Ask the provider to generate one.');
+        setClaimVerifying(false);
+        return;
+      }
+      // Validate the submitted code
+      const result = await AccountVerification.validateChallenge(challenge, claimVerifyCode.trim());
+      if (!result.valid) {
+        // Increment and persist attempt count
+        const updatedChallenge = { ...challenge, attempts: (challenge.attempts || 0) + 1 };
+        try { await svc.setState(record.roomId, EVT.CLAIM_VERIFICATION, updatedChallenge); } catch {}
+        const messages = {
+          expired: 'Verification code has expired. Ask the provider to generate a new one.',
+          max_attempts: 'Too many incorrect attempts. Ask the provider to generate a new code.',
+          incorrect_code: `Incorrect code. ${Math.max(0, challenge.max_attempts - updatedChallenge.attempts)} attempt${challenge.max_attempts - updatedChallenge.attempts !== 1 ? 's' : ''} remaining.`,
+          no_active_challenge: 'No active verification code. Ask the provider to generate one.'
+        };
+        setClaimVerifyError(messages[result.reason] || 'Verification failed.');
+        setClaimVerifying(false);
+        return;
+      }
+      // Mark challenge as verified
+      await svc.setState(record.roomId, EVT.CLAIM_VERIFICATION, {
+        ...challenge,
+        attempts: (challenge.attempts || 0) + 1,
+        status: 'verified',
+        verified_at: Date.now(),
+        verified_by: svc.userId
+      });
+      // Proceed with the actual claim
+      await handleClaimRoom(record);
+      setClaimVerifyModal(null);
+      setClaimVerifyCode('');
+      setClaimVerifyError('');
+    } catch (e) {
+      setClaimVerifyError('Claim failed: ' + e.message);
+    }
+    setClaimVerifying(false);
   };
 
   // NUL(room.member, {reason: owner_revocation}) — access_removal — kicks user from claimed room
@@ -3974,7 +4028,7 @@ const ClientApp = ({
       fontStyle: 'italic'
     }
   }, rec.notes)), /*#__PURE__*/React.createElement("button", {
-    onClick: () => handleClaimRoom(rec),
+    onClick: () => { setClaimVerifyModal(rec); setClaimVerifyCode(''); setClaimVerifyError(''); },
     className: "b-pri",
     style: {
       display: 'flex',
@@ -4785,6 +4839,54 @@ const ClientApp = ({
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
   })), /*#__PURE__*/React.createElement(Modal, {
+    open: !!claimVerifyModal,
+    onClose: () => { setClaimVerifyModal(null); setClaimVerifyCode(''); setClaimVerifyError(''); },
+    title: "Verify Your Identity",
+    w: 440
+  }, claimVerifyModal && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 12, color: 'var(--tx-1)', marginBottom: 16, lineHeight: 1.6 }
+  }, "Enter the 6-digit verification code given to you by your provider. This confirms you are the intended recipient of this account."), /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 8 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label" }, "CLAIMING: ", claimVerifyModal.client_name || 'Record')), /*#__PURE__*/React.createElement("div", {
+    style: { textAlign: 'center', marginBottom: 16 }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: claimVerifyCode,
+    onChange: e => { setClaimVerifyCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6)); setClaimVerifyError(''); },
+    placeholder: "000000",
+    maxLength: 6,
+    autoFocus: true,
+    style: {
+      fontSize: 32,
+      fontFamily: 'var(--mono)',
+      fontWeight: 700,
+      letterSpacing: '0.3em',
+      textAlign: 'center',
+      width: 220,
+      padding: '12px 16px',
+      background: 'var(--bg-2)',
+      border: '2px solid var(--bd)',
+      borderRadius: 'var(--r)',
+      color: 'var(--tx-0)'
+    }
+  })), claimVerifyError && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'rgba(220,38,38,.08)',
+      border: '1px solid rgba(220,38,38,.2)',
+      borderRadius: 'var(--r)',
+      padding: '10px 14px',
+      fontSize: 11.5,
+      color: '#f87171',
+      marginBottom: 14,
+      lineHeight: 1.5
+    }
+  }, claimVerifyError), /*#__PURE__*/React.createElement("button", {
+    onClick: handleVerifiedClaim,
+    className: "b-pri",
+    disabled: claimVerifyCode.length !== 6 || claimVerifying,
+    style: { width: '100%', padding: 12, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }
+  }, /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 16 }), claimVerifying ? 'Verifying...' : 'Verify & Claim'), /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 10.5, color: 'var(--tx-3)', marginTop: 12, textAlign: 'center', lineHeight: 1.5 }
+  }, "Don\u2019t have a code? Ask the person or organization who created this record to generate one for you."))), /*#__PURE__*/React.createElement(Modal, {
     open: shareContactModal,
     onClose: () => setShareContactModal(false),
     title: "Share My Details",

@@ -115,7 +115,9 @@ const EVT = {
   // Trash bin — soft-deleted individuals pending permanent removal
   ORG_TRASH: `${NS}.org.trash`,
   // Team record index — maps team rooms to their owned CLIENT_RECORD rooms, tracks vault access state
-  TEAM_RECORD_INDEX: `${NS}.team.record.index`
+  TEAM_RECORD_INDEX: `${NS}.team.record.index`,
+  // Account claim verification (6-digit code for identity confirmation before room claim)
+  CLAIM_VERIFICATION: `${NS}.claim.verification`
 };
 
 /* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */

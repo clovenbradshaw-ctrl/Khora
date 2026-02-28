@@ -551,6 +551,64 @@ const EmailVerification = {
   }
 };
 
+/* ════════════════════════════════════════════════════════════════════════════════
+ * §10b  ACCOUNT CLAIM VERIFICATION (6-DIGIT CODE)
+ *
+ * Operator Manifest:
+ *   INS(claim.verification_code, {via: crypto.getRandomValues}) — challenge_creation
+ *   ALT(claim.plaintext_code, {transform: sha256_hash}) — one_way_transform
+ *
+ * Protects against accidental room claims by the wrong Matrix user.
+ * The provider generates a 6-digit code, communicates it in-person or via
+ * a trusted platform, and the client must enter it before claiming succeeds.
+ * Only the SHA-256 hash is stored in room state — never the plaintext code.
+ *
+ * Triad Summary:
+ *   Existence:       INS (code creation)
+ *   Structure:       —
+ *   Interpretation:  ALT (hash transform)
+ * ════════════════════════════════════════════════════════════════════════════════ */
+const AccountVerification = {
+  // INS(claim.verification_code, {via: crypto.getRandomValues}) — challenge_creation
+  generateCode() {
+    const arr = crypto.getRandomValues(new Uint8Array(4));
+    const num = (arr[0] << 24 | arr[1] << 16 | arr[2] << 8 | arr[3]) >>> 0;
+    return String(num % 1000000).padStart(6, '0');
+  },
+  // ALT(claim.plaintext_code, {transform: sha256_hash, via: web_crypto}) — one_way_transform
+  async hashCode(code) {
+    const data = new TextEncoder().encode(code + ':khora_claim_verify_v1');
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode(...new Uint8Array(hash)));
+  },
+  // INS(claim.challenge, {data: code_hash+expiry}) — verification_initiation
+  async createChallenge() {
+    const code = this.generateCode();
+    const codeHash = await this.hashCode(code);
+    return {
+      challenge: {
+        code_hash: codeHash,
+        created: Date.now(),
+        expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+        attempts: 0,
+        max_attempts: 3,
+        status: 'pending'
+      },
+      plainCode: code // returned for display — never stored in state
+    };
+  },
+  // DES(claim.identity, {attestation: code_match}) — verified_attestation on success
+  // NUL(claim.challenge, {reason: expired|max_attempts}) — lockout on failure
+  async validateChallenge(challenge, submittedCode) {
+    if (!challenge || challenge.status !== 'pending') return { valid: false, reason: 'no_active_challenge' };
+    if (Date.now() > challenge.expires) return { valid: false, reason: 'expired' };
+    if (challenge.attempts >= challenge.max_attempts) return { valid: false, reason: 'max_attempts' };
+    const submittedHash = await this.hashCode(submittedCode);
+    if (submittedHash !== challenge.code_hash) return { valid: false, reason: 'incorrect_code' };
+    return { valid: true };
+  }
+};
+
 /* ═══════════════════ EVENT TYPES (§11) ═══════════════════
  * Operator Manifest:
  *   DES(protocol.event_types, {namespace: io.khora.*}) — protocol_vocabulary
