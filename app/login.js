@@ -371,9 +371,9 @@ const LoginScreen = ({
   };
   const infoSectionStyle = { maxWidth: 720, margin: '0 auto', padding: '0 20px' };
   const infoCardStyle = { background: 'var(--bg-1)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '24px 24px' };
-  const sectionLabelStyle = { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--gold)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12 };
-  const sectionTitleStyle = { fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 10, letterSpacing: '-0.01em' };
-  const bodyTextStyle = { fontSize: 13.5, color: 'var(--tx-1)', lineHeight: 1.7 };
+  const sectionLabelStyle = { fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--gold)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 12 };
+  const sectionTitleStyle = { fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 10, letterSpacing: '-0.01em' };
+  const bodyTextStyle = { fontSize: 14.5, color: 'var(--tx-1)', lineHeight: 1.7 };
   const featureIconBox = (bg, fg) => ({ width: 40, height: 40, borderRadius: 'var(--r-lg)', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: fg, flexShrink: 0 });
 
   return /*#__PURE__*/React.createElement("div", {
@@ -448,13 +448,13 @@ const LoginScreen = ({
     style: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, var(--teal), var(--gold))' }
   }),
   /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10, textAlign: 'center' }
+    style: { fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--teal)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10, textAlign: 'center' }
   }, "SHARED STANDARDS"),
   /*#__PURE__*/React.createElement("h2", {
-    style: { fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 8, letterSpacing: '-0.01em', textAlign: 'center' }
+    style: { fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 8, letterSpacing: '-0.01em', textAlign: 'center' }
   }, "Agree on what you call things"),
   /*#__PURE__*/React.createElement("p", {
-    style: { fontSize: 12.5, color: 'var(--tx-1)', lineHeight: 1.65, textAlign: 'center', marginBottom: 16 }
+    style: { fontSize: 14, color: 'var(--tx-1)', lineHeight: 1.65, textAlign: 'center', marginBottom: 16 }
   }, "When organizations work together, they need a common language. Khora makes a critical distinction visible:"),
 
   /* Compact GIVEN / MEANT side-by-side */
@@ -465,31 +465,31 @@ const LoginScreen = ({
     style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '14px 16px', borderLeft: '3px solid var(--teal)' }
   },
   /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 6 }
+    style: { fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--teal)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 6 }
   }, "GIVEN"),
   /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--serif)', fontSize: 13.5, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 4 }
+    style: { fontFamily: 'var(--serif)', fontSize: 14.5, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 4 }
   }, "What actually happened"),
   /*#__PURE__*/React.createElement("p", {
-    style: { fontSize: 11.5, color: 'var(--tx-2)', lineHeight: 1.55 }
+    style: { fontSize: 13, color: 'var(--tx-2)', lineHeight: 1.55 }
   }, "Raw information, as observed. \u201CI slept in my car last night.\u201D Uninterpreted, owned by the person who said it.")),
 
   /*#__PURE__*/React.createElement("div", {
     style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '14px 16px', borderLeft: '3px solid var(--gold)' }
   },
   /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--gold)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 6 }
+    style: { fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--gold)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 6 }
   }, "MEANT"),
   /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--serif)', fontSize: 13.5, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 4 }
+    style: { fontFamily: 'var(--serif)', fontSize: 14.5, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 4 }
   }, "What an institution classifies it as"),
   /*#__PURE__*/React.createElement("p", {
-    style: { fontSize: 11.5, color: 'var(--tx-2)', lineHeight: 1.55 }
+    style: { fontSize: 13, color: 'var(--tx-2)', lineHeight: 1.55 }
   }, "One agency calls it \u201CLiterally Homeless.\u201D Another says \u201CPriority 1.\u201D Same fact, different meanings."))
   ), /* end GIVEN/MEANT grid */
 
   /*#__PURE__*/React.createElement("p", {
-    style: { fontSize: 11, color: 'var(--tx-3)', lineHeight: 1.55, marginTop: 12, textAlign: 'center' }
+    style: { fontSize: 12.5, color: 'var(--tx-3)', lineHeight: 1.55, marginTop: 12, textAlign: 'center' }
   }, "Khora keeps both \u2014 the raw observation and every institutional interpretation \u2014 so nothing gets lost in translation.")
 
   )), /* end explainer card */
@@ -534,14 +534,14 @@ const LoginScreen = ({
   }, "Khora"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontFamily: 'var(--mono)',
-      fontSize: 10,
+      fontSize: 11,
       color: 'var(--tx-2)',
       letterSpacing: '.08em'
     }
   }, "SOVEREIGN CASE MANAGEMENT")), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
-      fontSize: 13,
+      fontSize: 14,
       marginTop: 18,
       marginBottom: 24,
       lineHeight: 1.65,
@@ -577,7 +577,7 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontFamily: 'var(--mono)',
-      fontSize: 10,
+      fontSize: 11,
       color: 'var(--tx-2)',
       letterSpacing: '.1em',
       textTransform: 'uppercase',
@@ -597,7 +597,7 @@ const LoginScreen = ({
     }
   }, extReg.server)), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12.5,
+      fontSize: 14,
       color: 'var(--tx-1)',
       lineHeight: 1.6,
       marginBottom: 16
@@ -609,7 +609,7 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontFamily: 'var(--mono)',
-      fontSize: 9.5,
+      fontSize: 11,
       color: 'var(--tx-2)',
       letterSpacing: '.1em',
       textTransform: 'uppercase',
@@ -674,7 +674,7 @@ const LoginScreen = ({
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       fontFamily: 'var(--mono)',
-      fontSize: 10,
+      fontSize: 11,
       color: 'var(--tx-2)',
       letterSpacing: '.1em',
       textTransform: 'uppercase',
@@ -690,7 +690,7 @@ const LoginScreen = ({
     }
   }, "Sign in here"), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12.5,
+      fontSize: 14,
       color: 'var(--tx-1)',
       lineHeight: 1.6,
       marginBottom: 16
@@ -933,7 +933,7 @@ const LoginScreen = ({
   }), /*#__PURE__*/React.createElement("span", {
     style: {
       fontFamily: 'var(--mono)',
-      fontSize: 10.5,
+      fontSize: 11.5,
       color: 'var(--tx-3)'
     }
   }, typeof matrixcs !== 'undefined' ? 'Secure connection ready' : 'Connecting\u2026'))),
@@ -944,7 +944,7 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => { const el = document.getElementById('khora-info'); if (el) el.scrollIntoView({ behavior: 'smooth' }); },
     className: "b-gho b-xs",
-    style: { display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--tx-3)', fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.04em' }
+    style: { display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--tx-3)', fontSize: 12, fontFamily: 'var(--mono)', letterSpacing: '.04em' }
   }, "Learn more ", /*#__PURE__*/React.createElement(I, { n: "chevronDown", s: 14 })))
 
   ), /* end anim-up */
@@ -967,7 +967,7 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement("div", {
     style: sectionLabelStyle
   }, "WHAT IS KHORA?"), /*#__PURE__*/React.createElement("h2", {
-    style: { ...sectionTitleStyle, fontSize: 26 }
+    style: { ...sectionTitleStyle, fontSize: 28 }
   }, "Your information, under your control"), /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
   }, "Khora is a case management system where the person being served owns their data. You decide exactly which pieces of your information to share with each provider, and you can take it back at any time. No vendor lock-in, no corporate database you can't see inside.")),
@@ -1042,7 +1042,7 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement(I, { n: "user", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
   }, "Client"), /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, fontSize: 12.5 }
+    style: { ...bodyTextStyle, fontSize: 13.5 }
   }, "The person being served. Owns a personal vault with all their data. Decides exactly who sees what, field by field."))),
 
   /* Provider */
@@ -1053,7 +1053,7 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement(I, { n: "briefcase", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
   }, "Provider"), /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, fontSize: 12.5 }
+    style: { ...bodyTextStyle, fontSize: 13.5 }
   }, "A case worker or service professional. Connects to clients, records assessments, and manages cases \u2014 seeing only what each client has authorized."))),
 
   /* Organization */
@@ -1064,7 +1064,7 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement(I, { n: "users", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
   }, "Organization"), /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, fontSize: 12.5 }
+    style: { ...bodyTextStyle, fontSize: 13.5 }
   }, "A team or agency. Manages staff roles, policies, and settings. Organizations can join networks to share standards with peer organizations."))),
 
   /* Network */
@@ -1075,13 +1075,13 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement(I, { n: "globe", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
   }, "Network"), /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, fontSize: 12.5 }
+    style: { ...bodyTextStyle, fontSize: 13.5 }
   }, "The federation layer. Coordinates shared standards across member organizations \u2014 what you call things, how you measure them, and how decisions get made.")))
 
   ), /* end role grid */
 
   /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, textAlign: 'center', marginTop: 20, fontSize: 12.5, color: 'var(--tx-2)' }
+    style: { ...bodyTextStyle, textAlign: 'center', marginTop: 20, fontSize: 13.5, color: 'var(--tx-2)' }
   }, "You don't pick a role at signup. Khora detects it automatically based on the groups you belong to. One account can hold multiple roles at once.")),
 
   /* ── Section 3: How Security Works ── */
