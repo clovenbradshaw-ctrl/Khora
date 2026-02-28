@@ -3720,6 +3720,7 @@ const ProviderApp = ({
       { id: 'hierarchy', icon: 'globe', label: 'My Network' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' },
+      { id: 'backup', icon: 'cloud', label: 'Backup' },
       ...(orgRoom ? [{ id: 'org-settings', icon: 'briefcase', label: 'Organization' }] : [])
     ],
     onMoreNavigate: id => { setView(id); setActiveCase(null); setActiveIndividual(null); setActiveResourceProfile(null); }
@@ -4042,6 +4043,10 @@ const ProviderApp = ({
       id: 'transparency',
       icon: 'eye',
       label: 'Transparency'
+    }, {
+      id: 'backup',
+      icon: 'cloud',
+      label: 'Backup'
     }].map(item => /*#__PURE__*/React.createElement("div", {
       key: item.id,
       onClick: () => {
@@ -9001,6 +9006,8 @@ const ProviderApp = ({
     session: session
   }), view === 'transparency' && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
+  }), view === 'backup' && /*#__PURE__*/React.createElement(BackupSettingsView, {
+    showToast: showToast
   }))), /*#__PURE__*/React.createElement(Modal, {
     open: discoverModal,
     onClose: () => setDiscoverModal(false),
