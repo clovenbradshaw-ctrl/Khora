@@ -436,6 +436,64 @@ const LoginScreen = ({
     style: { marginBottom: 20 }
   }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 120 })),
 
+  /* ── Compact Given/Meant explainer above login ── */
+  /*#__PURE__*/React.createElement("div", {
+    className: "anim-up",
+    style: { width: '100%', maxWidth: 540, marginBottom: 20 }
+  },
+  /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-1)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '24px 28px', position: 'relative', overflow: 'hidden' }
+  },
+  /*#__PURE__*/React.createElement("div", {
+    style: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, var(--teal), var(--gold))' }
+  }),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10, textAlign: 'center' }
+  }, "SHARED STANDARDS"),
+  /*#__PURE__*/React.createElement("h2", {
+    style: { fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 8, letterSpacing: '-0.01em', textAlign: 'center' }
+  }, "Agree on what you call things"),
+  /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 12.5, color: 'var(--tx-1)', lineHeight: 1.65, textAlign: 'center', marginBottom: 16 }
+  }, "When organizations work together, they need a common language. Khora makes a critical distinction visible:"),
+
+  /* Compact GIVEN / MEANT side-by-side */
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }
+  },
+  /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '14px 16px', borderLeft: '3px solid var(--teal)' }
+  },
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 6 }
+  }, "GIVEN"),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--serif)', fontSize: 13.5, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 4 }
+  }, "What actually happened"),
+  /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 11.5, color: 'var(--tx-2)', lineHeight: 1.55 }
+  }, "Raw information, as observed. \u201CI slept in my car last night.\u201D Uninterpreted, owned by the person who said it.")),
+
+  /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '14px 16px', borderLeft: '3px solid var(--gold)' }
+  },
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--gold)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 6 }
+  }, "MEANT"),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--serif)', fontSize: 13.5, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 4 }
+  }, "What an institution classifies it as"),
+  /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 11.5, color: 'var(--tx-2)', lineHeight: 1.55 }
+  }, "One agency calls it \u201CLiterally Homeless.\u201D Another says \u201CPriority 1.\u201D Same fact, different meanings."))
+  ), /* end GIVEN/MEANT grid */
+
+  /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 11, color: 'var(--tx-3)', lineHeight: 1.55, marginTop: 12, textAlign: 'center' }
+  }, "Khora keeps both \u2014 the raw observation and every institutional interpretation \u2014 so nothing gets lost in translation.")
+
+  )), /* end explainer card */
+
   /* Login card */
   /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
@@ -1026,59 +1084,7 @@ const LoginScreen = ({
     style: { ...bodyTextStyle, textAlign: 'center', marginTop: 20, fontSize: 12.5, color: 'var(--tx-2)' }
   }, "You don't pick a role at signup. Khora detects it automatically based on the groups you belong to. One account can hold multiple roles at once.")),
 
-  /* ── Section 3: Shared Standards & the GIVEN/MEANT divide ── */
-  /*#__PURE__*/React.createElement("div", {
-    style: { ...infoSectionStyle, paddingTop: 48, paddingBottom: 48 }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: { textAlign: 'center', marginBottom: 32 }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: sectionLabelStyle
-  }, "SHARED STANDARDS"), /*#__PURE__*/React.createElement("h2", {
-    style: sectionTitleStyle
-  }, "Agree on what you call things"), /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
-  }, "When multiple organizations work together, they need a common language. Khora lets networks define shared forms, definitions, and norms \u2014 then propagate them to every member organization. Everyone collects data the same way, so it actually means the same thing.")),
-
-  /* GIVEN / MEANT explainer */
-  /*#__PURE__*/React.createElement("div", {
-    style: { ...infoCardStyle, marginTop: 24 }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: { ...sectionLabelStyle, marginBottom: 16, color: 'var(--teal)' }
-  }, "THE GIVEN / MEANT DIVIDE"), /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, marginBottom: 16 }
-  }, "Here's a problem most systems hide from you: the same piece of information means different things to different institutions. Khora makes this visible."), /*#__PURE__*/React.createElement("div", {
-    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }
-  },
-
-  /* GIVEN side */
-  /*#__PURE__*/React.createElement("div", {
-    style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '16px 18px', borderLeft: '3px solid var(--teal)' }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--teal)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 8 }
-  }, "GIVEN"), /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 6 }
-  }, "What actually happened"), /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, fontSize: 12.5 }
-  }, "The raw information, as observed. A client says: \"I slept in my car last night.\" That's the given \u2014 uninterpreted, owned by the person who said it.")),
-
-  /* MEANT side */
-  /*#__PURE__*/React.createElement("div", {
-    style: { background: 'var(--bg-2)', borderRadius: 'var(--r)', padding: '16px 18px', borderLeft: '3px solid var(--gold)' }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--gold)', letterSpacing: '.1em', fontWeight: 700, marginBottom: 8 }
-  }, "MEANT"), /*#__PURE__*/React.createElement("div", {
-    style: { fontFamily: 'var(--serif)', fontSize: 15, color: 'var(--tx-0)', fontWeight: 600, marginBottom: 6 }
-  }, "What an institution classifies it as"), /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, fontSize: 12.5 }
-  }, "The institutional interpretation. One agency calls it \"Literally Homeless, Category 1.\" Another says \"Priority 1 \u2014 immediate outreach.\" A third might not count it at all. Same fact, different meanings."))
-
-  ), /* end GIVEN/MEANT grid */
-
-  /*#__PURE__*/React.createElement("p", {
-    style: { ...bodyTextStyle, fontSize: 12.5, color: 'var(--tx-2)' }
-  }, "Most systems collapse this distinction \u2014 they record the classification and throw away the original observation. Khora keeps both, traces which framework turned one into the other, and shows you when frameworks disagree. The raw information always belongs to the person who provided it; the interpretations are documented as exactly that \u2014 interpretations."))),
-
-  /* ── Section 4: How Security Works ── */
+  /* ── Section 3: How Security Works ── */
   /*#__PURE__*/React.createElement("div", {
     style: { ...infoSectionStyle, paddingTop: 48, paddingBottom: 48 }
   }, /*#__PURE__*/React.createElement("div", {
