@@ -1,56 +1,32 @@
+/* ═══════════════════ MATRIX SERVICE ═══════════════════
+ * Operator Manifest:
+ *   INS(matrix.room, {e2ee, state}) — room_creation                   — createRoom
+ *   INS(matrix.bridge_room, {power_levels}) — client_sovereign_creation — createClientRoom
+ *   ALT(matrix.room_state, {state_event}) — protocol_mutation         — setState
+ *   INS(matrix.timeline_event, {room}) — event_emission               — sendEvent
+ *   DES(matrix.room_topology, {via: sync_state}) — room_classification — scanRooms
+ *
+ * Triad Summary:
+ *   Existence:       INS (room creation, event emission)
+ *   Structure:       CON (room membership, power levels)
+ *   Interpretation:  ALT (state events), DES (room classification)
+ *   No REC — KhoraService is a transport layer; it never reinterprets data.
+ *
+ * Auth operations (login, restoreSession, logout) live in auth.js (KhoraAuth).
+ * KhoraService delegates identity and client access to KhoraAuth via getters.
+ * ═══════════════════════════════════════════════════════════ */
 class KhoraService {
-  constructor() {
-    this.client = null;
-    this._baseUrl = null;
-    this._token = null;
-    this._userId = null;
-    this._timelineListenerAttached = false;
+  // ── Delegation to KhoraAuth (backward-compatible interface) ──
+  // All 254+ svc.userId references across the codebase continue working.
+  get client() { return KhoraAuth.client; }
+  get userId() { return KhoraAuth.userId; }
+  get _token() { return KhoraAuth.token; }
+  get _baseUrl() { return KhoraAuth.baseUrl; }
+
+  get hasCrypto() {
+    return this.client && typeof this.client.isCryptoEnabled === 'function' && this.client.isCryptoEnabled();
   }
 
-  // Register real-time timeline event listener on the Matrix client.
-  // Dispatches DOM CustomEvents so React components can react instantly
-  // to new Khora events without polling.
-  _setupTimelineListener() {
-    if (!this.client || this._timelineListenerAttached) return;
-    this._timelineListenerAttached = true;
-    const khoraPrefix = NS + '.';
-    this.client.on('Room.timeline', (event, room, toStartOfTimeline) => {
-      if (toStartOfTimeline) return; // ignore historical pagination
-      const type = event.getType();
-      // Only fire for Khora-namespaced events (io.khora.*)
-      if (!type.startsWith(khoraPrefix)) return;
-      const detail = {
-        eventId: event.getId(),
-        roomId: room?.roomId,
-        type,
-        content: event.getContent(),
-        sender: event.getSender(),
-        ts: event.getTs(),
-        isOwn: event.getSender() === this._userId
-      };
-      window.dispatchEvent(new CustomEvent('khora:timeline', {
-        detail
-      }));
-    });
-    // Also listen for state events to catch schema/org/roster changes
-    this.client.on('RoomState.events', (event, roomState) => {
-      const type = event.getType();
-      if (!type.startsWith(khoraPrefix)) return;
-      const detail = {
-        eventId: event.getId(),
-        roomId: roomState?.roomId,
-        type,
-        content: event.getContent(),
-        sender: event.getSender(),
-        ts: event.getTs(),
-        isState: true,
-        isOwn: event.getSender() === this._userId
-      };
-      window.dispatchEvent(new CustomEvent('khora:state', {
-        detail
-      }));
-    });
-  }
   async _withRetry(fn, maxAttempts = 5) {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
@@ -69,235 +45,6 @@ class KhoraService {
     throw new Error('Rate limited — too many requests. Please try again.');
   }
 
-  // INS(matrix.session, {credentials}) — authentication → INS(crypto.vault_key, {via: hkdf}) — at_rest_encryption → NUL(matrix.legacy_stores, {reason: purge}) — cleanup
-  async login(homeserver, user, pass) {
-    const baseUrl = homeserver.startsWith('http') ? homeserver : `https://${homeserver}`;
-    this._baseUrl = baseUrl;
-    if (typeof matrixcs !== 'undefined') {
-      this.client = matrixcs.createClient({
-        baseUrl
-      });
-      const res = await this.client.login('m.login.password', {
-        user,
-        password: pass
-      });
-      // Derive per-user at-rest encryption key (AES-256-GCM via HKDF from access token)
-      // Only this user's session can decrypt local IndexedDB data
-      await LocalVaultCrypto.deriveKey(res.user_id, res.access_token, res.device_id);
-      // Purge any legacy unencrypted IndexedDB databases (preserves Matrix crypto store for E2EE)
-      await this._purgeUnencryptedStores();
-      this.client = matrixcs.createClient({
-        baseUrl,
-        accessToken: res.access_token,
-        userId: res.user_id,
-        deviceId: res.device_id
-      });
-      try {
-        await this.client.initCrypto();
-      } catch (e) {
-        console.warn('Crypto:', e.message);
-      }
-      await this.client.startClient({
-        initialSyncLimit: 30
-      });
-      await new Promise((resolve, reject) => {
-        if (this.client.isInitialSyncComplete()) return resolve();
-        const timeout = setTimeout(() => reject(new Error('Sync timed out — the server may be overloaded. Please try again.')), 60000);
-        this.client.on('sync', (state, prev, data) => {
-          if (state === 'PREPARED') {
-            clearTimeout(timeout);
-            resolve();
-          } else if (state === 'ERROR') {
-            clearTimeout(timeout);
-            reject(new Error(data?.error?.message || 'Sync failed — please try again.'));
-          }
-        });
-      });
-      this._userId = res.user_id;
-      this._token = res.access_token;
-      // Attach real-time timeline event listener
-      this._setupTimelineListener();
-      // Persist session to localStorage so it survives page refresh, tab close, and browser restart
-      try {
-        localStorage.setItem('khora_session', JSON.stringify({
-          homeserver: baseUrl,
-          accessToken: res.access_token,
-          userId: res.user_id,
-          deviceId: res.device_id
-        }));
-      } catch {}
-      // Cache encrypted session metadata in the encrypted vault
-      try {
-        await KhoraEncryptedCache.put('session', 'current', {
-          userId: res.user_id,
-          homeserver: baseUrl,
-          deviceId: res.device_id,
-          ts: Date.now()
-        });
-      } catch {}
-      return {
-        userId: res.user_id
-      };
-    } else {
-      const baseUrlFallback = homeserver.startsWith('http') ? homeserver : `https://${homeserver}`;
-      const resp = await this._api('POST', '/login', {
-        type: 'm.login.password',
-        user,
-        password: pass
-      }, true);
-      this._token = resp.access_token;
-      this._userId = resp.user_id;
-      // Persist session to localStorage so it survives page refresh (non-SDK path)
-      try {
-        localStorage.setItem('khora_session', JSON.stringify({
-          homeserver: baseUrlFallback,
-          accessToken: resp.access_token,
-          userId: resp.user_id,
-          deviceId: resp.device_id || 'fallback'
-        }));
-      } catch {}
-      return {
-        userId: resp.user_id
-      };
-    }
-  }
-
-  // DES(matrix.session, {check: whoami}) — token_validation → INS(matrix.client, {valid_token}) — reconnection | NUL(matrix.session, {reason: expired}) — destruction
-  async restoreSession() {
-    const raw = localStorage.getItem('khora_session');
-    if (!raw) return null;
-    let saved;
-    try {
-      saved = JSON.parse(raw);
-    } catch {
-      localStorage.removeItem('khora_session');
-      return null;
-    }
-    const {
-      homeserver,
-      accessToken,
-      userId,
-      deviceId
-    } = saved;
-    if (!homeserver || !accessToken || !userId || !deviceId) return null;
-
-    // Step 1: Validate token with the homeserver (lightweight /whoami check)
-    // Retry transient network failures with exponential backoff before giving up
-    let tokenValid = false;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      try {
-        const resp = await fetch(`${homeserver}/_matrix/client/v3/account/whoami`, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        });
-        if (resp.ok) {
-          tokenValid = true;
-          break;
-        }
-        if (resp.status === 401 || resp.status === 403) {
-          // Token expired or revoked — clear saved session, require fresh login
-          console.warn('Session token expired or revoked (HTTP ' + resp.status + ')');
-          localStorage.removeItem('khora_session');
-          return {
-            expired: true
-          };
-        }
-        // Server error (5xx) — treat as transient, retry
-        if (resp.status >= 500) {
-          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
-          continue;
-        }
-        // Other client error — don't retry
-        break;
-      } catch (e) {
-        // Network error (offline, DNS failure, etc.) — retry with backoff
-        console.warn('Session restore network error (attempt ' + (attempt + 1) + '):', e.message);
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
-          continue;
-        }
-        // All retries exhausted — keep the saved session intact for next app load
-        // but return a network error so the UI can offer retry
-        return {
-          networkError: true,
-          message: e.message
-        };
-      }
-    }
-    if (!tokenValid) {
-      // Retries exhausted on server errors — preserve session for next load
-      return {
-        networkError: true,
-        message: 'Server unavailable'
-      };
-    }
-
-    // Step 2: Token is valid — initialize the Matrix client and sync
-    try {
-      this._baseUrl = homeserver;
-      await LocalVaultCrypto.deriveKey(userId, accessToken, deviceId);
-      if (typeof matrixcs !== 'undefined') {
-        this.client = matrixcs.createClient({
-          baseUrl: homeserver,
-          accessToken,
-          userId,
-          deviceId
-        });
-        try {
-          await this.client.initCrypto();
-        } catch (e) {
-          console.warn('Crypto:', e.message);
-        }
-        await this.client.startClient({
-          initialSyncLimit: 30
-        });
-        await new Promise((resolve, reject) => {
-          if (this.client.isInitialSyncComplete()) return resolve();
-          const timeout = setTimeout(() => reject(new Error('Sync timed out')), 90000);
-          this.client.on('sync', (state, prev, data) => {
-            if (state === 'PREPARED') {
-              clearTimeout(timeout);
-              resolve();
-            } else if (state === 'ERROR') {
-              clearTimeout(timeout);
-              reject(new Error(data?.error?.message || 'Sync failed'));
-            }
-          });
-        });
-      }
-      this._userId = userId;
-      this._token = accessToken;
-      // Attach real-time timeline event listener
-      this._setupTimelineListener();
-      return {
-        userId
-      };
-    } catch (e) {
-      console.warn('Session restore sync failed:', e.message);
-      // Sync failure after valid token — keep session, allow retry
-      // Clean up partial client state but preserve localStorage
-      if (this.client) {
-        try {
-          this.client.stopClient();
-        } catch {}
-      }
-      this.client = null;
-      this._token = null;
-      this._userId = null;
-      LocalVaultCrypto.clear();
-      return {
-        networkError: true,
-        message: e.message
-      };
-    }
-  }
-  get userId() {
-    return this._userId;
-  }
-  get hasCrypto() {
-    return this.client && typeof this.client.isCryptoEnabled === 'function' && this.client.isCryptoEnabled();
-  }
   async _api(method, path, body, noAuth) {
     const url = `${this._baseUrl}/_matrix/client/v3${path}`;
     const h = {
@@ -380,7 +127,7 @@ class KhoraService {
     if (clientMatrixId) {
       opts.power_level_content_override = {
         users: {
-          [this._userId]: 50,
+          [this.userId]: 50,
           [clientMatrixId]: 100
         },
         events_default: 0,
@@ -672,58 +419,6 @@ class KhoraService {
     }
   }
 
-  // NUL(matrix.legacy_idb, {targets: store_names}) — security_cleanup
-  // Purge unencrypted IndexedDB databases created by the Matrix SDK sync layer
-  // or legacy application caches. Preserves crypto stores (Olm/Megolm key material
-  // needed for E2EE continuity) and our own encrypted vault.
-  async _purgeUnencryptedStores() {
-    if (typeof indexedDB?.databases === 'function') {
-      try {
-        const dbs = await indexedDB.databases();
-        for (const db of dbs) {
-          // Keep our encrypted vault and any crypto key stores
-          if (db.name && db.name !== KhoraEncryptedCache.DB_NAME && !db.name.includes('crypto')) {
-            try {
-              indexedDB.deleteDatabase(db.name);
-            } catch {}
-          }
-        }
-      } catch (e) {
-        console.warn('IndexedDB purge:', e.message);
-      }
-    }
-    // Explicitly target known unencrypted sync/state databases by name
-    for (const name of ['amino', 'matrix-js-sdk:default', 'matrix-js-sdk:riot-web-sync', 'matrix-js-sdk:web-sync']) {
-      try {
-        indexedDB.deleteDatabase(name);
-      } catch {}
-    }
-  }
-
-  // NUL(matrix.session+keys+cache, {reason: logout}) — full_teardown — destroys all local state
-  async logout() {
-    if (this.client) {
-      this.client.stopClient();
-      try {
-        await this.client.logout();
-      } catch {}
-    }
-    this.client = null;
-    this._token = null;
-    this._userId = null;
-    // NUL(crypto.vault_key, {reason: logout}) — key_destruction — local encrypted data becomes unreadable
-    LocalVaultCrypto.clear();
-    // Wipe encrypted local cache and close database connection
-    try {
-      await KhoraEncryptedCache.clear();
-      KhoraEncryptedCache.close();
-    } catch {}
-    // Purge any remaining unencrypted databases
-    try {
-      await this._purgeUnencryptedStores();
-    } catch {}
-  }
-
   // Scan invited rooms — returns rooms the user has been invited to but hasn't joined.
   // Uses invite state from /sync (SDK) or invite section of sync response (API).
   async scanInvitedRooms(types = [EVT.IDENTITY]) {
@@ -788,23 +483,3 @@ class KhoraService {
 }
 const svc = new KhoraService();
 const WEBHOOK_BASE = 'https://n8n.intelechia.com/webhook';
-
-/* ═══════════════════ DOMAIN CONFIG (§C.0) ═══════════════════
- * Operator Manifest:
- *   DES — pure designation. Forms, interpretations, transforms, vault fields,
- *         roles, relationship types, terminology. All are vocabulary definitions.
- *
- * Triad Summary:
- *   Existence:       DES (naming forms, fields, authorities, roles)
- *   Structure:       —
- *   Interpretation:  —
- *   No mutations here. DOMAIN_CONFIG is the interpretive frame that other modules
- *   reference. All actual INS/ALT/CON/REC operations happen elsewhere using
- *   these designations. Changing DOMAIN_CONFIG changes the vocabulary itself —
- *   which is a meta-level REC, but not one performed by code at runtime.
- *
- * All domain-specific content is consolidated here. To adapt Tessera for a
- * different sector, replace the contents of DOMAIN_CONFIG — the application
- * logic, encryption model, bridge topology, and EO operator layer are all
- * domain-agnostic.
- * ═══════════════════════════════════════════════════════════════════════════ */

@@ -362,7 +362,7 @@ const LoginScreen = ({
           return;
         }
       }
-      const s = await svc.login(effectiveHs, user, pass);
+      const s = await KhoraAuth.login(effectiveHs, user, pass);
       onLogin(s);
     } catch (e) {
       setErr(e.message);

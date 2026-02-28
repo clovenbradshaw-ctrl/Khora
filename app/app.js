@@ -70,7 +70,7 @@ const App = () => {
     setRestoring(true);
     setRestoreError(null);
     try {
-      const restored = await svc.restoreSession();
+      const restored = await KhoraAuth.restoreSession();
       if (!restored) {
         setRestoring(false);
         return;
@@ -309,7 +309,7 @@ const App = () => {
       localStorage.removeItem('khora_active_org');
       localStorage.removeItem('khora_welcomed');
     } catch {}
-    await svc.logout();
+    await KhoraAuth.logout();
     setSession(null);
     setAvailableContexts([]);
     setActiveContext(null);
