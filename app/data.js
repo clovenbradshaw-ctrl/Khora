@@ -2699,7 +2699,7 @@ const DatabaseView = ({
   /*#__PURE__*/React.createElement("button", {
     className: "b-pri b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 4 },
-    onClick: () => setAddColumnModal(true)
+    onClick: () => { setAddFieldDd(false); setAddColumnModal(true); }
   }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Add Column"),
   // Quick-add from existing definitions dropdown
   /*#__PURE__*/React.createElement("div", {
