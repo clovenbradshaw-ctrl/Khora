@@ -921,6 +921,13 @@ const CreateFieldModal = ({ open, onClose, onSave, onPropose, fieldDefs, categor
   );
 };
 
+/* ─── Helper: map URI library categories to column categories ─── */
+const mapUriCatToColumnCat = c => {
+  const m = { identity: 'identity', demographics: 'identity', contact: 'contact', location: 'contact',
+    health: 'case', safety: 'case', enrollment: 'case', service: 'case', sensitive: 'sensitive' };
+  return m[c] || 'details';
+};
+
 /* ─── AddColumnModal — add a column to the Individuals table with required definition + team governance ─── */
 const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, teamMode, activeTeamObj, svc, orgRoom, networkRoom, showToast, fieldGovernanceConfig }) => {
   const [label, setLabel] = useState('');
@@ -936,6 +943,8 @@ const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, te
   const [mode, setMode] = useState('new'); // 'new' | 'existing'
   const [selectedExistingUri, setSelectedExistingUri] = useState('');
   const [existingSearch, setExistingSearch] = useState('');
+  const [uriSource, setUriSource] = useState(null); // { uri, source_library, source_library_id }
+  const [uriBrowserOpen, setUriBrowserOpen] = useState(false);
 
   const computedKey = key || fieldLabelToKey(label);
   const uri = `khora:${teamMode ? 'team/' + teamMode.roomId + '/' : 'org/'}${computedKey}`;
@@ -950,7 +959,8 @@ const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, te
   if (!open) return null;
 
   const defLen = definition.length;
-  const isValidNew = label.trim().length > 0 && computedKey.length > 0 && defLen >= 20 && dataType;
+  const defMinLen = uriSource ? 5 : 20;
+  const isValidNew = label.trim().length > 0 && computedKey.length > 0 && defLen >= defMinLen && dataType;
   const isValidExisting = !!selectedExistingUri;
 
   // Resolve team governance context
@@ -970,6 +980,16 @@ const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, te
     setLabel(''); setKey(''); setKeyEdited(false); setCategory('details');
     setDataType('text'); setDefinition(''); setScope(''); setSensitive(false);
     setSelectedExistingUri(''); setExistingSearch(''); setDuplicateWarning(null);
+    setUriSource(null); setUriBrowserOpen(false);
+  };
+
+  const handleUriSelect = entry => {
+    setDefinition(entry.definition || '');
+    if (!label.trim()) { setLabel(entry.label || ''); if (!keyEdited) setKey(fieldLabelToKey(entry.label || '')); }
+    if (entry.data_type) setDataType(entry.data_type);
+    if (entry.category) setCategory(mapUriCatToColumnCat(entry.category));
+    setUriSource({ uri: entry.uri, source_library: entry.source_library, source_library_id: entry.source_library_id });
+    setUriBrowserOpen(false);
   };
 
   const handleSaveNew = async () => {
@@ -984,7 +1004,7 @@ const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, te
       definition: definition.trim(),
       scope: scope.trim() || null,
       sensitive,
-      authority: null,
+      authority: uriSource ? { org: uriSource.source_library, name: uriSource.source_library, provision: null, uri: uriSource.uri } : null,
       version: 1,
       version_history: [],
       migration_rules: [],
@@ -1236,14 +1256,35 @@ const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, te
               )
             )
           ),
-          // Definition (required)
+          // Definition (required) — manual entry OR URI library
           React.createElement('div', { className: 'cf-row' },
             React.createElement('label', { className: 'cf-label' }, 'Definition', React.createElement('span', { className: 'required' }, '*'),
-              React.createElement('span', { style: { fontSize: 9, color: 'var(--tx-3)', marginLeft: 6, fontWeight: 400 } }, 'Every column must have a clear definition')),
-            React.createElement('textarea', { value: definition, onChange: e => setDefinition(e.target.value),
-              placeholder: 'Describe what this column means, how it should be interpreted, and what values are expected (min 20 characters)...',
+              React.createElement('span', { style: { fontSize: 9, color: 'var(--tx-3)', marginLeft: 6, fontWeight: 400 } }, 'Enter manually or browse standard definitions')),
+            React.createElement('textarea', { value: definition, onChange: e => { setDefinition(e.target.value); if (uriSource) setUriSource(null); },
+              placeholder: uriSource ? 'Definition from URI library (edit to override)...' : 'Describe what this column means, how it should be interpreted, and what values are expected...',
               style: { fontSize: 13, minHeight: 72 } }),
-            React.createElement('div', { className: `cf-char-count ${defLen < 20 ? 'warn' : 'ok'}` }, defLen, '/20 min')
+            React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 } },
+              React.createElement('button', {
+                className: 'b-gho b-xs', type: 'button',
+                style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 },
+                onClick: () => setUriBrowserOpen(true)
+              }, React.createElement(I, { n: 'globe', s: 11 }), 'Browse URI Libraries'),
+              React.createElement('div', { className: `cf-char-count ${defLen < defMinLen ? 'warn' : 'ok'}` }, defLen, '/', defMinLen, ' min')
+            ),
+            uriSource && React.createElement('div', {
+              style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, padding: '4px 8px',
+                background: 'var(--blue-dim)', borderRadius: 'var(--r)', border: '1px solid rgba(56,152,224,.15)', fontSize: 11 }
+            },
+              React.createElement(I, { n: 'link', s: 10, c: 'var(--blue)' }),
+              React.createElement('span', { style: { color: 'var(--tx-2)' } }, 'Source: '),
+              React.createElement('span', { style: { fontWeight: 600, color: 'var(--blue)' } }, uriSource.source_library),
+              React.createElement('span', { style: { fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--tx-3)', marginLeft: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 } }, uriSource.uri),
+              React.createElement('button', {
+                className: 'b-gho', type: 'button',
+                style: { marginLeft: 'auto', padding: '0 4px', fontSize: 12, lineHeight: 1 },
+                onClick: () => setUriSource(null)
+              }, '\u2715')
+            )
           ),
           // Scope
           React.createElement('div', { className: 'cf-row' },
@@ -1278,7 +1319,14 @@ const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, te
             React.createElement('div', { className: 'cf-preview-uri' }, uri),
             React.createElement('div', { style: { marginTop: 6, fontSize: 11, color: 'var(--tx-1)', lineHeight: 1.5 } },
               label.trim() || 'Column Name', ' \u2014 ', definition.trim().slice(0, 80) || 'definition...', definition.length > 80 ? '...' : '')
-          )
+          ),
+          // URI Library Browser modal
+          React.createElement(UriLibraryBrowser, {
+            open: uriBrowserOpen,
+            onClose: () => setUriBrowserOpen(false),
+            mode: 'select',
+            onSelect: handleUriSelect
+          })
         )
       ),
       React.createElement('div', { className: 'cf-footer' },
