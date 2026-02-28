@@ -76,6 +76,7 @@ const ProviderApp = ({
   const [newClientNotes, setNewClientNotes] = useState('');
   const [clientInviteMatrixId, setClientInviteMatrixId] = useState('');
   const [copiedField, setCopiedField] = useState(null);
+  const [verifyCodeModal, setVerifyCodeModal] = useState(null); // { record, code, expires } or null
   // Teams — flexible groups of people (not tied to a single org)
   const [teams, setTeams] = useState([]);
   const [createTeamModal, setCreateTeamModal] = useState(false);
@@ -1842,6 +1843,20 @@ const ProviderApp = ({
       showToast(`${T.client_term} "${newClientName}" created${clientId ? ' — invite sent' : ''}`, 'success');
     } catch (e) {
       showToast('Failed: ' + e.message, 'error');
+    }
+  };
+  // INS(claim.verification.code, {generated_by, expires}) — challenge_creation
+  const handleGenerateClaimCode = async (record) => {
+    try {
+      const { challenge, plainCode } = await AccountVerification.createChallenge();
+      await svc.setState(record.roomId, EVT.CLAIM_VERIFICATION, challenge);
+      await emitOp(record.roomId, 'INS', dot('claim', 'verification', 'code'), {
+        generated_by: svc.userId,
+        expires: challenge.expires
+      }, orgFrame());
+      setVerifyCodeModal({ record, code: plainCode, expires: challenge.expires });
+    } catch (e) {
+      showToast('Failed to generate verification code: ' + e.message, 'error');
     }
   };
   const handleClientInvite = async () => {
@@ -5421,7 +5436,18 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement(I, {
       n: "userPlus",
       s: 11
-    }), "Invite"), /*#__PURE__*/React.createElement("button", {
+    }), "Invite"), rec.status !== 'claimed' && /*#__PURE__*/React.createElement("button", {
+      onClick: () => handleGenerateClaimCode(rec),
+      className: "b-gho b-xs",
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 3
+      }
+    }, /*#__PURE__*/React.createElement(I, {
+      n: "shieldCheck",
+      s: 11
+    }), "Code"), /*#__PURE__*/React.createElement("button", {
       onClick: () => openCase(rec.roomId),
       className: "b-gho b-xs",
       style: {
@@ -11349,6 +11375,66 @@ const ProviderApp = ({
     n: "plus",
     s: 16
   }), " Create ", T.client_term, " Record")), /*#__PURE__*/React.createElement(Modal, {
+    open: !!verifyCodeModal,
+    onClose: () => setVerifyCodeModal(null),
+    title: "Claim Verification Code",
+    w: 440
+  }, verifyCodeModal && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: 12,
+      color: 'var(--tx-1)',
+      marginBottom: 16,
+      lineHeight: 1.6
+    }
+  }, "Give this code to ", /*#__PURE__*/React.createElement("strong", null, verifyCodeModal.record.client_name || 'the individual'), " in person or via a trusted communication channel. They will need to enter it to claim their account."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'var(--bg-2)',
+      border: '1px solid var(--bd)',
+      borderRadius: 'var(--r)',
+      padding: '24px 20px',
+      textAlign: 'center',
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 36,
+      fontFamily: 'var(--mono)',
+      fontWeight: 700,
+      letterSpacing: '0.3em',
+      color: 'var(--teal)',
+      marginBottom: 8
+    }
+  }, verifyCodeModal.code), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      navigator.clipboard.writeText(verifyCodeModal.code);
+      setCopiedField('verify-code');
+      setTimeout(() => setCopiedField(null), 2000);
+    },
+    className: "b-gho b-xs",
+    style: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: copiedField === 'verify-code' ? 'check' : 'copy',
+    s: 12
+  }), copiedField === 'verify-code' ? 'Copied!' : 'Copy Code')), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'var(--gold-dim)',
+      border: '1px solid rgba(218,165,32,.15)',
+      borderRadius: 'var(--r)',
+      padding: '10px 14px',
+      fontSize: 11,
+      color: 'var(--tx-1)',
+      lineHeight: 1.6
+    }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: "clock",
+    s: 12,
+    c: "var(--gold)"
+  }), " Expires in 15 minutes (", new Date(verifyCodeModal.expires).toLocaleTimeString(), "). ", /*#__PURE__*/React.createElement("br", null), "Maximum 3 attempts. You can generate a new code at any time."))), /*#__PURE__*/React.createElement(Modal, {
     open: !!clientInviteModal,
     onClose: () => {
       setClientInviteModal(null);
