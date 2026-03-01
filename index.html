@@ -19,13 +19,13 @@
 <link rel="dns-prefetch" href="https://esm.sh">
 <!-- Preload heaviest scripts so download starts immediately -->
 <link rel="preload" href="https://unpkg.com/@matrix-org/olm@3.2.15/olm.js" as="script">
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js" as="script">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/matrix-js-sdk@28.2.0/dist/browser-matrix.min.js" as="script">
 <!-- Core scripts (synchronous — needed before Babel processes JSX) -->
 <!-- Olm (libolm) — required for Megolm E2EE. Must load before Matrix SDK. -->
 <!-- SRI: When adding integrity hashes, also add crossorigin="anonymous" to each tag -->
 <!-- To generate: curl -s <URL> | openssl dgst -sha384 -binary | openssl base64 -A -->
-<script src="https://unpkg.com/@matrix-org/olm@3.2.15/olm.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js"></script>
+<script src="https://unpkg.com/@matrix-org/olm@3.2.15/olm.js" onerror="console.error('Failed to load Olm SDK from CDN')"></script>
+<script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@28.2.0/dist/browser-matrix.min.js" onerror="console.error('Failed to load Matrix SDK from CDN')"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <!-- Non-critical: username generator loaded as module (non-blocking) -->
