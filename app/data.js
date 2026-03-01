@@ -380,6 +380,14 @@ const DataTable = ({
   const [sortField, setSortField] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [visibleCols, setVisibleCols] = useState(defaultVisibleCols || columns.map(c => c.key));
+  // Sync newly-added columns from defaultVisibleCols into visibleCols
+  useEffect(() => {
+    if (!defaultVisibleCols) return;
+    setVisibleCols(prev => {
+      const missing = defaultVisibleCols.filter(k => !prev.includes(k));
+      return missing.length > 0 ? [...prev, ...missing] : prev;
+    });
+  }, [defaultVisibleCols && defaultVisibleCols.join(',')]);
   const [colDd, setColDd] = useState(false);
   const [grpDd, setGrpDd] = useState(false);
   // Multi-select
