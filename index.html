@@ -140,9 +140,9 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .tab:hover:not(.active){background:var(--bg-2);color:var(--tx-1)}
 
 /* ═══ Inbox Responsive Styles ═══ */
-.inbox-wrap{margin:0 auto;width:100%}
-.inbox-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:12px}
-.inbox-panel{display:flex;gap:0;border:1px solid var(--border-0);border-radius:var(--r-lg);overflow:hidden;background:var(--bg-1);height:calc(100vh - 200px);min-height:520px;max-height:900px}
+.inbox-wrap{margin:0 auto;width:100%;display:flex;flex-direction:column;overflow:hidden}
+.inbox-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px;flex-shrink:0}
+.inbox-panel{display:flex;gap:0;border:1px solid var(--border-0);border-radius:var(--r-lg);overflow:hidden;background:var(--bg-1);flex:1;min-height:0}
 .inbox-list{width:300px;min-width:300px;border-right:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2)}
 .inbox-chat{flex:1;display:flex;flex-direction:column;background:var(--bg-1);min-width:0}
 .inbox-msgs{flex:1;overflow:auto;padding:20px 24px;display:flex;flex-direction:column;gap:2px}
@@ -153,8 +153,9 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
   .inbox-list{width:260px;min-width:260px}
 }
 @media(max-width:900px){
+  .inbox-wrap{height:auto!important;overflow:visible}
   .inbox-header{flex-direction:column;gap:8px}
-  .inbox-panel{flex-direction:column;height:auto;max-height:none}
+  .inbox-panel{flex-direction:column;flex:none;height:auto;max-height:none}
   .inbox-list{width:100%;min-width:100%;border-right:none;border-bottom:1px solid var(--border-0);max-height:260px}
   .inbox-chat{min-height:420px}
   .inbox-msgs{padding:14px 16px}
@@ -25372,7 +25373,8 @@ const ClientApp = ({
       color: 'var(--teal)'
     }
   }, "Full control after claiming:"), " When you claim a room, ownership transfers to you (power level 100). You can remove the provider, close the room, or manage who has access. The provider cannot undo your claim."))), view === 'inbox' && !activeBridge && /*#__PURE__*/React.createElement("div", {
-    className: "anim-up inbox-wrap"
+    className: "anim-up inbox-wrap",
+    style: { height: 'calc(100vh - 80px)' }
   }, /*#__PURE__*/React.createElement("div", {
     className: "inbox-header"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
@@ -25387,15 +25389,7 @@ const ClientApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Encrypted conversations with your connections. Messages are end-to-end encrypted."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
-    storageType: "matrix",
-    roomId: typeof inboxConvo === 'number' ? (providers[inboxConvo] || {}).bridgeRoomId : inboxConvo || (providers[0] || {}).bridgeRoomId,
-    encrypted: true,
-    encLabel: "Megolm E2EE",
-    label: "Messages",
-    members: typeof inboxConvo === 'number' && inboxConvo !== null ? providers.filter(p => p.bridgeRoomId === providers[inboxConvo]?.bridgeRoomId).map(p => ({ userId: p.providerUserId, role: 'provider' })).concat([{ userId: svc.userId, role: 'client (you)' }]) : undefined,
-    extra: [{ label: 'Privacy', value: 'Each conversation is a separate encrypted Matrix room. Only you and your connection can read messages.' }]
-  })), /*#__PURE__*/React.createElement("div", {
+  }, "Encrypted conversations with your connections. Messages are end-to-end encrypted.")), /*#__PURE__*/React.createElement("div", {
     style: { display: 'flex', gap: 6, flexShrink: 0 }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setAddProviderModal(true),
@@ -40016,7 +40010,8 @@ const ProviderApp = ({
     },
     T: T
   }), view === 'inbox' && !activeCase && /*#__PURE__*/React.createElement("div", {
-    className: "anim-up inbox-wrap"
+    className: "anim-up inbox-wrap",
+    style: { height: 'calc(100vh - 80px)' }
   },
     /*#__PURE__*/React.createElement("div", {
     className: "inbox-header"
@@ -40032,14 +40027,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Encrypted conversations with ", T.client_term_plural.toLowerCase(), orgRoom ? ' and organizations' : '', " in one place."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
-    storageType: "matrix",
-    roomId: inboxConvo,
-    encrypted: true,
-    encLabel: "Megolm E2EE",
-    label: "Messages",
-    extra: [{ label: 'Privacy model', value: 'Each conversation is a separate encrypted Matrix room (bridge). Direct messages are between you and one client. Org channels use opacity envelopes.' }, orgRoom ? { label: 'Org channel opacity', value: orgOpacity + ' \u2014 controls what receiving orgs see about message sender identity' } : null].filter(Boolean)
-  })), /*#__PURE__*/React.createElement("div", {
+  }, "Encrypted conversations with ", T.client_term_plural.toLowerCase(), orgRoom ? ' and organizations' : '', " in one place.")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6,
