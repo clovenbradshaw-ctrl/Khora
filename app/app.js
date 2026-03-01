@@ -285,6 +285,21 @@ const App = () => {
   if (!session) return /*#__PURE__*/React.createElement(LoginScreen, {
     onLogin: handleLogin
   });
+  const handleLogout = async () => {
+    try {
+      sessionStorage.removeItem('khora_session');
+      localStorage.removeItem('khora_session'); // clean up legacy
+      localStorage.removeItem('khora_active_context');
+      localStorage.removeItem('khora_active_org');
+      localStorage.removeItem('khora_welcomed');
+    } catch {}
+    await KhoraAuth.logout();
+    setSession(null);
+    setAvailableContexts([]);
+    setActiveContext(null);
+    setDetectedRoles(null);
+    setWelcomed(false);
+  };
   if (!activeContext) return /*#__PURE__*/React.createElement("div", {
     className: "grid-bg",
     style: {
@@ -306,21 +321,6 @@ const App = () => {
       marginTop: 16
     }
   }, "Detecting role context\u2026")));
-  const handleLogout = async () => {
-    try {
-      sessionStorage.removeItem('khora_session');
-      localStorage.removeItem('khora_session'); // clean up legacy
-      localStorage.removeItem('khora_active_context');
-      localStorage.removeItem('khora_active_org');
-      localStorage.removeItem('khora_welcomed');
-    } catch {}
-    await KhoraAuth.logout();
-    setSession(null);
-    setAvailableContexts([]);
-    setActiveContext(null);
-    setDetectedRoles(null);
-    setWelcomed(false);
-  };
   return /*#__PURE__*/React.createElement(React.Fragment, null, activeContext === 'client' ? /*#__PURE__*/React.createElement(ClientApp, {
     session: session,
     onLogout: handleLogout,

@@ -4840,7 +4840,7 @@ const ClientApp = ({
       padding: '14px 0',
       textAlign: 'center'
     }
-  }, "No messages yet") : bridgeMessages.map((msg, i) => /*#__PURE__*/React.createElement("div", {
+  }, "No messages yet") : [...bridgeMessages].reverse().map((msg, i) => /*#__PURE__*/React.createElement("div", {
     key: msg.id || i,
     style: {
       padding: '8px 0',

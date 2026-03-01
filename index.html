@@ -2059,6 +2059,10 @@ const ThemeProvider = ({
   useEffect(() => {
     document.documentElement.classList.toggle('light', theme === 'light');
     localStorage.setItem('khora-theme', theme);
+    // Sync global SWC variable for legacy components (SwTag, SwBtn, SwInput)
+    if (typeof SWC_LIGHT !== 'undefined' && typeof SWC_DARK !== 'undefined') {
+      SWC = theme === 'light' ? SWC_LIGHT : SWC_DARK;
+    }
   }, [theme]);
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: light)');
@@ -10421,12 +10425,13 @@ const Toast = ({
   useEffect(() => {
     const t = setTimeout(onClose, 3500);
     return () => clearTimeout(t);
-  }, []);
+  }, [onClose]);
   const c = {
     info: 'var(--blue)',
     success: 'var(--green)',
     error: 'var(--red)',
-    warn: 'var(--gold)'
+    warn: 'var(--gold)',
+    warning: 'var(--gold)'
   }[type];
   return /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
@@ -12645,7 +12650,7 @@ const BackupSettingsView = ({ showToast }) => {
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
         /*#__PURE__*/React.createElement("button", { className: "b-pri b-sm", onClick: handleBridgeEnable },
           /*#__PURE__*/React.createElement(I, { n: "globe", s: 12 }), " Enable Bridge"),
-        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => {} }, "Not Now"))),
+        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => setPhase('connected') }, "Not Now"))),
     isBridgeActive && /*#__PURE__*/React.createElement("div", { style: { background: 'var(--bg-2)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
       /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', animation: 'pulse 1.5s infinite', flexShrink: 0 } }),
       /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--tx-2)' } },
@@ -20256,8 +20261,8 @@ const LoginScreen = ({
     try {
       const s = await KhoraAuth.login(effectiveHs, user.replace(/^@/, '').split(':')[0], pass);
       onLogin(s);
-    } catch (e) {
-      setErr(e.message);
+    } catch (loginErr) {
+      setErr(loginErr.message);
     }
     setLoading(false);
   };
@@ -25809,7 +25814,7 @@ const ClientApp = ({
       padding: '14px 0',
       textAlign: 'center'
     }
-  }, "No messages yet") : bridgeMessages.map((msg, i) => /*#__PURE__*/React.createElement("div", {
+  }, "No messages yet") : [...bridgeMessages].reverse().map((msg, i) => /*#__PURE__*/React.createElement("div", {
     key: msg.id || i,
     style: {
       padding: '8px 0',
@@ -30556,20 +30561,20 @@ const CreateFieldModal = ({ open, onClose, onSave, onPropose, fieldDefs, categor
   const [saving, setSaving] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
 
-  if (!open) return null;
-
   const ns = namespace || 'org';
   const uri = `khora:${ns}/${key || fieldLabelToKey(label)}`;
   const computedKey = key || fieldLabelToKey(label);
   const defLen = definition.length;
   const isValid = label.trim().length > 0 && computedKey.length > 0 && defLen >= 20 && dataType;
 
-  // Check for duplicate URIs / keys
+  // Check for duplicate URIs / keys — must be before any early return (Rules of Hooks)
   React.useEffect(() => {
     if (!computedKey || !fieldDefs) { setDuplicateWarning(null); return; }
     const existing = Object.values(fieldDefs).find(d => d.key === computedKey || d.uri === uri);
     setDuplicateWarning(existing ? `A field with key "${computedKey}" already exists (${existing.label})` : null);
   }, [computedKey, uri, fieldDefs]);
+
+  if (!open) return null;
 
   const handleSave = async () => {
     if (!isValid || duplicateWarning) return;
@@ -33113,7 +33118,7 @@ const TeamDetailView = ({
       style: {
         height: '100%',
         background: 'var(--green)',
-        width: `${Math.min(100, approvalCount / threshold * 100)}%`,
+        width: `${threshold > 0 ? Math.min(100, approvalCount / threshold * 100) : 100}%`,
         borderRadius: 2,
         transition: 'width .3s'
       }
@@ -33988,11 +33993,11 @@ const ProfileActivityFeed = ({
 /* ─── CrmFieldRow — single inline-editable field row ─── */
 const CrmFieldRow = ({ fieldDef, value, disclosed, eoOp, frame, onSave, roomId, onRestore }) => {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [msEditing, setMsEditing] = useState(false);
   const isLocked = disclosed === false;
   const hasValue = value !== undefined && value !== null && value !== '';
   const displayValue = Array.isArray(value) ? value.join(', ') : value;
   if (fieldDef.data_type === 'multi_select' && !isLocked) {
-    const [msEditing, setMsEditing] = useState(false);
     const currentArr = Array.isArray(value) ? value : (value ? value.split(', ').filter(Boolean) : []);
     const toggleOpt = opt => {
       const next = currentArr.includes(opt) ? currentArr.filter(v => v !== opt) : [...currentArr, opt];
@@ -39904,13 +39909,13 @@ const ProviderApp = ({
         borderRadius: 'var(--r)',
         cursor: 'pointer',
         marginBottom: 1,
-        background: (view === item.id || item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile')) && !activeCase ? 'var(--bg-4)' : 'transparent',
-        borderLeft: (view === item.id || item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile')) && !activeCase ? `2px solid ${teamMode ? `hsl(${teamMode.color_hue || 260}, 60%, 55%)` : 'var(--gold)'}` : '2px solid transparent',
+        background: (view === item.id || (item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile'))) && !activeCase ? 'var(--bg-4)' : 'transparent',
+        borderLeft: (view === item.id || (item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile'))) && !activeCase ? `2px solid ${teamMode ? `hsl(${teamMode.color_hue || 260}, 60%, 55%)` : 'var(--gold)'}` : '2px solid transparent',
         display: 'flex',
         alignItems: 'center',
         gap: 8,
         transition: 'all .15s',
-        color: (view === item.id || item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile')) && !activeCase ? 'var(--tx-0)' : 'var(--tx-1)'
+        color: (view === item.id || (item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile'))) && !activeCase ? 'var(--tx-0)' : 'var(--tx-1)'
       },
       onMouseEnter: e => {
         if (!(view === item.id && !activeCase)) e.currentTarget.style.background = 'var(--bg-3)';
@@ -39924,7 +39929,7 @@ const ProviderApp = ({
     }), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12.5,
-        fontWeight: view === item.id || item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile') ? 600 : 400
+        fontWeight: (view === item.id || (item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile'))) && !activeCase ? 600 : 400
       }
     }, item.label), item.id === 'inbox' && cases.length + orgChannels.length > 0 && /*#__PURE__*/React.createElement("span", {
       className: "nav-badge nav-badge-gold"
@@ -42554,7 +42559,7 @@ const ProviderApp = ({
       padding: '12px 0',
       textAlign: 'center'
     }
-  }, "No messages") : messages.map((msg, i) => /*#__PURE__*/React.createElement("div", {
+  }, "No messages") : [...messages].reverse().map((msg, i) => /*#__PURE__*/React.createElement("div", {
     key: msg.id || i,
     style: {
       padding: '8px 0',
@@ -44704,7 +44709,7 @@ const ProviderApp = ({
         padding: '20px 0',
         textAlign: 'center'
       }
-    }, "No messages yet. Start the conversation.") : channelMessages.map((msg, i) => {
+    }, "No messages yet. Start the conversation.") : [...channelMessages].reverse().map((msg, i) => {
       const sender = resolveMessageSender(msg);
       return /*#__PURE__*/React.createElement("div", {
         key: msg.id || i,
@@ -49217,6 +49222,21 @@ const App = () => {
   if (!session) return /*#__PURE__*/React.createElement(LoginScreen, {
     onLogin: handleLogin
   });
+  const handleLogout = async () => {
+    try {
+      sessionStorage.removeItem('khora_session');
+      localStorage.removeItem('khora_session'); // clean up legacy
+      localStorage.removeItem('khora_active_context');
+      localStorage.removeItem('khora_active_org');
+      localStorage.removeItem('khora_welcomed');
+    } catch {}
+    await KhoraAuth.logout();
+    setSession(null);
+    setAvailableContexts([]);
+    setActiveContext(null);
+    setDetectedRoles(null);
+    setWelcomed(false);
+  };
   if (!activeContext) return /*#__PURE__*/React.createElement("div", {
     className: "grid-bg",
     style: {
@@ -49238,21 +49258,6 @@ const App = () => {
       marginTop: 16
     }
   }, "Detecting role context\u2026")));
-  const handleLogout = async () => {
-    try {
-      sessionStorage.removeItem('khora_session');
-      localStorage.removeItem('khora_session'); // clean up legacy
-      localStorage.removeItem('khora_active_context');
-      localStorage.removeItem('khora_active_org');
-      localStorage.removeItem('khora_welcomed');
-    } catch {}
-    await KhoraAuth.logout();
-    setSession(null);
-    setAvailableContexts([]);
-    setActiveContext(null);
-    setDetectedRoles(null);
-    setWelcomed(false);
-  };
   return /*#__PURE__*/React.createElement(React.Fragment, null, activeContext === 'client' ? /*#__PURE__*/React.createElement(ClientApp, {
     session: session,
     onLogout: handleLogout,

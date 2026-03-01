@@ -4124,13 +4124,13 @@ const ProviderApp = ({
         borderRadius: 'var(--r)',
         cursor: 'pointer',
         marginBottom: 1,
-        background: (view === item.id || item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile')) && !activeCase ? 'var(--bg-4)' : 'transparent',
-        borderLeft: (view === item.id || item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile')) && !activeCase ? `2px solid ${teamMode ? `hsl(${teamMode.color_hue || 260}, 60%, 55%)` : 'var(--gold)'}` : '2px solid transparent',
+        background: (view === item.id || (item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile'))) && !activeCase ? 'var(--bg-4)' : 'transparent',
+        borderLeft: (view === item.id || (item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile'))) && !activeCase ? `2px solid ${teamMode ? `hsl(${teamMode.color_hue || 260}, 60%, 55%)` : 'var(--gold)'}` : '2px solid transparent',
         display: 'flex',
         alignItems: 'center',
         gap: 8,
         transition: 'all .15s',
-        color: (view === item.id || item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile')) && !activeCase ? 'var(--tx-0)' : 'var(--tx-1)'
+        color: (view === item.id || (item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile'))) && !activeCase ? 'var(--tx-0)' : 'var(--tx-1)'
       },
       onMouseEnter: e => {
         if (!(view === item.id && !activeCase)) e.currentTarget.style.background = 'var(--bg-3)';
@@ -4144,7 +4144,7 @@ const ProviderApp = ({
     }), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12.5,
-        fontWeight: view === item.id || item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile') ? 600 : 400
+        fontWeight: (view === item.id || (item.id === 'database' && (view === 'individual-profile' || view === 'resource-profile'))) && !activeCase ? 600 : 400
       }
     }, item.label), item.id === 'inbox' && cases.length + orgChannels.length > 0 && /*#__PURE__*/React.createElement("span", {
       className: "nav-badge nav-badge-gold"
@@ -6781,7 +6781,7 @@ const ProviderApp = ({
       padding: '12px 0',
       textAlign: 'center'
     }
-  }, "No messages") : messages.map((msg, i) => /*#__PURE__*/React.createElement("div", {
+  }, "No messages") : [...messages].reverse().map((msg, i) => /*#__PURE__*/React.createElement("div", {
     key: msg.id || i,
     style: {
       padding: '8px 0',
@@ -8931,7 +8931,7 @@ const ProviderApp = ({
         padding: '20px 0',
         textAlign: 'center'
       }
-    }, "No messages yet. Start the conversation.") : channelMessages.map((msg, i) => {
+    }, "No messages yet. Start the conversation.") : [...channelMessages].reverse().map((msg, i) => {
       const sender = resolveMessageSender(msg);
       return /*#__PURE__*/React.createElement("div", {
         key: msg.id || i,
