@@ -350,32 +350,6 @@ const PersonalDashboard = ({
     };
   }, [loadBridgeActivity]);
 
-  // Auto-refresh active chat when new messages arrive in real time
-  useEffect(() => {
-    let debounce = null;
-    const msgHandler = (e) => {
-      const d = e.detail;
-      if (d?.type !== 'm.room.message' || d?.isOwn) return;
-      const rid = d?.roomId;
-      if (!rid) return;
-      if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        if (activeBridge && rid === activeBridge) loadBridgeMessages(activeBridge);
-        if (inboxConvo !== null) {
-          if (typeof inboxConvo === 'string' && rid === inboxConvo) loadInboxMessages(inboxConvo);
-          else if (typeof inboxConvo === 'number') {
-            const prov = providers[inboxConvo];
-            if (prov && rid === prov.bridgeRoomId) loadInboxMessages(prov.bridgeRoomId);
-          }
-        }
-      }, 300);
-    };
-    window.addEventListener('khora:timeline', msgHandler);
-    return () => {
-      window.removeEventListener('khora:timeline', msgHandler);
-      if (debounce) clearTimeout(debounce);
-    };
-  }, [activeBridge, inboxConvo, providers]);
 
   // Filtered events
   const filteredEvents = useMemo(() => {
