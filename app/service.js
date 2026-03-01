@@ -92,14 +92,7 @@ class KhoraService {
       }));
       return r.room_id;
     } else {
-      const r = await this._api('POST', '/createRoom', {
-        name,
-        topic,
-        visibility: 'private',
-        preset: 'private_chat',
-        initial_state
-      });
-      return r.room_id;
+      KhoraE2EE.requireEncryptedSend('create room');
     }
   }
 
@@ -152,8 +145,7 @@ class KhoraService {
       const r = await this._withRetry(() => this.client.createRoom(opts));
       return r.room_id;
     } else {
-      const r = await this._api('POST', '/createRoom', opts);
-      return r.room_id;
+      KhoraE2EE.requireEncryptedSend('create room');
     }
   }
   async setPowerLevel(roomId, userId, level) {
@@ -239,12 +231,7 @@ class KhoraService {
         }
       }
     } else {
-      // Guard: NEVER send to encrypted rooms via REST API — this bypasses Megolm and sends plaintext
-      if (this._isRoomEncrypted(roomId)) {
-        throw new Error('Cannot send to encrypted room — E2EE SDK unavailable. Please reload the app.');
-      }
-      const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
-      await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(type)}/${txn}`, content);
+      KhoraE2EE.requireEncryptedSend('send event');
     }
   }
   async sendMessage(roomId, body, extra = {}, replyTo = null) {
@@ -282,12 +269,7 @@ class KhoraService {
         }
       }
     } else {
-      // Guard: NEVER send messages to encrypted rooms via REST API — this bypasses Megolm
-      if (this._isRoomEncrypted(roomId)) {
-        throw new Error('Cannot send message to encrypted room — E2EE SDK unavailable. Please reload the app.');
-      }
-      const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
-      await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txn}`, content);
+      KhoraE2EE.requireEncryptedSend('send message');
     }
   }
   async getMessages(roomId, limit = 40) {

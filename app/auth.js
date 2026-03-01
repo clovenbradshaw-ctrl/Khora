@@ -296,82 +296,52 @@ const KhoraAuth = {
   async login(homeserver, user, pass) {
     const baseUrl = homeserver.startsWith('http') ? homeserver : `https://${homeserver}`;
     this._baseUrl = baseUrl;
-    if (typeof matrixcs !== 'undefined') {
-      this._client = matrixcs.createClient({ baseUrl });
-      const res = await this._client.login('m.login.password', { user, password: pass });
-      await LocalVaultCrypto.deriveKey(res.user_id, res.access_token, res.device_id);
-      await this._purgeUnencryptedStores();
-      this._client = matrixcs.createClient({
-        baseUrl,
+    KhoraE2EE.requireSDK();
+    this._client = matrixcs.createClient({ baseUrl });
+    const res = await this._client.login('m.login.password', { user, password: pass });
+    await LocalVaultCrypto.deriveKey(res.user_id, res.access_token, res.device_id);
+    await this._purgeUnencryptedStores();
+    const cryptoStore = KhoraE2EE.createCryptoStore();
+    this._client = matrixcs.createClient({
+      baseUrl,
+      accessToken: res.access_token,
+      userId: res.user_id,
+      deviceId: res.device_id,
+      cryptoStore
+    });
+    // E2EE is MANDATORY — abort login if crypto init fails
+    await KhoraE2EE.initMandatoryCrypto(this._client);
+    await this._client.startClient({ initialSyncLimit: 30 });
+    await new Promise((resolve, reject) => {
+      if (this._client.isInitialSyncComplete()) return resolve();
+      const timeout = setTimeout(() => reject(new Error('Sync timed out — the server may be overloaded. Please try again.')), 60000);
+      this._client.on('sync', (state, prev, data) => {
+        if (state === 'PREPARED') { clearTimeout(timeout); resolve(); }
+        else if (state === 'ERROR') { clearTimeout(timeout); reject(new Error(data?.error?.message || 'Sync failed — please try again.')); }
+      });
+    });
+    this._userId = res.user_id;
+    this._token = res.access_token;
+    this._setupTimelineListener();
+    // Security: store session in sessionStorage (clears on tab close) — never localStorage
+    try {
+      sessionStorage.setItem('khora_session', JSON.stringify({
+        homeserver: baseUrl,
         accessToken: res.access_token,
         userId: res.user_id,
         deviceId: res.device_id
+      }));
+      try { localStorage.removeItem('khora_session'); } catch {}
+    } catch {}
+    try {
+      await KhoraEncryptedCache.put('session', 'current', {
+        userId: res.user_id,
+        homeserver: baseUrl,
+        deviceId: res.device_id,
+        ts: Date.now()
       });
-      // Initialize E2EE crypto — retry up to 3 times to ensure encryption is active.
-      // If all retries fail, the session still starts but hasCrypto will be false
-      // and the UI will reflect that messages cannot be encrypted.
-      for (let cryptoAttempt = 0; cryptoAttempt < 3; cryptoAttempt++) {
-        try {
-          if (typeof Olm !== 'undefined') await Olm.init();
-          await this._client.initCrypto();
-          this._client.setGlobalErrorOnUnknownDevices(false);
-          break;
-        } catch (e) {
-          console.warn(`Crypto init attempt ${cryptoAttempt + 1}/3:`, e.message);
-          if (cryptoAttempt < 2) await new Promise(r => setTimeout(r, 1000 * (cryptoAttempt + 1)));
-        }
-      }
-      await this._client.startClient({ initialSyncLimit: 30 });
-      await new Promise((resolve, reject) => {
-        if (this._client.isInitialSyncComplete()) return resolve();
-        const timeout = setTimeout(() => reject(new Error('Sync timed out — the server may be overloaded. Please try again.')), 60000);
-        this._client.on('sync', (state, prev, data) => {
-          if (state === 'PREPARED') { clearTimeout(timeout); resolve(); }
-          else if (state === 'ERROR') { clearTimeout(timeout); reject(new Error(data?.error?.message || 'Sync failed — please try again.')); }
-        });
-      });
-      this._userId = res.user_id;
-      this._token = res.access_token;
-      this._setupTimelineListener();
-      // Security: store session in sessionStorage (clears on tab close) — never localStorage
-      try {
-        sessionStorage.setItem('khora_session', JSON.stringify({
-          homeserver: baseUrl,
-          accessToken: res.access_token,
-          userId: res.user_id,
-          deviceId: res.device_id
-        }));
-        // Clean up any stale localStorage session from previous versions
-        try { localStorage.removeItem('khora_session'); } catch {}
-      } catch {}
-      try {
-        await KhoraEncryptedCache.put('session', 'current', {
-          userId: res.user_id,
-          homeserver: baseUrl,
-          deviceId: res.device_id,
-          ts: Date.now()
-        });
-      } catch {}
-      return { userId: res.user_id };
-    } else {
-      const resp = await this._api('POST', '/login', {
-        type: 'm.login.password', user, password: pass
-      }, true);
-      this._token = resp.access_token;
-      this._userId = resp.user_id;
-      this._baseUrl = baseUrl;
-      // Security: store session in sessionStorage (clears on tab close) — never localStorage
-      try {
-        sessionStorage.setItem('khora_session', JSON.stringify({
-          homeserver: baseUrl,
-          accessToken: resp.access_token,
-          userId: resp.user_id,
-          deviceId: resp.device_id || 'fallback'
-        }));
-        try { localStorage.removeItem('khora_session'); } catch {}
-      } catch {}
-      return { userId: resp.user_id };
-    }
+    } catch {}
+    return { userId: res.user_id };
   },
 
   // DES(matrix.session, {check: whoami}) — token_validation
@@ -427,30 +397,20 @@ const KhoraAuth = {
     try {
       this._baseUrl = homeserver;
       await LocalVaultCrypto.deriveKey(userId, accessToken, deviceId);
-      if (typeof matrixcs !== 'undefined') {
-        this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId });
-        // Initialize E2EE crypto — retry up to 3 times to ensure encryption is active.
-        for (let cryptoAttempt = 0; cryptoAttempt < 3; cryptoAttempt++) {
-          try {
-            if (typeof Olm !== 'undefined') await Olm.init();
-            await this._client.initCrypto();
-            this._client.setGlobalErrorOnUnknownDevices(false);
-            break;
-          } catch (e) {
-            console.warn(`Crypto init attempt ${cryptoAttempt + 1}/3:`, e.message);
-            if (cryptoAttempt < 2) await new Promise(r => setTimeout(r, 1000 * (cryptoAttempt + 1)));
-          }
-        }
-        await this._client.startClient({ initialSyncLimit: 30 });
-        await new Promise((resolve, reject) => {
-          if (this._client.isInitialSyncComplete()) return resolve();
-          const timeout = setTimeout(() => reject(new Error('Sync timed out')), 90000);
-          this._client.on('sync', (state, prev, data) => {
-            if (state === 'PREPARED') { clearTimeout(timeout); resolve(); }
-            else if (state === 'ERROR') { clearTimeout(timeout); reject(new Error(data?.error?.message || 'Sync failed')); }
-          });
+      KhoraE2EE.requireSDK();
+      const cryptoStore = KhoraE2EE.createCryptoStore();
+      this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId, cryptoStore });
+      // E2EE is MANDATORY — abort restore if crypto init fails
+      await KhoraE2EE.initMandatoryCrypto(this._client);
+      await this._client.startClient({ initialSyncLimit: 30 });
+      await new Promise((resolve, reject) => {
+        if (this._client.isInitialSyncComplete()) return resolve();
+        const timeout = setTimeout(() => reject(new Error('Sync timed out')), 90000);
+        this._client.on('sync', (state, prev, data) => {
+          if (state === 'PREPARED') { clearTimeout(timeout); resolve(); }
+          else if (state === 'ERROR') { clearTimeout(timeout); reject(new Error(data?.error?.message || 'Sync failed')); }
         });
-      }
+      });
       this._userId = userId;
       this._token = accessToken;
       this._setupTimelineListener();
