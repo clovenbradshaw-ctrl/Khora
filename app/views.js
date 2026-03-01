@@ -1901,6 +1901,180 @@ const ProfileActivityFeed = ({
   }));
 };
 
+/* ─── CrmFieldRow — single inline-editable field row ─── */
+const CrmFieldRow = ({ fieldDef, value, disclosed, eoOp, frame, onSave, roomId, onRestore }) => {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const isLocked = disclosed === false;
+  const hasValue = value !== undefined && value !== null && value !== '';
+  const displayValue = Array.isArray(value) ? value.join(', ') : value;
+
+  // Multi-select needs special handling
+  if (fieldDef.data_type === 'multi_select' && !isLocked) {
+    const [msEditing, setMsEditing] = useState(false);
+    const currentArr = Array.isArray(value) ? value : (value ? value.split(', ').filter(Boolean) : []);
+    const toggleOpt = opt => {
+      const next = currentArr.includes(opt) ? currentArr.filter(v => v !== opt) : [...currentArr, opt];
+      onSave && onSave(next.join(', '));
+    };
+    return React.createElement("div", { className: "crm-field-row" },
+      React.createElement("div", { className: "crm-field-label" },
+        React.createElement("span", null, fieldDef.label),
+        fieldDef.sensitive && React.createElement(I, { n: "lock", s: 10, c: "var(--tx-3)" }),
+        fieldDef.required && React.createElement("span", { className: "crm-req" }, "*")
+      ),
+      React.createElement("div", { className: "crm-field-value", style: { position: 'relative' } },
+        React.createElement("div", {
+          className: "crm-ms-trigger" + (hasValue ? '' : ' empty'),
+          onClick: e => { e.stopPropagation(); setMsEditing(!msEditing); }
+        }, hasValue ? currentArr.map(v => React.createElement("span", { key: v, className: "crm-ms-chip" }, v)) : React.createElement("span", { className: "crm-placeholder" }, "Select...")),
+        msEditing && React.createElement("div", { className: "crm-ms-dd" },
+          (fieldDef.options || []).map(opt => React.createElement("label", {
+            key: opt, className: "crm-ms-opt", onClick: e => e.stopPropagation()
+          },
+            React.createElement("input", { type: "checkbox", checked: currentArr.includes(opt), onChange: () => toggleOpt(opt) }),
+            opt
+          )),
+          React.createElement("button", {
+            className: "b-gho b-xs", style: { width: '100%', marginTop: 4 },
+            onClick: e => { e.stopPropagation(); setMsEditing(false); }
+          }, "Done")
+        )
+      ),
+      React.createElement("div", { className: "crm-field-meta" },
+        eoOp && React.createElement(DtEo, { op: eoOp }),
+        frame && React.createElement("span", {
+          className: "dt-eo",
+          style: { background: frame === 'GIVEN' ? 'var(--teal-dim)' : 'var(--gold-dim)', color: frame === 'GIVEN' ? 'var(--teal)' : 'var(--gold)' }
+        }, frame),
+        roomId && React.createElement("span", {
+          onClick: () => setHistoryOpen(!historyOpen),
+          style: { cursor: 'pointer', color: historyOpen ? 'var(--teal)' : 'var(--tx-3)', marginLeft: 'auto' },
+          title: "View change history"
+        }, React.createElement(I, { n: "git-commit", s: 11 }))
+      ),
+      historyOpen && roomId && React.createElement("div", { style: { marginTop: 6 } },
+        React.createElement(RecordProvenance, {
+          roomId: roomId,
+          entityKey: 'org.individuals.' + fieldDef.key,
+          label: fieldDef.label,
+          session: null,
+          onRestore: onRestore ? v => onRestore(fieldDef.key, v) : null
+        })
+      )
+    );
+  }
+
+  // Standard fields: text, date, select, number, text_long, email, phone
+  return React.createElement("div", { className: "crm-field-row" },
+    React.createElement("div", { className: "crm-field-label" },
+      React.createElement("span", null, fieldDef.label),
+      fieldDef.sensitive && React.createElement(I, { n: "lock", s: 10, c: "var(--tx-3)" }),
+      fieldDef.required && React.createElement("span", { className: "crm-req" }, "*")
+    ),
+    React.createElement("div", { className: "crm-field-value" },
+      isLocked
+        ? React.createElement("div", { className: "dt-locked" }, React.createElement(DtLock, null), " not disclosed")
+        : React.createElement(EditableCell, {
+            value: displayValue || '',
+            onSave: onSave,
+            placeholder: fieldDef.data_type === 'date' ? 'Set date...'
+              : fieldDef.data_type === 'single_select' ? 'Select...'
+              : 'Click to edit...',
+            type: fieldDef.data_type,
+            options: fieldDef.data_type === 'single_select' ? fieldDef.options : undefined,
+            singleClick: true
+          })
+    ),
+    React.createElement("div", { className: "crm-field-meta" },
+      eoOp && React.createElement(DtEo, { op: eoOp }),
+      frame && React.createElement("span", {
+        className: "dt-eo",
+        style: { background: frame === 'GIVEN' ? 'var(--teal-dim)' : 'var(--gold-dim)', color: frame === 'GIVEN' ? 'var(--teal)' : 'var(--gold)' }
+      }, frame),
+      fieldDef.source && React.createElement("span", {
+        className: "tag",
+        style: { fontSize: 8, padding: '1px 4px', background: fieldDef.source === 'vault' ? 'var(--purple-dim)' : 'var(--bg-3)', color: fieldDef.source === 'vault' ? 'var(--purple)' : 'var(--tx-3)' }
+      }, fieldDef.source === 'vault' ? 'VAULT' : 'CRM'),
+      roomId && React.createElement("span", {
+        onClick: () => setHistoryOpen(!historyOpen),
+        style: { cursor: 'pointer', color: historyOpen ? 'var(--teal)' : 'var(--tx-3)', marginLeft: 'auto' },
+        title: "View change history"
+      }, React.createElement(I, { n: "git-commit", s: 11 }))
+    ),
+    historyOpen && roomId && React.createElement("div", { style: { marginTop: 6 } },
+      React.createElement(RecordProvenance, {
+        roomId: roomId,
+        entityKey: 'org.individuals.' + fieldDef.key,
+        label: fieldDef.label,
+        session: null,
+        onRestore: onRestore ? v => onRestore(fieldDef.key, v) : null
+      })
+    )
+  );
+};
+
+/* ─── CrmSection — collapsible section for CRM profile ─── */
+const CrmSection = ({ section, fields, individual, onFieldEdit, onRestore, fieldDefs }) => {
+  const [collapsed, setCollapsed] = useState(false);
+  const allFields = individual.fields || {};
+  const sharedData = individual._case?.sharedData || {};
+  const filledCount = section.fields.filter(f => {
+    const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
+    return val !== undefined && val !== null && val !== '';
+  }).length;
+  const sectionColor = `var(--${section.color})`;
+
+  return React.createElement("div", { className: "crm-section" + (collapsed ? " collapsed" : "") },
+    React.createElement("div", {
+      className: "crm-section-header",
+      onClick: () => setCollapsed(!collapsed),
+      style: { borderLeftColor: sectionColor }
+    },
+      React.createElement(I, { n: section.icon, s: 14, c: sectionColor }),
+      React.createElement("span", { className: "crm-section-label" }, section.label),
+      React.createElement("span", { className: "crm-section-count", style: { color: filledCount > 0 ? sectionColor : 'var(--tx-3)' } },
+        filledCount, "/", section.fields.length),
+      React.createElement(I, { n: collapsed ? "chevronRight" : "chevronDown", s: 12, c: "var(--tx-3)" })
+    ),
+    !collapsed && React.createElement("div", { className: "crm-section-body" },
+      section.fields.map(fieldDef => {
+        const fieldData = allFields[fieldDef.key];
+        const sharedVal = sharedData[fieldDef.key];
+        // Special handling for full_name — pull from individual.name
+        const rawValue = fieldDef.key === 'full_name'
+          ? (individual.name || '')
+          : (fieldData?.value || sharedVal || '');
+        return React.createElement(CrmFieldRow, {
+          key: fieldDef.key,
+          fieldDef: fieldDef,
+          value: rawValue,
+          disclosed: fieldData ? fieldData.disclosed : undefined,
+          eoOp: fieldData?.eo_op || null,
+          frame: fieldData?.frame || null,
+          onSave: v => onFieldEdit && onFieldEdit(individual, fieldDef.key, v),
+          roomId: individual.bridgeRoom || individual.id,
+          onRestore: onRestore
+        });
+      }),
+      // Custom fields from fieldDefs that fall into this section's category
+      fields.filter(f => !section.fields.some(sf => sf.key === f.key)).map(f => {
+        const fieldData = allFields[f.key];
+        return React.createElement(CrmFieldRow, {
+          key: f.key,
+          fieldDef: { ...f, source: 'custom' },
+          value: fieldData?.value || sharedData[f.key] || '',
+          disclosed: fieldData ? fieldData.disclosed : undefined,
+          eoOp: fieldData?.eo_op || null,
+          frame: fieldData?.frame || null,
+          onSave: v => onFieldEdit && onFieldEdit(individual, f.key, v),
+          roomId: individual.bridgeRoom || individual.id,
+          onRestore: onRestore
+        });
+      })
+    )
+  );
+};
+
 /* ─── IndividualProfilePage — full profile view for an individual ─── */
 const IndividualProfilePage = ({
   individual,
@@ -1920,7 +2094,8 @@ const IndividualProfilePage = ({
   canAllocateResource,
   onAllocate,
   fieldDefs,
-  onFieldEdit
+  onFieldEdit,
+  activeTeamObj
 }) => {
   const [tab, setTab] = useState('fields');
   const [profileAllocModal, setProfileAllocModal] = useState(false);
@@ -1961,15 +2136,30 @@ const IndividualProfilePage = ({
     style: {
       background: individual.status === 'revoked' ? 'var(--border-1)' : 'var(--green)'
     }
-  }, (individual.name || '?')[0].toUpperCase()), /*#__PURE__*/React.createElement("div", {
+  }, (individual.name || '?')[0].toUpperCase()), React.createElement("div", {
     className: "profile-info"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "profile-name"
-  }, individual.name || 'Unknown'), /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", { className: "profile-name", style: { display: 'flex', alignItems: 'center', gap: 6 } },
+    React.createElement(EditableCell, {
+      value: individual.name || '',
+      onSave: v => onFieldEdit && onFieldEdit(individual, 'name', v),
+      placeholder: "Enter name...",
+      singleClick: true
+    })
+  ), React.createElement("div", {
     className: "profile-badges"
-  }, /*#__PURE__*/React.createElement(DtStatusBadge, {
-    status: individual.status
-  }), individual.bridgeRoom && /*#__PURE__*/React.createElement(DtRoom, {
+  }, React.createElement(EditableCell, {
+    value: individual.status || 'active',
+    onSave: v => onFieldEdit && onFieldEdit(individual, 'status', v),
+    options: ['imported', 'invited', 'joined', 'claimed', 'active', 'revoked'],
+    singleClick: true,
+    renderDisplay: val => React.createElement(DtStatusBadge, { status: val })
+  }), React.createElement(EditableCell, {
+    value: individual.priority || 'none',
+    onSave: v => onFieldEdit && onFieldEdit(individual, 'priority', v),
+    options: ['none', 'low', 'medium', 'high', 'critical'],
+    singleClick: true,
+    renderDisplay: val => React.createElement("span", { className: 'tag ' + (DT_PRI_CFG[val] || 'tag-purple'), style: { fontSize: 10 } }, val)
+  }), individual.bridgeRoom && React.createElement(DtRoom, {
     room: individual.bridgeRoom
   }), individual.transferable ? /*#__PURE__*/React.createElement("span", {
     className: "tag tag-teal",
@@ -2050,109 +2240,99 @@ const IndividualProfilePage = ({
     key: t.id,
     className: 'profile-tab' + (tab === t.id ? ' active' : ''),
     onClick: () => setTab(t.id)
-  }, t.label))), tab === 'fields' && /*#__PURE__*/React.createElement("div", {
-    className: "profile-section"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "profile-section-title",
-    style: { marginBottom: 0 }
-  }, "Fields"), /*#__PURE__*/React.createElement("div", {
-    className: "dt-dd-wrap",
-    style: { position: 'relative' }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "b-pri b-sm",
-    style: { display: 'flex', alignItems: 'center', gap: 4 },
-    onClick: () => setAddFieldPicker(!addFieldPicker)
-  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Add Field"), addFieldPicker && /*#__PURE__*/React.createElement("div", {
-    className: "dt-dd",
-    style: { minWidth: 240, maxHeight: 280, overflow: 'auto', right: 0, left: 'auto' }
-  }, /*#__PURE__*/React.createElement("div", { className: "dt-dd-label" }, "Add a field value"), Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !(individual.fields || {})[d.key]).map(d => /*#__PURE__*/React.createElement("div", {
-    key: d.uri || d.key,
-    className: "dt-dd-item",
-    onClick: () => { setAddFieldValue(d); setAddFieldInput(''); setAddFieldPicker(false); }
-  }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 500, fontSize: 12.5 } }, d.label || d.key), /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: 'var(--tx-3)', marginTop: 1 } }, [d.category, d.data_type].filter(Boolean).join(' \u00b7 ')))), Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !(individual.fields || {})[d.key]).length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: { padding: '12px 14px', fontSize: 11.5, color: 'var(--tx-3)' }
-  }, "All fields already have values.")))), addFieldValue && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: { padding: 14, marginBottom: 12, border: '1px solid var(--gold)', background: 'var(--bg-2)' }
-  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--gold)' } }, "Set value for: ", addFieldValue.label || addFieldValue.key), /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 6 } }, /*#__PURE__*/React.createElement("input", {
-    className: "dt-search",
-    style: { flex: 1, width: 'auto' },
-    placeholder: `Enter ${addFieldValue.label || addFieldValue.key}...`,
-    value: addFieldInput,
-    onChange: e => setAddFieldInput(e.target.value),
-    onKeyDown: e => {
-      if (e.key === 'Enter' && addFieldInput.trim() && onFieldEdit) {
-        onFieldEdit(individual, addFieldValue.key, addFieldInput.trim());
-        setAddFieldValue(null);
-        setAddFieldInput('');
-      }
-    },
-    autoFocus: true
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "b-pri b-sm",
-    disabled: !addFieldInput.trim(),
-    onClick: () => {
-      if (addFieldInput.trim() && onFieldEdit) {
-        onFieldEdit(individual, addFieldValue.key, addFieldInput.trim());
-        setAddFieldValue(null);
-        setAddFieldInput('');
-      }
-    }
-  }, "Save"), /*#__PURE__*/React.createElement("button", {
-    className: "b-gho b-sm",
-    onClick: () => { setAddFieldValue(null); setAddFieldInput(''); }
-  }, "Cancel"))), Object.keys(individual.fields || {}).length === 0 && !addFieldValue ? /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      textAlign: 'center',
-      padding: '30px 20px',
-      color: 'var(--tx-3)'
-    }
-  }, "No fields yet. Click ", /*#__PURE__*/React.createElement("strong", null, "Add Field"), " above to get started.") : /*#__PURE__*/React.createElement("div", {
-    className: "profile-fields-grid"
-  }, Object.entries(individual.fields || {}).map(([key, f]) => {
-    const _fpOpen = provenanceTarget?.entityKey === key && provenanceTarget?.roomId === individual.bridgeRoom;
-    return /*#__PURE__*/React.createElement("div", {
-    key: key,
-    className: "profile-field-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "profile-field-label"
-  }, (() => { const def = Object.values(fieldDefs || {}).find(d => d.key === key); return def?.label || key.replace(/_/g, ' '); })()), f.disclosed === false ? /*#__PURE__*/React.createElement("div", {
-    className: "dt-locked"
-  }, /*#__PURE__*/React.createElement(DtLock, null), " not disclosed") : /*#__PURE__*/React.createElement("div", {
-    className: "profile-field-value"
-  }, f.value || '\u2014'), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 4,
-      marginTop: 6,
-      alignItems: 'center'
-    }
-  }, f.eo_op && /*#__PURE__*/React.createElement(DtEo, {
-    op: f.eo_op
-  }), f.frame && /*#__PURE__*/React.createElement("span", {
-    className: "dt-eo",
-    style: {
-      background: f.frame === 'GIVEN' ? 'var(--teal-dim)' : 'var(--gold-dim)',
-      color: f.frame === 'GIVEN' ? 'var(--teal)' : 'var(--gold)'
-    }
-  }, f.frame), individual.bridgeRoom && /*#__PURE__*/React.createElement("span", {
-    onClick: () => setProvenanceTarget(_fpOpen ? null : { entityKey: key, label: key.replace(/_/g, ' '), roomId: individual.bridgeRoom }),
-    style: { cursor: 'pointer', color: _fpOpen ? 'var(--teal)' : 'var(--tx-3)', transition: 'color .15s', marginLeft: 'auto' },
-    title: "View field history"
-  }, /*#__PURE__*/React.createElement(I, { n: "git-commit", s: 11 }))),
-  _fpOpen && /*#__PURE__*/React.createElement("div", {
-    style: { marginTop: 6 }
-  }, /*#__PURE__*/React.createElement(RecordProvenance, {
-    roomId: individual.bridgeRoom,
-    entityKey: key,
-    label: key.replace(/_/g, ' '),
-    session: null,
-    onRestore: onFieldEdit ? value => onFieldEdit(individual, key, value) : null
-  })));
-  }))), tab === 'notes' && /*#__PURE__*/React.createElement("div", {
+  }, t.label))), tab === 'fields' && React.createElement("div", {
+    className: "profile-section crm-profile"
+  },
+  // Section header with completion overview
+  React.createElement("div", {
+    style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }
+  },
+    React.createElement("div", null,
+      React.createElement("div", { className: "profile-section-title", style: { marginBottom: 2 } }, "Individual Record"),
+      React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)' } },
+        "All changes are tracked. Click any field to edit. ",
+        React.createElement(I, { n: "git-commit", s: 10, c: "var(--tx-3)" }), " = view history.")
+    ),
+    React.createElement("div", { style: { display: 'flex', gap: 6, alignItems: 'center' } },
+      React.createElement("span", {
+        style: { fontSize: 11, color: 'var(--tx-2)', fontFamily: 'var(--mono)' }
+      }, (() => {
+        const allFields = individual.fields || {};
+        const sharedData = individual._case?.sharedData || {};
+        const total = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.length, 0);
+        const filled = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.filter(f => {
+          const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
+          return val !== undefined && val !== null && val !== '';
+        }).length, 0);
+        return `${filled}/${total} fields`;
+      })()),
+      React.createElement("div", {
+        style: { width: 60, height: 4, borderRadius: 2, background: 'var(--bg-3)', overflow: 'hidden' }
+      }, React.createElement("div", {
+        style: { height: '100%', borderRadius: 2, background: 'var(--teal)', transition: 'width .3s', width: (() => {
+          const allFields = individual.fields || {};
+          const sharedData = individual._case?.sharedData || {};
+          const total = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.length, 0);
+          const filled = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.filter(f => {
+            const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
+            return val !== undefined && val !== null && val !== '';
+          }).length, 0);
+          return Math.round((filled / Math.max(total, 1)) * 100) + '%';
+        })() }
+      }))
+    )
+  ),
+  // Render all CRM sections
+  CRM_PROFILE_SECTIONS.map(section => {
+    // Gather any custom fieldDefs that match this section category
+    const catMap = { case_management: 'case', identity: 'identity', contact: 'contact', demographics: 'details', housing: 'details', case_tracking: 'case', exit_outcome: 'case', details: 'details', sensitive: 'sensitive' };
+    const extraFields = Object.values(fieldDefs || {}).filter(d =>
+      d.category === (catMap[section.id] || section.id) && !CRM_STANDARD_KEYS.has(d.key)
+    );
+    return React.createElement(CrmSection, {
+      key: section.id,
+      section: section,
+      fields: extraFields,
+      individual: individual,
+      onFieldEdit: onFieldEdit,
+      onRestore: onFieldEdit ? (key, v) => onFieldEdit(individual, key, v) : null,
+      fieldDefs: fieldDefs
+    });
+  }),
+  // Custom fields section (fieldDefs not in any standard section)
+  (() => {
+    const customDefs = Object.values(fieldDefs || {}).filter(d => !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
+    if (customDefs.length === 0) return null;
+    const allFields = individual.fields || {};
+    const sharedData = individual._case?.sharedData || {};
+    return React.createElement("div", { className: "crm-section" },
+      React.createElement("div", {
+        className: "crm-section-header",
+        style: { borderLeftColor: 'var(--purple)' }
+      },
+        React.createElement(I, { n: "grid", s: 14, c: "var(--purple)" }),
+        React.createElement("span", { className: "crm-section-label" }, "Custom Fields"),
+        React.createElement("span", { className: "crm-section-count", style: { color: 'var(--purple)' } }, customDefs.length)
+      ),
+      React.createElement("div", { className: "crm-section-body" },
+        customDefs.map(d => {
+          const fieldData = allFields[d.key];
+          return React.createElement(CrmFieldRow, {
+            key: d.key,
+            fieldDef: { key: d.key, label: d.label || d.key, data_type: d.data_type || 'text', source: 'custom', sensitive: d.sensitive, options: d.options },
+            value: fieldData?.value || sharedData[d.key] || '',
+            disclosed: fieldData ? fieldData.disclosed : undefined,
+            eoOp: fieldData?.eo_op || null,
+            frame: fieldData?.frame || null,
+            onSave: v => onFieldEdit && onFieldEdit(individual, d.key, v),
+            roomId: individual.bridgeRoom || individual.id,
+            onRestore: onFieldEdit ? (key, v) => onFieldEdit(individual, key, v) : null
+          });
+        })
+      )
+    );
+  })()
+  ), tab === 'notes' && /*#__PURE__*/React.createElement("div", {
     className: "profile-section"
   }, /*#__PURE__*/React.createElement("div", {
     style: {

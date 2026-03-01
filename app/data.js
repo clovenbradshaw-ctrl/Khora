@@ -173,12 +173,77 @@ const dtFmtDate = iso => {
   });
 };
 
+/* ═══════════════════ CRM PROFILE SECTIONS ═══════════════════
+ * Unified field schema merging vault fields + CRM columns for the
+ * individual profile page. Each section groups related fields with
+ * their data types, options, and sensitivity markers.
+ * ════════════════════════════════════════════════════════════════ */
+const CRM_PROFILE_SECTIONS = [
+  { id: 'case_management', label: 'Case Management', icon: 'briefcase', color: 'gold', fields: [
+    { key: 'intake_date', label: 'Intake Date', data_type: 'date', source: 'crm', required: true },
+    { key: 'status', label: 'Case Status', data_type: 'single_select', source: 'crm', required: true, options: ['active', 'pending', 'inactive', 'closed', 'waitlist'] },
+    { key: 'assigned_to', label: 'Assigned Case Manager', data_type: 'text', source: 'crm' },
+    { key: 'referral_source', label: 'Referral Source', data_type: 'text', source: 'crm' },
+    { key: 'priority', label: 'Priority', data_type: 'single_select', source: 'crm', options: ['urgent', 'high', 'medium', 'low'] },
+    { key: 'program', label: 'Program / Service', data_type: 'text', source: 'crm' },
+  ]},
+  { id: 'identity', label: 'Identity', icon: 'user', color: 'blue', fields: [
+    { key: 'full_name', label: 'Full Name', data_type: 'text', source: 'vault' },
+    { key: 'dob', label: 'Date of Birth', data_type: 'date', source: 'vault', sensitive: true },
+    { key: 'id_number', label: 'ID Number', data_type: 'text', source: 'vault', sensitive: true },
+  ]},
+  { id: 'contact', label: 'Contact', icon: 'msg', color: 'teal', fields: [
+    { key: 'email', label: 'Email', data_type: 'email', source: 'vault' },
+    { key: 'phone', label: 'Phone', data_type: 'phone', source: 'vault' },
+    { key: 'address', label: 'Address', data_type: 'text', source: 'vault', sensitive: true },
+  ]},
+  { id: 'demographics', label: 'Demographics', icon: 'users', color: 'purple', fields: [
+    { key: 'gender_identity', label: 'Gender Identity', data_type: 'text', source: 'crm', sensitive: true },
+    { key: 'race_ethnicity', label: 'Race / Ethnicity', data_type: 'multi_select', source: 'crm', sensitive: true, options: ['American Indian or Alaska Native', 'Asian', 'Black or African American', 'Hispanic or Latino', 'Native Hawaiian or Pacific Islander', 'White', 'Multiracial', 'Other', 'Unknown', 'Prefer not to say'] },
+    { key: 'veteran_status', label: 'Veteran Status', data_type: 'single_select', source: 'crm', options: ['Yes', 'No', 'Unknown'] },
+    { key: 'household_size', label: 'Household Size', data_type: 'number', source: 'crm' },
+    { key: 'disability', label: 'Disability Status', data_type: 'multi_select', source: 'crm', sensitive: true, options: ['Physical', 'Cognitive', 'Mental Health', 'Substance Use Disorder', 'Chronic Health Condition', 'None', 'Unknown', 'Prefer not to say'] },
+    { key: 'income_source', label: 'Primary Income Source', data_type: 'multi_select', source: 'crm', options: ['Employment', 'SSI', 'SSDI', 'TANF', 'General Assistance', 'VA Benefits', 'Child Support', 'No Income', 'Other', 'Unknown'] },
+  ]},
+  { id: 'housing', label: 'Housing', icon: 'globe', color: 'orange', fields: [
+    { key: 'housing_status', label: 'Housing Status', data_type: 'single_select', source: 'crm', options: ['Unsheltered', 'Emergency Shelter', 'Safe Haven', 'Transitional Housing', 'Doubled Up', 'Hotel or Motel', 'Permanent Housing', 'Unknown'] },
+    { key: 'chronic_homeless', label: 'Chronic Homelessness', data_type: 'single_select', source: 'crm', options: ['Yes', 'No', 'Unknown'] },
+    { key: 'living_situation', label: 'Living Situation Detail', data_type: 'text', source: 'crm' },
+  ]},
+  { id: 'case_tracking', label: 'Case Tracking', icon: 'layers', color: 'teal', fields: [
+    { key: 'presenting_situation', label: 'Presenting Situation', data_type: 'text_long', source: 'crm' },
+    { key: 'goals', label: 'Goals', data_type: 'text_long', source: 'crm' },
+    { key: 'barriers', label: 'Barriers', data_type: 'text_long', source: 'crm' },
+    { key: 'last_contact_date', label: 'Last Contact Date', data_type: 'date', source: 'crm' },
+    { key: 'next_appointment', label: 'Next Appointment', data_type: 'date', source: 'crm' },
+  ]},
+  { id: 'exit_outcome', label: 'Exit & Outcome', icon: 'flag', color: 'green', fields: [
+    { key: 'exit_date', label: 'Exit Date', data_type: 'date', source: 'crm' },
+    { key: 'exit_destination', label: 'Exit Destination', data_type: 'single_select', source: 'crm', options: ['Permanent Housing', 'Transitional Housing', 'Family or Friends', 'Emergency Shelter', 'Another Provider', 'Institutional Setting', 'No Contact / Left', 'Deceased', 'Unknown', 'Other'] },
+    { key: 'outcome', label: 'Outcome Notes', data_type: 'text_long', source: 'crm' },
+  ]},
+  { id: 'details', label: 'Details', icon: 'folder', color: 'gold', fields: [
+    { key: 'affiliation', label: 'Organization / Affiliation', data_type: 'text', source: 'vault' },
+    { key: 'case_notes', label: 'Case Notes', data_type: 'text_long', source: 'vault' },
+    { key: 'documents', label: 'Documents', data_type: 'text', source: 'vault', sensitive: true },
+    { key: 'history', label: 'Case History', data_type: 'text_long', source: 'vault' },
+  ]},
+  { id: 'sensitive', label: 'Sensitive', icon: 'shieldCheck', color: 'red', fields: [
+    { key: 'restricted_notes', label: 'Restricted Notes', data_type: 'text_long', source: 'vault', sensitive: true },
+  ]},
+];
+// Set of all standard CRM field keys (for identifying custom fields)
+const CRM_STANDARD_KEYS = new Set(CRM_PROFILE_SECTIONS.flatMap(s => s.fields.map(f => f.key)));
+
 /* ─── EditableCell — click-to-edit cell with blur save ─── */
 const EditableCell = ({
   value,
   onSave,
   placeholder,
-  type
+  type,
+  options,
+  renderDisplay,
+  singleClick
 }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || '');
@@ -193,36 +258,99 @@ const EditableCell = ({
     setEditing(false);
     if (draft !== (value || '')) onSave && onSave(draft);
   };
-  if (editing) return /*#__PURE__*/React.createElement("input", {
-    ref: inputRef,
-    className: "dt-ecell-input",
-    value: draft,
-    onChange: e => setDraft(e.target.value),
-    onBlur: commit,
-    onKeyDown: e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        commit();
-      }
-      if (e.key === 'Escape') {
-        setDraft(value || '');
-        setEditing(false);
-      }
-    },
-    onClick: e => e.stopPropagation()
-  });
-  return /*#__PURE__*/React.createElement("div", {
+  const startEdit = e => {
+    e.stopPropagation();
+    setEditing(true);
+  };
+  if (editing) {
+    // Select dropdown for fields with options
+    if (options && options.length > 0) {
+      return React.createElement("select", {
+        ref: inputRef,
+        className: "dt-ecell-input",
+        value: draft,
+        onChange: e => { setDraft(e.target.value); },
+        onBlur: commit,
+        onKeyDown: e => {
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+        },
+        onClick: e => e.stopPropagation(),
+        style: { cursor: 'pointer' }
+      }, React.createElement("option", { value: "" }, "— Select —"),
+        options.map(o => React.createElement("option", { key: o, value: o }, o)));
+    }
+    // Textarea for text_long
+    if (type === 'text_long') {
+      return React.createElement("textarea", {
+        ref: inputRef,
+        className: "dt-ecell-input",
+        value: draft,
+        onChange: e => setDraft(e.target.value),
+        onBlur: commit,
+        onKeyDown: e => {
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+        },
+        onClick: e => e.stopPropagation(),
+        rows: 3,
+        style: { resize: 'vertical', minHeight: 60, fontFamily: 'inherit', fontSize: 'inherit' }
+      });
+    }
+    // Date input
+    if (type === 'date') {
+      return React.createElement("input", {
+        ref: inputRef,
+        className: "dt-ecell-input",
+        type: "date",
+        value: draft,
+        onChange: e => setDraft(e.target.value),
+        onBlur: commit,
+        onKeyDown: e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+        },
+        onClick: e => e.stopPropagation()
+      });
+    }
+    // Number input
+    if (type === 'number') {
+      return React.createElement("input", {
+        ref: inputRef,
+        className: "dt-ecell-input",
+        type: "number",
+        value: draft,
+        onChange: e => setDraft(e.target.value),
+        onBlur: commit,
+        onKeyDown: e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+        },
+        onClick: e => e.stopPropagation()
+      });
+    }
+    // Default text input (also handles email, phone, etc.)
+    return React.createElement("input", {
+      ref: inputRef,
+      className: "dt-ecell-input",
+      type: type === 'email' ? 'email' : type === 'phone' ? 'tel' : 'text',
+      value: draft,
+      onChange: e => setDraft(e.target.value),
+      onBlur: commit,
+      onKeyDown: e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+      },
+      onClick: e => e.stopPropagation()
+    });
+  }
+  // Display mode
+  const displayContent = renderDisplay ? renderDisplay(draft) : null;
+  return React.createElement("div", {
     className: "dt-ecell",
-    title: "Double-click to edit",
-    onDoubleClick: e => {
-      e.stopPropagation();
-      setEditing(true);
-    }
-  }, draft || /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--tx-3)',
-      fontStyle: 'italic'
-    }
+    title: singleClick ? "Click to edit" : "Double-click to edit",
+    onClick: singleClick ? startEdit : undefined,
+    onDoubleClick: singleClick ? undefined : startEdit
+  }, displayContent || draft || React.createElement("span", {
+    style: { color: 'var(--tx-3)', fontStyle: 'italic' }
   }, placeholder || '—'));
 };
 
@@ -460,10 +588,13 @@ const DataTable = ({
     onClick: e => toggleSelect(row.id, e)
   }, selected.has(row.id) ? '✓' : '')), visCols.map(col => /*#__PURE__*/React.createElement("td", {
     key: col.key
-  }, editable && col.editable ? /*#__PURE__*/React.createElement(EditableCell, {
+  }, editable && col.editable ? React.createElement(EditableCell, {
     value: getVal(row, col.key),
     placeholder: col.placeholder,
-    onSave: v => onCellEdit && onCellEdit(row, col.key, v)
+    onSave: v => onCellEdit && onCellEdit(row, col.key, v),
+    options: col.options,
+    type: col.data_type,
+    renderDisplay: col.options || col.renderDisplay ? () => renderCell(row, col) : undefined
   }) : renderCell(row, col))))))))), onAddRow && /*#__PURE__*/React.createElement("div", {
     className: "dt-add-row",
     onClick: onAddRow
@@ -2161,6 +2292,189 @@ const CreateLinkedRecordModal = ({
   })));
 };
 
+/* ─── BulkAddFieldsModal — add fields to multiple individuals at once ─── */
+const BulkAddFieldsModal = ({ open, onClose, selectedIds, individuals, fieldDefs, onApply, showToast }) => {
+  const [checked, setChecked] = useState({});
+  const [values, setValues] = useState({});
+  const [search, setSearch] = useState('');
+  const [applying, setApplying] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [collapsedSections, setCollapsedSections] = useState({});
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (open) { setChecked({}); setValues({}); setSearch(''); setApplying(false); setProgress({ done: 0, total: 0 }); }
+  }, [open]);
+
+  if (!open) return null;
+
+  const selectedInds = (individuals || []).filter(ind => selectedIds.has(ind.id));
+  const checkedKeys = Object.keys(checked).filter(k => checked[k]);
+
+  // Determine which fields are already set on ALL selected individuals
+  const allHaveField = key => selectedInds.every(ind => {
+    const f = ind.fields?.[key];
+    const sd = ind._case?.sharedData?.[key];
+    return (f?.value || sd || (key === 'full_name' ? ind.name : ''));
+  });
+
+  // Build sections: CRM standard + custom fieldDefs
+  const allSections = [...CRM_PROFILE_SECTIONS];
+  const customDefs = Object.values(fieldDefs || {}).filter(d => !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
+  if (customDefs.length > 0) {
+    allSections.push({
+      id: 'custom', label: 'Custom Fields', icon: 'grid', color: 'purple',
+      fields: customDefs.map(d => ({ key: d.key, label: d.label || d.key, data_type: d.data_type || 'text', source: 'custom', options: d.options }))
+    });
+  }
+
+  // Filter by search
+  const matchesSearch = f => !search || f.label.toLowerCase().includes(search.toLowerCase()) || f.key.toLowerCase().includes(search.toLowerCase());
+
+  const toggleSection = id => setCollapsedSections(prev => ({ ...prev, [id]: !prev[id] }));
+
+  const handleApply = async () => {
+    if (checkedKeys.length === 0) return;
+    setApplying(true);
+    const total = selectedInds.length * checkedKeys.length;
+    setProgress({ done: 0, total });
+    let done = 0;
+    for (const ind of selectedInds) {
+      for (const key of checkedKeys) {
+        try {
+          await onApply(ind, key, values[key] || '');
+        } catch (e) {
+          console.warn('Bulk field apply failed:', ind.id, key, e.message);
+        }
+        done++;
+        setProgress({ done, total });
+      }
+    }
+    setApplying(false);
+    if (showToast) showToast(`Added ${checkedKeys.length} field(s) to ${selectedInds.length} individual(s)`, 'success');
+    onClose();
+  };
+
+  return React.createElement("div", {
+    className: "cf-overlay",
+    onClick: e => { if (e.target === e.currentTarget && !applying) onClose(); }
+  },
+    React.createElement("div", { className: "cf-modal", style: { width: 600, maxHeight: '80vh', display: 'flex', flexDirection: 'column' } },
+      // Header
+      React.createElement("div", { className: "cf-header" },
+        React.createElement("h3", null, "Add Fields to ", selectedInds.length, " Individual", selectedInds.length !== 1 ? "s" : ""),
+        React.createElement("button", {
+          className: "b-gho b-xs",
+          onClick: onClose,
+          disabled: applying,
+          style: { fontSize: 16, lineHeight: 1, padding: '2px 8px' }
+        }, "\u2715")
+      ),
+      // Search
+      React.createElement("div", { style: { padding: '0 20px 10px' } },
+        React.createElement("input", {
+          className: "dt-search",
+          placeholder: "Search fields...",
+          value: search,
+          onChange: e => setSearch(e.target.value),
+          style: { width: '100%' }
+        })
+      ),
+      // Field list (scrollable)
+      React.createElement("div", { style: { flex: 1, overflow: 'auto', padding: '0 20px' } },
+        allSections.map(section => {
+          const visibleFields = section.fields.filter(matchesSearch);
+          if (visibleFields.length === 0) return null;
+          const isCollapsed = collapsedSections[section.id];
+          const sColor = `var(--${section.color})`;
+          return React.createElement("div", { key: section.id, style: { marginBottom: 12 } },
+            React.createElement("div", {
+              style: { display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '6px 0', borderBottom: '1px solid var(--border-0)' },
+              onClick: () => toggleSection(section.id)
+            },
+              React.createElement(I, { n: section.icon, s: 12, c: sColor }),
+              React.createElement("span", { style: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: sColor } }, section.label),
+              React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)', marginLeft: 'auto' } }, visibleFields.length, " fields"),
+              React.createElement(I, { n: isCollapsed ? "chevronRight" : "chevronDown", s: 10, c: "var(--tx-3)" })
+            ),
+            !isCollapsed && visibleFields.map(f => {
+              const alreadySet = allHaveField(f.key);
+              const isChecked = checked[f.key] || false;
+              return React.createElement("div", {
+                key: f.key,
+                className: "bulk-field-row" + (alreadySet ? " already-set" : ""),
+                style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0 6px 18px', opacity: alreadySet ? 0.5 : 1 }
+              },
+                React.createElement("div", {
+                  className: 'dt-cb' + (isChecked ? ' checked' : ''),
+                  onClick: () => { if (!alreadySet) setChecked(prev => ({ ...prev, [f.key]: !prev[f.key] })); },
+                  style: { flexShrink: 0, width: 16, height: 16, cursor: alreadySet ? 'not-allowed' : 'pointer' }
+                }, isChecked ? '\u2713' : ''),
+                React.createElement("div", { style: { flex: '0 0 140px', minWidth: 0 } },
+                  React.createElement("div", { style: { fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, f.label),
+                  React.createElement("div", { style: { fontSize: 9, color: 'var(--tx-3)' } },
+                    f.data_type, f.sensitive ? ' \u00b7 sensitive' : '', alreadySet ? ' \u00b7 already set' : '')
+                ),
+                // Value input (shown when checked and not already set)
+                isChecked && !alreadySet && React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  f.data_type === 'single_select' && f.options
+                    ? React.createElement("select", {
+                        className: "dt-ecell-input",
+                        value: values[f.key] || '',
+                        onChange: e => setValues(prev => ({ ...prev, [f.key]: e.target.value })),
+                        style: { width: '100%', fontSize: 11 }
+                      },
+                        React.createElement("option", { value: "" }, "(empty)"),
+                        f.options.map(o => React.createElement("option", { key: o, value: o }, o))
+                      )
+                    : f.data_type === 'date'
+                    ? React.createElement("input", {
+                        className: "dt-ecell-input",
+                        type: "date",
+                        value: values[f.key] || '',
+                        onChange: e => setValues(prev => ({ ...prev, [f.key]: e.target.value })),
+                        style: { width: '100%', fontSize: 11 }
+                      })
+                    : React.createElement("input", {
+                        className: "dt-ecell-input",
+                        placeholder: "Default value (optional)",
+                        value: values[f.key] || '',
+                        onChange: e => setValues(prev => ({ ...prev, [f.key]: e.target.value })),
+                        style: { width: '100%', fontSize: 11 }
+                      })
+                )
+              );
+            })
+          );
+        })
+      ),
+      // Footer
+      React.createElement("div", {
+        style: { padding: '12px 20px', borderTop: '1px solid var(--border-0)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
+      },
+        React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-2)' } },
+          checkedKeys.length, " field", checkedKeys.length !== 1 ? "s" : "", " selected",
+          applying ? ` \u00b7 ${progress.done}/${progress.total}` : " \u00b7 empty values = placeholder"
+        ),
+        React.createElement("div", { style: { display: 'flex', gap: 6 } },
+          React.createElement("button", {
+            className: "b-gho b-sm",
+            onClick: onClose,
+            disabled: applying
+          }, "Cancel"),
+          React.createElement("button", {
+            className: "b-pri b-sm",
+            disabled: checkedKeys.length === 0 || applying,
+            onClick: handleApply,
+            style: { display: 'flex', alignItems: 'center', gap: 4 }
+          }, applying ? React.createElement(Spin, { s: 12 }) : React.createElement(I, { n: "plus", s: 11 }),
+            applying ? `Applying ${progress.done}/${progress.total}...` : `Apply to ${selectedInds.length}`)
+        )
+      )
+    )
+  );
+};
+
 /* ─── DatabaseView — unified tabbed view for Individuals, Notes, Resources ─── */
 const DatabaseView = ({
   cases,
@@ -2233,6 +2547,7 @@ const DatabaseView = ({
   const [enabledFieldCols, setEnabledFieldCols] = useState([]);
   const [addFieldDd, setAddFieldDd] = useState(false);
   const [addColumnModal, setAddColumnModal] = useState(false);
+  const [bulkFieldsModal, setBulkFieldsModal] = useState(null); // Set of selected row IDs
 
   // Transform cases into individual rows (same as IndividualsView)
   const individuals = cases.map(c => {
@@ -2294,14 +2609,18 @@ const DatabaseView = ({
     placeholder: 'Enter name...'
   }, {
     key: 'status',
-    label: 'Status'
+    label: 'Status',
+    editable: true,
+    options: ['imported', 'invited', 'joined', 'claimed', 'active', 'revoked']
   }, {
     key: 'priority',
     label: 'Priority',
-    editable: true
+    editable: true,
+    options: ['none', 'low', 'medium', 'high', 'critical']
   }, {
     key: 'assignedTo',
-    label: 'Assigned'
+    label: 'Assigned',
+    editable: true
   }, {
     key: 'fields_count',
     label: 'Fields'
@@ -2810,6 +3129,11 @@ const DatabaseView = ({
     label: "individuals",
     selectable: true,
     bulkActions: [{
+      id: 'add_fields',
+      label: 'Add Fields',
+      cls: 'b-gho b-xs',
+      icon: 'grid'
+    }, {
       id: 'assign',
       label: 'Assign',
       cls: 'b-gho b-xs',
@@ -2825,13 +3149,29 @@ const DatabaseView = ({
       cls: 'b-red b-xs',
       icon: 'trash'
     }],
-    onBulkAction: onBulkAction,
+    onBulkAction: (actionId, selectedRows) => {
+      if (actionId === 'add_fields') {
+        setBulkFieldsModal(new Set(selectedRows));
+        return;
+      }
+      onBulkAction && onBulkAction(actionId, selectedRows);
+    },
     draggable: true,
     onReorder: onReorder,
     editable: true,
     onCellEdit: onCellEdit,
     onAddRow: onAddRow || onCreateClient,
     addRowLabel: `Add ${T?.client_term || 'Individual'}`
+  }),
+  // Bulk Add Fields Modal
+  React.createElement(BulkAddFieldsModal, {
+    open: !!bulkFieldsModal,
+    onClose: () => setBulkFieldsModal(null),
+    selectedIds: bulkFieldsModal || new Set(),
+    individuals: allIndividuals,
+    fieldDefs: fieldDefs,
+    onApply: onCellEdit,
+    showToast: showToast
   })), dbTab === 'notes' && /*#__PURE__*/React.createElement(NotesTable, {
     notes: notes,
     individuals: allIndividuals,

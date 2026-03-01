@@ -224,6 +224,10 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
   .tab{white-space:nowrap;flex-shrink:0}
   /* Profile grid: single column */
   .profile-fields-grid{grid-template-columns:1fr}
+  /* CRM field row: stack on mobile */
+  .crm-field-row{grid-template-columns:1fr;gap:2px}
+  .crm-field-label{padding-top:0}
+  .crm-field-meta{justify-content:flex-start}
   /* Dashboard stats: 2 columns */
   .pd-grid{grid-template-columns:repeat(2,1fr)}
   /* Page headers: stack vertically */
@@ -1237,6 +1241,39 @@ table.dt td.dt-drag-handle:active{cursor:grabbing}
 .profile-field-card{padding:12px 14px;border-radius:var(--r);border:1px solid var(--border-0);background:var(--bg-2)}
 .profile-field-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--tx-2);margin-bottom:4px}
 .profile-field-value{font-size:14px;font-weight:500;color:var(--tx-0)}
+/* ═══ CRM Profile Sections ═══ */
+.crm-profile{display:flex;flex-direction:column;gap:8px}
+.crm-section{border:1px solid var(--border-0);border-radius:var(--r-lg);background:var(--bg-1);overflow:hidden}
+.crm-section.collapsed .crm-section-body{display:none}
+.crm-section-header{display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;border-left:3px solid var(--border-1);transition:background .12s;user-select:none}
+.crm-section-header:hover{background:var(--bg-2)}
+.crm-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.crm-section-count{font-size:10px;font-family:var(--mono);margin-left:auto;margin-right:4px}
+.crm-section-body{border-top:1px solid var(--border-0);padding:4px 0}
+.crm-field-row{display:grid;grid-template-columns:160px 1fr auto;align-items:start;gap:8px;padding:7px 14px 7px 20px;transition:background .1s;min-height:34px}
+.crm-field-row:hover{background:var(--bg-2)}
+.crm-field-label{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--tx-2);padding-top:3px;min-width:0}
+.crm-field-label span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-field-value{min-width:0}
+.crm-field-value .dt-ecell{font-size:13px;min-height:22px;padding:1px 0}
+.crm-field-value .dt-ecell-input{font-size:12px;padding:3px 6px;width:100%;box-sizing:border-box}
+.crm-field-value select.dt-ecell-input{cursor:pointer}
+.crm-field-value textarea.dt-ecell-input{font-size:12px;padding:4px 6px;line-height:1.4}
+.crm-field-meta{display:flex;align-items:center;gap:4px;padding-top:3px;flex-shrink:0;min-width:60px;justify-content:flex-end}
+.crm-req{color:var(--red);font-size:10px;font-weight:700}
+.crm-placeholder{color:var(--tx-3);font-style:italic;font-size:12px}
+/* Multi-select field */
+.crm-ms-trigger{display:flex;flex-wrap:wrap;gap:3px;cursor:pointer;min-height:22px;padding:2px 0;border-bottom:1px dashed transparent;transition:border-color .12s}
+.crm-ms-trigger:hover{border-bottom-color:var(--gold-dim)}
+.crm-ms-trigger.empty{padding-top:3px}
+.crm-ms-chip{font-size:10px;padding:1px 6px;border-radius:9px;background:var(--teal-dim);color:var(--teal);white-space:nowrap}
+.crm-ms-dd{position:absolute;top:100%;left:0;right:0;z-index:90;background:var(--bg-1);border:1px solid var(--border-1);border-radius:var(--r);box-shadow:0 6px 20px rgba(0,0,0,.15);padding:6px;max-height:200px;overflow:auto}
+.crm-ms-opt{display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:11.5px;cursor:pointer;border-radius:3px;transition:background .1s}
+.crm-ms-opt:hover{background:var(--bg-3)}
+.crm-ms-opt input[type=checkbox]{accent-color:var(--teal)}
+/* Bulk field modal */
+.bulk-field-row.already-set{cursor:not-allowed}
+.bulk-field-row .dt-ecell-input{font-size:11px;padding:2px 6px}
 /* ═══ Tombstone display ═══ */
 .tombstone-notice{padding:14px 16px;border-radius:var(--r);background:var(--red-dim);border:1px solid rgba(232,93,93,.15);display:flex;align-items:center;gap:10px;font-size:12px;color:var(--red)}
 /* ═══ Personal Dashboard ═══ */
@@ -26779,12 +26816,76 @@ const dtFmtDate = iso => {
   });
 };
 
+/* ═══════════════════ CRM PROFILE SECTIONS ═══════════════════
+ * Unified field schema merging vault fields + CRM columns for the
+ * individual profile page. Each section groups related fields with
+ * their data types, options, and sensitivity markers.
+ * ════════════════════════════════════════════════════════════════ */
+const CRM_PROFILE_SECTIONS = [
+  { id: 'case_management', label: 'Case Management', icon: 'briefcase', color: 'gold', fields: [
+    { key: 'intake_date', label: 'Intake Date', data_type: 'date', source: 'crm', required: true },
+    { key: 'status', label: 'Case Status', data_type: 'single_select', source: 'crm', required: true, options: ['active', 'pending', 'inactive', 'closed', 'waitlist'] },
+    { key: 'assigned_to', label: 'Assigned Case Manager', data_type: 'text', source: 'crm' },
+    { key: 'referral_source', label: 'Referral Source', data_type: 'text', source: 'crm' },
+    { key: 'priority', label: 'Priority', data_type: 'single_select', source: 'crm', options: ['urgent', 'high', 'medium', 'low'] },
+    { key: 'program', label: 'Program / Service', data_type: 'text', source: 'crm' },
+  ]},
+  { id: 'identity', label: 'Identity', icon: 'user', color: 'blue', fields: [
+    { key: 'full_name', label: 'Full Name', data_type: 'text', source: 'vault' },
+    { key: 'dob', label: 'Date of Birth', data_type: 'date', source: 'vault', sensitive: true },
+    { key: 'id_number', label: 'ID Number', data_type: 'text', source: 'vault', sensitive: true },
+  ]},
+  { id: 'contact', label: 'Contact', icon: 'msg', color: 'teal', fields: [
+    { key: 'email', label: 'Email', data_type: 'email', source: 'vault' },
+    { key: 'phone', label: 'Phone', data_type: 'phone', source: 'vault' },
+    { key: 'address', label: 'Address', data_type: 'text', source: 'vault', sensitive: true },
+  ]},
+  { id: 'demographics', label: 'Demographics', icon: 'users', color: 'purple', fields: [
+    { key: 'gender_identity', label: 'Gender Identity', data_type: 'text', source: 'crm', sensitive: true },
+    { key: 'race_ethnicity', label: 'Race / Ethnicity', data_type: 'multi_select', source: 'crm', sensitive: true, options: ['American Indian or Alaska Native', 'Asian', 'Black or African American', 'Hispanic or Latino', 'Native Hawaiian or Pacific Islander', 'White', 'Multiracial', 'Other', 'Unknown', 'Prefer not to say'] },
+    { key: 'veteran_status', label: 'Veteran Status', data_type: 'single_select', source: 'crm', options: ['Yes', 'No', 'Unknown'] },
+    { key: 'household_size', label: 'Household Size', data_type: 'number', source: 'crm' },
+    { key: 'disability', label: 'Disability Status', data_type: 'multi_select', source: 'crm', sensitive: true, options: ['Physical', 'Cognitive', 'Mental Health', 'Substance Use Disorder', 'Chronic Health Condition', 'None', 'Unknown', 'Prefer not to say'] },
+    { key: 'income_source', label: 'Primary Income Source', data_type: 'multi_select', source: 'crm', options: ['Employment', 'SSI', 'SSDI', 'TANF', 'General Assistance', 'VA Benefits', 'Child Support', 'No Income', 'Other', 'Unknown'] },
+  ]},
+  { id: 'housing', label: 'Housing', icon: 'globe', color: 'orange', fields: [
+    { key: 'housing_status', label: 'Housing Status', data_type: 'single_select', source: 'crm', options: ['Unsheltered', 'Emergency Shelter', 'Safe Haven', 'Transitional Housing', 'Doubled Up', 'Hotel or Motel', 'Permanent Housing', 'Unknown'] },
+    { key: 'chronic_homeless', label: 'Chronic Homelessness', data_type: 'single_select', source: 'crm', options: ['Yes', 'No', 'Unknown'] },
+    { key: 'living_situation', label: 'Living Situation Detail', data_type: 'text', source: 'crm' },
+  ]},
+  { id: 'case_tracking', label: 'Case Tracking', icon: 'layers', color: 'teal', fields: [
+    { key: 'presenting_situation', label: 'Presenting Situation', data_type: 'text_long', source: 'crm' },
+    { key: 'goals', label: 'Goals', data_type: 'text_long', source: 'crm' },
+    { key: 'barriers', label: 'Barriers', data_type: 'text_long', source: 'crm' },
+    { key: 'last_contact_date', label: 'Last Contact Date', data_type: 'date', source: 'crm' },
+    { key: 'next_appointment', label: 'Next Appointment', data_type: 'date', source: 'crm' },
+  ]},
+  { id: 'exit_outcome', label: 'Exit & Outcome', icon: 'flag', color: 'green', fields: [
+    { key: 'exit_date', label: 'Exit Date', data_type: 'date', source: 'crm' },
+    { key: 'exit_destination', label: 'Exit Destination', data_type: 'single_select', source: 'crm', options: ['Permanent Housing', 'Transitional Housing', 'Family or Friends', 'Emergency Shelter', 'Another Provider', 'Institutional Setting', 'No Contact / Left', 'Deceased', 'Unknown', 'Other'] },
+    { key: 'outcome', label: 'Outcome Notes', data_type: 'text_long', source: 'crm' },
+  ]},
+  { id: 'details', label: 'Details', icon: 'folder', color: 'gold', fields: [
+    { key: 'affiliation', label: 'Organization / Affiliation', data_type: 'text', source: 'vault' },
+    { key: 'case_notes', label: 'Case Notes', data_type: 'text_long', source: 'vault' },
+    { key: 'documents', label: 'Documents', data_type: 'text', source: 'vault', sensitive: true },
+    { key: 'history', label: 'Case History', data_type: 'text_long', source: 'vault' },
+  ]},
+  { id: 'sensitive', label: 'Sensitive', icon: 'shieldCheck', color: 'red', fields: [
+    { key: 'restricted_notes', label: 'Restricted Notes', data_type: 'text_long', source: 'vault', sensitive: true },
+  ]},
+];
+const CRM_STANDARD_KEYS = new Set(CRM_PROFILE_SECTIONS.flatMap(s => s.fields.map(f => f.key)));
+
 /* ─── EditableCell — click-to-edit cell with blur save ─── */
 const EditableCell = ({
   value,
   onSave,
   placeholder,
-  type
+  type,
+  options,
+  renderDisplay,
+  singleClick
 }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || '');
@@ -26799,37 +26900,94 @@ const EditableCell = ({
     setEditing(false);
     if (draft !== (value || '')) onSave && onSave(draft);
   };
-  if (editing) return /*#__PURE__*/React.createElement("input", {
-    ref: inputRef,
-    className: "dt-ecell-input",
-    value: draft,
-    onChange: e => setDraft(e.target.value),
-    onBlur: commit,
-    onKeyDown: e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        commit();
-      }
-      if (e.key === 'Escape') {
-        setDraft(value || '');
-        setEditing(false);
-      }
-    },
-    onClick: e => e.stopPropagation()
-  });
-  return /*#__PURE__*/React.createElement("div", {
+  const startEdit = e => {
+    e.stopPropagation();
+    setEditing(true);
+  };
+  if (editing) {
+    if (options && options.length > 0) {
+      return React.createElement("select", {
+        ref: inputRef,
+        className: "dt-ecell-input",
+        value: draft,
+        onChange: e => { setDraft(e.target.value); },
+        onBlur: commit,
+        onKeyDown: e => {
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+        },
+        onClick: e => e.stopPropagation(),
+        style: { cursor: 'pointer' }
+      }, React.createElement("option", { value: "" }, "\u2014 Select \u2014"),
+        options.map(o => React.createElement("option", { key: o, value: o }, o)));
+    }
+    if (type === 'text_long') {
+      return React.createElement("textarea", {
+        ref: inputRef,
+        className: "dt-ecell-input",
+        value: draft,
+        onChange: e => setDraft(e.target.value),
+        onBlur: commit,
+        onKeyDown: e => {
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+        },
+        onClick: e => e.stopPropagation(),
+        rows: 3,
+        style: { resize: 'vertical', minHeight: 60, fontFamily: 'inherit', fontSize: 'inherit' }
+      });
+    }
+    if (type === 'date') {
+      return React.createElement("input", {
+        ref: inputRef,
+        className: "dt-ecell-input",
+        type: "date",
+        value: draft,
+        onChange: e => setDraft(e.target.value),
+        onBlur: commit,
+        onKeyDown: e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+        },
+        onClick: e => e.stopPropagation()
+      });
+    }
+    if (type === 'number') {
+      return React.createElement("input", {
+        ref: inputRef,
+        className: "dt-ecell-input",
+        type: "number",
+        value: draft,
+        onChange: e => setDraft(e.target.value),
+        onBlur: commit,
+        onKeyDown: e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+        },
+        onClick: e => e.stopPropagation()
+      });
+    }
+    return React.createElement("input", {
+      ref: inputRef,
+      className: "dt-ecell-input",
+      type: type === 'email' ? 'email' : type === 'phone' ? 'tel' : 'text',
+      value: draft,
+      onChange: e => setDraft(e.target.value),
+      onBlur: commit,
+      onKeyDown: e => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
+      },
+      onClick: e => e.stopPropagation()
+    });
+  }
+  const displayContent = renderDisplay ? renderDisplay(draft) : null;
+  return React.createElement("div", {
     className: "dt-ecell",
-    title: "Double-click to edit",
-    onDoubleClick: e => {
-      e.stopPropagation();
-      setEditing(true);
-    }
-  }, draft || /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--tx-3)',
-      fontStyle: 'italic'
-    }
-  }, placeholder || '—'));
+    title: singleClick ? "Click to edit" : "Double-click to edit",
+    onClick: singleClick ? startEdit : undefined,
+    onDoubleClick: singleClick ? undefined : startEdit
+  }, displayContent || draft || React.createElement("span", {
+    style: { color: 'var(--tx-3)', fontStyle: 'italic' }
+  }, placeholder || '\u2014'));
 };
 
 /* ─── Generic DataTable component (enhanced) ─── */
@@ -27066,10 +27224,13 @@ const DataTable = ({
     onClick: e => toggleSelect(row.id, e)
   }, selected.has(row.id) ? '✓' : '')), visCols.map(col => /*#__PURE__*/React.createElement("td", {
     key: col.key
-  }, editable && col.editable ? /*#__PURE__*/React.createElement(EditableCell, {
+  }, editable && col.editable ? React.createElement(EditableCell, {
     value: getVal(row, col.key),
     placeholder: col.placeholder,
-    onSave: v => onCellEdit && onCellEdit(row, col.key, v)
+    onSave: v => onCellEdit && onCellEdit(row, col.key, v),
+    options: col.options,
+    type: col.data_type,
+    renderDisplay: col.options || col.renderDisplay ? () => renderCell(row, col) : undefined
   }) : renderCell(row, col))))))))), onAddRow && /*#__PURE__*/React.createElement("div", {
     className: "dt-add-row",
     onClick: onAddRow
@@ -28767,6 +28928,108 @@ const CreateLinkedRecordModal = ({
   })));
 };
 
+/* ─── BulkAddFieldsModal — add fields to multiple individuals at once ─── */
+const BulkAddFieldsModal = ({ open, onClose, selectedIds, individuals, fieldDefs, onApply, showToast }) => {
+  const [checked, setChecked] = useState({});
+  const [values, setValues] = useState({});
+  const [search, setSearch] = useState('');
+  const [applying, setApplying] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [collapsedSections, setCollapsedSections] = useState({});
+  useEffect(() => {
+    if (open) { setChecked({}); setValues({}); setSearch(''); setApplying(false); setProgress({ done: 0, total: 0 }); }
+  }, [open]);
+  if (!open) return null;
+  const selectedInds = (individuals || []).filter(ind => selectedIds.has(ind.id));
+  const checkedKeys = Object.keys(checked).filter(k => checked[k]);
+  const allHaveField = key => selectedInds.every(ind => {
+    const f = ind.fields?.[key]; const sd = ind._case?.sharedData?.[key];
+    return (f?.value || sd || (key === 'full_name' ? ind.name : ''));
+  });
+  const allSections = [...CRM_PROFILE_SECTIONS];
+  const customDefs = Object.values(fieldDefs || {}).filter(d => !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
+  if (customDefs.length > 0) {
+    allSections.push({ id: 'custom', label: 'Custom Fields', icon: 'grid', color: 'purple',
+      fields: customDefs.map(d => ({ key: d.key, label: d.label || d.key, data_type: d.data_type || 'text', source: 'custom', options: d.options }))
+    });
+  }
+  const matchesSearch = f => !search || f.label.toLowerCase().includes(search.toLowerCase()) || f.key.toLowerCase().includes(search.toLowerCase());
+  const toggleSection = id => setCollapsedSections(prev => ({ ...prev, [id]: !prev[id] }));
+  const handleApply = async () => {
+    if (checkedKeys.length === 0) return;
+    setApplying(true);
+    const total = selectedInds.length * checkedKeys.length;
+    setProgress({ done: 0, total });
+    let done = 0;
+    for (const ind of selectedInds) {
+      for (const key of checkedKeys) {
+        try { await onApply(ind, key, values[key] || ''); } catch (e) { console.warn('Bulk field apply failed:', ind.id, key, e.message); }
+        done++; setProgress({ done, total });
+      }
+    }
+    setApplying(false);
+    if (showToast) showToast(`Added ${checkedKeys.length} field(s) to ${selectedInds.length} individual(s)`, 'success');
+    onClose();
+  };
+  return React.createElement("div", { className: "cf-overlay", onClick: e => { if (e.target === e.currentTarget && !applying) onClose(); } },
+    React.createElement("div", { className: "cf-modal", style: { width: 600, maxHeight: '80vh', display: 'flex', flexDirection: 'column' } },
+      React.createElement("div", { className: "cf-header" },
+        React.createElement("h3", null, "Add Fields to ", selectedInds.length, " Individual", selectedInds.length !== 1 ? "s" : ""),
+        React.createElement("button", { className: "b-gho b-xs", onClick: onClose, disabled: applying, style: { fontSize: 16, lineHeight: 1, padding: '2px 8px' } }, "\u2715")
+      ),
+      React.createElement("div", { style: { padding: '0 20px 10px' } },
+        React.createElement("input", { className: "dt-search", placeholder: "Search fields...", value: search, onChange: e => setSearch(e.target.value), style: { width: '100%' } })
+      ),
+      React.createElement("div", { style: { flex: 1, overflow: 'auto', padding: '0 20px' } },
+        allSections.map(section => {
+          const visibleFields = section.fields.filter(matchesSearch);
+          if (visibleFields.length === 0) return null;
+          const isCollapsed = collapsedSections[section.id];
+          const sColor = `var(--${section.color})`;
+          return React.createElement("div", { key: section.id, style: { marginBottom: 12 } },
+            React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '6px 0', borderBottom: '1px solid var(--border-0)' }, onClick: () => toggleSection(section.id) },
+              React.createElement(I, { n: section.icon, s: 12, c: sColor }),
+              React.createElement("span", { style: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.6px', color: sColor } }, section.label),
+              React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-3)', marginLeft: 'auto' } }, visibleFields.length, " fields"),
+              React.createElement(I, { n: isCollapsed ? "chevronRight" : "chevronDown", s: 10, c: "var(--tx-3)" })
+            ),
+            !isCollapsed && visibleFields.map(f => {
+              const alreadySet = allHaveField(f.key);
+              const isChecked = checked[f.key] || false;
+              return React.createElement("div", { key: f.key, className: "bulk-field-row" + (alreadySet ? " already-set" : ""), style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0 6px 18px', opacity: alreadySet ? 0.5 : 1 } },
+                React.createElement("div", { className: 'dt-cb' + (isChecked ? ' checked' : ''), onClick: () => { if (!alreadySet) setChecked(prev => ({ ...prev, [f.key]: !prev[f.key] })); }, style: { flexShrink: 0, width: 16, height: 16, cursor: alreadySet ? 'not-allowed' : 'pointer' } }, isChecked ? '\u2713' : ''),
+                React.createElement("div", { style: { flex: '0 0 140px', minWidth: 0 } },
+                  React.createElement("div", { style: { fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, f.label),
+                  React.createElement("div", { style: { fontSize: 9, color: 'var(--tx-3)' } }, f.data_type, f.sensitive ? ' \u00b7 sensitive' : '', alreadySet ? ' \u00b7 already set' : '')
+                ),
+                isChecked && !alreadySet && React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  f.data_type === 'single_select' && f.options
+                    ? React.createElement("select", { className: "dt-ecell-input", value: values[f.key] || '', onChange: e => setValues(prev => ({ ...prev, [f.key]: e.target.value })), style: { width: '100%', fontSize: 11 } },
+                        React.createElement("option", { value: "" }, "(empty)"), f.options.map(o => React.createElement("option", { key: o, value: o }, o)))
+                    : f.data_type === 'date'
+                    ? React.createElement("input", { className: "dt-ecell-input", type: "date", value: values[f.key] || '', onChange: e => setValues(prev => ({ ...prev, [f.key]: e.target.value })), style: { width: '100%', fontSize: 11 } })
+                    : React.createElement("input", { className: "dt-ecell-input", placeholder: "Default value (optional)", value: values[f.key] || '', onChange: e => setValues(prev => ({ ...prev, [f.key]: e.target.value })), style: { width: '100%', fontSize: 11 } })
+                )
+              );
+            })
+          );
+        })
+      ),
+      React.createElement("div", { style: { padding: '12px 20px', borderTop: '1px solid var(--border-0)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+        React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-2)' } },
+          checkedKeys.length, " field", checkedKeys.length !== 1 ? "s" : "", " selected",
+          applying ? ` \u00b7 ${progress.done}/${progress.total}` : " \u00b7 empty values = placeholder"),
+        React.createElement("div", { style: { display: 'flex', gap: 6 } },
+          React.createElement("button", { className: "b-gho b-sm", onClick: onClose, disabled: applying }, "Cancel"),
+          React.createElement("button", { className: "b-pri b-sm", disabled: checkedKeys.length === 0 || applying, onClick: handleApply, style: { display: 'flex', alignItems: 'center', gap: 4 } },
+            applying ? React.createElement(Spin, { s: 12 }) : React.createElement(I, { n: "plus", s: 11 }),
+            applying ? `Applying ${progress.done}/${progress.total}...` : `Apply to ${selectedInds.length}`)
+        )
+      )
+    )
+  );
+};
+
 /* ─── DatabaseView — unified tabbed view for Individuals, Notes, Resources ─── */
 const DatabaseView = ({
   cases,
@@ -28839,6 +29102,7 @@ const DatabaseView = ({
   const [enabledFieldCols, setEnabledFieldCols] = useState([]);
   const [addFieldDd, setAddFieldDd] = useState(false);
   const [addColumnModal, setAddColumnModal] = useState(false);
+  const [bulkFieldsModal, setBulkFieldsModal] = useState(null);
 
   // Transform cases into individual rows (same as IndividualsView)
   const individuals = cases.map(c => {
@@ -28900,14 +29164,18 @@ const DatabaseView = ({
     placeholder: 'Enter name...'
   }, {
     key: 'status',
-    label: 'Status'
+    label: 'Status',
+    editable: true,
+    options: ['imported', 'invited', 'joined', 'claimed', 'active', 'revoked']
   }, {
     key: 'priority',
     label: 'Priority',
-    editable: true
+    editable: true,
+    options: ['none', 'low', 'medium', 'high', 'critical']
   }, {
     key: 'assignedTo',
-    label: 'Assigned'
+    label: 'Assigned',
+    editable: true
   }, {
     key: 'fields_count',
     label: 'Fields'
@@ -29416,6 +29684,11 @@ const DatabaseView = ({
     label: "individuals",
     selectable: true,
     bulkActions: [{
+      id: 'add_fields',
+      label: 'Add Fields',
+      cls: 'b-gho b-xs',
+      icon: 'grid'
+    }, {
       id: 'assign',
       label: 'Assign',
       cls: 'b-gho b-xs',
@@ -29431,13 +29704,28 @@ const DatabaseView = ({
       cls: 'b-red b-xs',
       icon: 'trash'
     }],
-    onBulkAction: onBulkAction,
+    onBulkAction: (actionId, selectedRows) => {
+      if (actionId === 'add_fields') {
+        setBulkFieldsModal(new Set(selectedRows));
+        return;
+      }
+      onBulkAction && onBulkAction(actionId, selectedRows);
+    },
     draggable: true,
     onReorder: onReorder,
     editable: true,
     onCellEdit: onCellEdit,
     onAddRow: onAddRow || onCreateClient,
     addRowLabel: `Add ${T?.client_term || 'Individual'}`
+  }),
+  React.createElement(BulkAddFieldsModal, {
+    open: !!bulkFieldsModal,
+    onClose: () => setBulkFieldsModal(null),
+    selectedIds: bulkFieldsModal || new Set(),
+    individuals: allIndividuals,
+    fieldDefs: fieldDefs,
+    onApply: onCellEdit,
+    showToast: showToast
   })), dbTab === 'notes' && /*#__PURE__*/React.createElement(NotesTable, {
     notes: notes,
     individuals: allIndividuals,
@@ -33538,6 +33826,91 @@ const ProfileActivityFeed = ({
   }));
 };
 
+/* ─── CrmFieldRow — single inline-editable field row ─── */
+const CrmFieldRow = ({ fieldDef, value, disclosed, eoOp, frame, onSave, roomId, onRestore }) => {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const isLocked = disclosed === false;
+  const hasValue = value !== undefined && value !== null && value !== '';
+  const displayValue = Array.isArray(value) ? value.join(', ') : value;
+  if (fieldDef.data_type === 'multi_select' && !isLocked) {
+    const [msEditing, setMsEditing] = useState(false);
+    const currentArr = Array.isArray(value) ? value : (value ? value.split(', ').filter(Boolean) : []);
+    const toggleOpt = opt => {
+      const next = currentArr.includes(opt) ? currentArr.filter(v => v !== opt) : [...currentArr, opt];
+      onSave && onSave(next.join(', '));
+    };
+    return React.createElement("div", { className: "crm-field-row" },
+      React.createElement("div", { className: "crm-field-label" },
+        React.createElement("span", null, fieldDef.label),
+        fieldDef.sensitive && React.createElement(I, { n: "lock", s: 10, c: "var(--tx-3)" }),
+        fieldDef.required && React.createElement("span", { className: "crm-req" }, "*")),
+      React.createElement("div", { className: "crm-field-value", style: { position: 'relative' } },
+        React.createElement("div", { className: "crm-ms-trigger" + (hasValue ? '' : ' empty'), onClick: e => { e.stopPropagation(); setMsEditing(!msEditing); } },
+          hasValue ? currentArr.map(v => React.createElement("span", { key: v, className: "crm-ms-chip" }, v)) : React.createElement("span", { className: "crm-placeholder" }, "Select...")),
+        msEditing && React.createElement("div", { className: "crm-ms-dd" },
+          (fieldDef.options || []).map(opt => React.createElement("label", { key: opt, className: "crm-ms-opt", onClick: e => e.stopPropagation() },
+            React.createElement("input", { type: "checkbox", checked: currentArr.includes(opt), onChange: () => toggleOpt(opt) }), opt)),
+          React.createElement("button", { className: "b-gho b-xs", style: { width: '100%', marginTop: 4 }, onClick: e => { e.stopPropagation(); setMsEditing(false); } }, "Done"))),
+      React.createElement("div", { className: "crm-field-meta" },
+        eoOp && React.createElement(DtEo, { op: eoOp }),
+        frame && React.createElement("span", { className: "dt-eo", style: { background: frame === 'GIVEN' ? 'var(--teal-dim)' : 'var(--gold-dim)', color: frame === 'GIVEN' ? 'var(--teal)' : 'var(--gold)' } }, frame),
+        roomId && React.createElement("span", { onClick: () => setHistoryOpen(!historyOpen), style: { cursor: 'pointer', color: historyOpen ? 'var(--teal)' : 'var(--tx-3)', marginLeft: 'auto' }, title: "View change history" }, React.createElement(I, { n: "git-commit", s: 11 }))),
+      historyOpen && roomId && React.createElement("div", { style: { marginTop: 6 } },
+        React.createElement(RecordProvenance, { roomId: roomId, entityKey: 'org.individuals.' + fieldDef.key, label: fieldDef.label, session: null, onRestore: onRestore ? v => onRestore(fieldDef.key, v) : null })));
+  }
+  return React.createElement("div", { className: "crm-field-row" },
+    React.createElement("div", { className: "crm-field-label" },
+      React.createElement("span", null, fieldDef.label),
+      fieldDef.sensitive && React.createElement(I, { n: "lock", s: 10, c: "var(--tx-3)" }),
+      fieldDef.required && React.createElement("span", { className: "crm-req" }, "*")),
+    React.createElement("div", { className: "crm-field-value" },
+      isLocked ? React.createElement("div", { className: "dt-locked" }, React.createElement(DtLock, null), " not disclosed")
+        : React.createElement(EditableCell, { value: displayValue || '', onSave: onSave,
+            placeholder: fieldDef.data_type === 'date' ? 'Set date...' : fieldDef.data_type === 'single_select' ? 'Select...' : 'Click to edit...',
+            type: fieldDef.data_type, options: fieldDef.data_type === 'single_select' ? fieldDef.options : undefined, singleClick: true })),
+    React.createElement("div", { className: "crm-field-meta" },
+      eoOp && React.createElement(DtEo, { op: eoOp }),
+      frame && React.createElement("span", { className: "dt-eo", style: { background: frame === 'GIVEN' ? 'var(--teal-dim)' : 'var(--gold-dim)', color: frame === 'GIVEN' ? 'var(--teal)' : 'var(--gold)' } }, frame),
+      fieldDef.source && React.createElement("span", { className: "tag", style: { fontSize: 8, padding: '1px 4px', background: fieldDef.source === 'vault' ? 'var(--purple-dim)' : 'var(--bg-3)', color: fieldDef.source === 'vault' ? 'var(--purple)' : 'var(--tx-3)' } }, fieldDef.source === 'vault' ? 'VAULT' : 'CRM'),
+      roomId && React.createElement("span", { onClick: () => setHistoryOpen(!historyOpen), style: { cursor: 'pointer', color: historyOpen ? 'var(--teal)' : 'var(--tx-3)', marginLeft: 'auto' }, title: "View change history" }, React.createElement(I, { n: "git-commit", s: 11 }))),
+    historyOpen && roomId && React.createElement("div", { style: { marginTop: 6 } },
+      React.createElement(RecordProvenance, { roomId: roomId, entityKey: 'org.individuals.' + fieldDef.key, label: fieldDef.label, session: null, onRestore: onRestore ? v => onRestore(fieldDef.key, v) : null })));
+};
+
+/* ─── CrmSection — collapsible section for CRM profile ─── */
+const CrmSection = ({ section, fields, individual, onFieldEdit, onRestore, fieldDefs }) => {
+  const [collapsed, setCollapsed] = useState(false);
+  const allFields = individual.fields || {};
+  const sharedData = individual._case?.sharedData || {};
+  const filledCount = section.fields.filter(f => {
+    const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
+    return val !== undefined && val !== null && val !== '';
+  }).length;
+  const sectionColor = `var(--${section.color})`;
+  return React.createElement("div", { className: "crm-section" + (collapsed ? " collapsed" : "") },
+    React.createElement("div", { className: "crm-section-header", onClick: () => setCollapsed(!collapsed), style: { borderLeftColor: sectionColor } },
+      React.createElement(I, { n: section.icon, s: 14, c: sectionColor }),
+      React.createElement("span", { className: "crm-section-label" }, section.label),
+      React.createElement("span", { className: "crm-section-count", style: { color: filledCount > 0 ? sectionColor : 'var(--tx-3)' } }, filledCount, "/", section.fields.length),
+      React.createElement(I, { n: collapsed ? "chevronRight" : "chevronDown", s: 12, c: "var(--tx-3)" })),
+    !collapsed && React.createElement("div", { className: "crm-section-body" },
+      section.fields.map(fieldDef => {
+        const fieldData = allFields[fieldDef.key];
+        const sharedVal = sharedData[fieldDef.key];
+        const rawValue = fieldDef.key === 'full_name' ? (individual.name || '') : (fieldData?.value || sharedVal || '');
+        return React.createElement(CrmFieldRow, { key: fieldDef.key, fieldDef: fieldDef, value: rawValue,
+          disclosed: fieldData ? fieldData.disclosed : undefined, eoOp: fieldData?.eo_op || null, frame: fieldData?.frame || null,
+          onSave: v => onFieldEdit && onFieldEdit(individual, fieldDef.key, v), roomId: individual.bridgeRoom || individual.id, onRestore: onRestore });
+      }),
+      fields.filter(f => !section.fields.some(sf => sf.key === f.key)).map(f => {
+        const fieldData = allFields[f.key];
+        return React.createElement(CrmFieldRow, { key: f.key, fieldDef: { ...f, source: 'custom' }, value: fieldData?.value || sharedData[f.key] || '',
+          disclosed: fieldData ? fieldData.disclosed : undefined, eoOp: fieldData?.eo_op || null, frame: fieldData?.frame || null,
+          onSave: v => onFieldEdit && onFieldEdit(individual, f.key, v), roomId: individual.bridgeRoom || individual.id, onRestore: onRestore });
+      }))
+  );
+};
+
 /* ─── IndividualProfilePage — full profile view for an individual ─── */
 const IndividualProfilePage = ({
   individual,
@@ -33557,7 +33930,8 @@ const IndividualProfilePage = ({
   canAllocateResource,
   onAllocate,
   fieldDefs,
-  onFieldEdit
+  onFieldEdit,
+  activeTeamObj
 }) => {
   const [tab, setTab] = useState('fields');
   const [profileAllocModal, setProfileAllocModal] = useState(false);
@@ -33598,15 +33972,15 @@ const IndividualProfilePage = ({
     style: {
       background: individual.status === 'revoked' ? 'var(--border-1)' : 'var(--green)'
     }
-  }, (individual.name || '?')[0].toUpperCase()), /*#__PURE__*/React.createElement("div", {
+  }, (individual.name || '?')[0].toUpperCase()), React.createElement("div", {
     className: "profile-info"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "profile-name"
-  }, individual.name || 'Unknown'), /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("div", { className: "profile-name", style: { display: 'flex', alignItems: 'center', gap: 6 } },
+    React.createElement(EditableCell, { value: individual.name || '', onSave: v => onFieldEdit && onFieldEdit(individual, 'name', v), placeholder: "Enter name...", singleClick: true })
+  ), React.createElement("div", {
     className: "profile-badges"
-  }, /*#__PURE__*/React.createElement(DtStatusBadge, {
-    status: individual.status
-  }), individual.bridgeRoom && /*#__PURE__*/React.createElement(DtRoom, {
+  }, React.createElement(EditableCell, { value: individual.status || 'active', onSave: v => onFieldEdit && onFieldEdit(individual, 'status', v), options: ['imported', 'invited', 'joined', 'claimed', 'active', 'revoked'], singleClick: true, renderDisplay: val => React.createElement(DtStatusBadge, { status: val }) }),
+  React.createElement(EditableCell, { value: individual.priority || 'none', onSave: v => onFieldEdit && onFieldEdit(individual, 'priority', v), options: ['none', 'low', 'medium', 'high', 'critical'], singleClick: true, renderDisplay: val => React.createElement("span", { className: 'tag ' + (DT_PRI_CFG[val] || 'tag-purple'), style: { fontSize: 10 } }, val) }),
+  individual.bridgeRoom && React.createElement(DtRoom, {
     room: individual.bridgeRoom
   }), individual.transferable ? /*#__PURE__*/React.createElement("span", {
     className: "tag tag-teal",
@@ -33687,109 +34061,98 @@ const IndividualProfilePage = ({
     key: t.id,
     className: 'profile-tab' + (tab === t.id ? ' active' : ''),
     onClick: () => setTab(t.id)
-  }, t.label))), tab === 'fields' && /*#__PURE__*/React.createElement("div", {
-    className: "profile-section"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "profile-section-title",
-    style: { marginBottom: 0 }
-  }, "Fields"), /*#__PURE__*/React.createElement("div", {
-    className: "dt-dd-wrap",
-    style: { position: 'relative' }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "b-pri b-sm",
-    style: { display: 'flex', alignItems: 'center', gap: 4 },
-    onClick: () => setAddFieldPicker(!addFieldPicker)
-  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Add Field"), addFieldPicker && /*#__PURE__*/React.createElement("div", {
-    className: "dt-dd",
-    style: { minWidth: 240, maxHeight: 280, overflow: 'auto', right: 0, left: 'auto' }
-  }, /*#__PURE__*/React.createElement("div", { className: "dt-dd-label" }, "Add a field value"), Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !(individual.fields || {})[d.key]).map(d => /*#__PURE__*/React.createElement("div", {
-    key: d.uri || d.key,
-    className: "dt-dd-item",
-    onClick: () => { setAddFieldValue(d); setAddFieldInput(''); setAddFieldPicker(false); }
-  }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 500, fontSize: 12.5 } }, d.label || d.key), /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: 'var(--tx-3)', marginTop: 1 } }, [d.category, d.data_type].filter(Boolean).join(' \u00b7 ')))), Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name' && !(individual.fields || {})[d.key]).length === 0 && /*#__PURE__*/React.createElement("div", {
-    style: { padding: '12px 14px', fontSize: 11.5, color: 'var(--tx-3)' }
-  }, "All fields already have values.")))), addFieldValue && /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: { padding: 14, marginBottom: 12, border: '1px solid var(--gold)', background: 'var(--bg-2)' }
-  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--gold)' } }, "Set value for: ", addFieldValue.label || addFieldValue.key), /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 6 } }, /*#__PURE__*/React.createElement("input", {
-    className: "dt-search",
-    style: { flex: 1, width: 'auto' },
-    placeholder: `Enter ${addFieldValue.label || addFieldValue.key}...`,
-    value: addFieldInput,
-    onChange: e => setAddFieldInput(e.target.value),
-    onKeyDown: e => {
-      if (e.key === 'Enter' && addFieldInput.trim() && onFieldEdit) {
-        onFieldEdit(individual, addFieldValue.key, addFieldInput.trim());
-        setAddFieldValue(null);
-        setAddFieldInput('');
-      }
-    },
-    autoFocus: true
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "b-pri b-sm",
-    disabled: !addFieldInput.trim(),
-    onClick: () => {
-      if (addFieldInput.trim() && onFieldEdit) {
-        onFieldEdit(individual, addFieldValue.key, addFieldInput.trim());
-        setAddFieldValue(null);
-        setAddFieldInput('');
-      }
-    }
-  }, "Save"), /*#__PURE__*/React.createElement("button", {
-    className: "b-gho b-sm",
-    onClick: () => { setAddFieldValue(null); setAddFieldInput(''); }
-  }, "Cancel"))), Object.keys(individual.fields || {}).length === 0 && !addFieldValue ? /*#__PURE__*/React.createElement("div", {
-    className: "card",
-    style: {
-      textAlign: 'center',
-      padding: '30px 20px',
-      color: 'var(--tx-3)'
-    }
-  }, "No fields yet. Click ", /*#__PURE__*/React.createElement("strong", null, "Add Field"), " above to get started.") : /*#__PURE__*/React.createElement("div", {
-    className: "profile-fields-grid"
-  }, Object.entries(individual.fields || {}).map(([key, f]) => {
-    const _fpOpen = provenanceTarget?.entityKey === key && provenanceTarget?.roomId === individual.bridgeRoom;
-    return /*#__PURE__*/React.createElement("div", {
-    key: key,
-    className: "profile-field-card"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "profile-field-label"
-  }, (() => { const def = Object.values(fieldDefs || {}).find(d => d.key === key); return def?.label || key.replace(/_/g, ' '); })()), f.disclosed === false ? /*#__PURE__*/React.createElement("div", {
-    className: "dt-locked"
-  }, /*#__PURE__*/React.createElement(DtLock, null), " not disclosed") : /*#__PURE__*/React.createElement("div", {
-    className: "profile-field-value"
-  }, f.value || '\u2014'), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      gap: 4,
-      marginTop: 6,
-      alignItems: 'center'
-    }
-  }, f.eo_op && /*#__PURE__*/React.createElement(DtEo, {
-    op: f.eo_op
-  }), f.frame && /*#__PURE__*/React.createElement("span", {
-    className: "dt-eo",
-    style: {
-      background: f.frame === 'GIVEN' ? 'var(--teal-dim)' : 'var(--gold-dim)',
-      color: f.frame === 'GIVEN' ? 'var(--teal)' : 'var(--gold)'
-    }
-  }, f.frame), individual.bridgeRoom && /*#__PURE__*/React.createElement("span", {
-    onClick: () => setProvenanceTarget(_fpOpen ? null : { entityKey: key, label: key.replace(/_/g, ' '), roomId: individual.bridgeRoom }),
-    style: { cursor: 'pointer', color: _fpOpen ? 'var(--teal)' : 'var(--tx-3)', transition: 'color .15s', marginLeft: 'auto' },
-    title: "View field history"
-  }, /*#__PURE__*/React.createElement(I, { n: "git-commit", s: 11 }))),
-  _fpOpen && /*#__PURE__*/React.createElement("div", {
-    style: { marginTop: 6 }
-  }, /*#__PURE__*/React.createElement(RecordProvenance, {
-    roomId: individual.bridgeRoom,
-    entityKey: key,
-    label: key.replace(/_/g, ' '),
-    session: null,
-    onRestore: onFieldEdit ? value => onFieldEdit(individual, key, value) : null
-  })));
-  }))), tab === 'notes' && /*#__PURE__*/React.createElement("div", {
+  }, t.label))), tab === 'fields' && React.createElement("div", {
+    className: "profile-section crm-profile"
+  },
+  // Section header with completion overview
+  React.createElement("div", {
+    style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }
+  },
+    React.createElement("div", null,
+      React.createElement("div", { className: "profile-section-title", style: { marginBottom: 2 } }, "Individual Record"),
+      React.createElement("div", { style: { fontSize: 11, color: 'var(--tx-2)' } },
+        "All changes are tracked. Click any field to edit. ",
+        React.createElement(I, { n: "git-commit", s: 10, c: "var(--tx-3)" }), " = view history.")
+    ),
+    React.createElement("div", { style: { display: 'flex', gap: 6, alignItems: 'center' } },
+      React.createElement("span", {
+        style: { fontSize: 11, color: 'var(--tx-2)', fontFamily: 'var(--mono)' }
+      }, (() => {
+        const allFields = individual.fields || {};
+        const sharedData = individual._case?.sharedData || {};
+        const total = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.length, 0);
+        const filled = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.filter(f => {
+          const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
+          return val !== undefined && val !== null && val !== '';
+        }).length, 0);
+        return `${filled}/${total} fields`;
+      })()),
+      React.createElement("div", {
+        style: { width: 60, height: 4, borderRadius: 2, background: 'var(--bg-3)', overflow: 'hidden' }
+      }, React.createElement("div", {
+        style: { height: '100%', borderRadius: 2, background: 'var(--teal)', transition: 'width .3s', width: (() => {
+          const allFields = individual.fields || {};
+          const sharedData = individual._case?.sharedData || {};
+          const total = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.length, 0);
+          const filled = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.filter(f => {
+            const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
+            return val !== undefined && val !== null && val !== '';
+          }).length, 0);
+          return Math.round((filled / Math.max(total, 1)) * 100) + '%';
+        })() }
+      }))
+    )
+  ),
+  // Render all CRM sections
+  CRM_PROFILE_SECTIONS.map(section => {
+    const catMap = { case_management: 'case', identity: 'identity', contact: 'contact', demographics: 'details', housing: 'details', case_tracking: 'case', exit_outcome: 'case', details: 'details', sensitive: 'sensitive' };
+    const extraFields = Object.values(fieldDefs || {}).filter(d =>
+      d.category === (catMap[section.id] || section.id) && !CRM_STANDARD_KEYS.has(d.key)
+    );
+    return React.createElement(CrmSection, {
+      key: section.id,
+      section: section,
+      fields: extraFields,
+      individual: individual,
+      onFieldEdit: onFieldEdit,
+      onRestore: onFieldEdit ? (key, v) => onFieldEdit(individual, key, v) : null,
+      fieldDefs: fieldDefs
+    });
+  }),
+  // Custom fields section (fieldDefs not in any standard section)
+  (() => {
+    const customDefs = Object.values(fieldDefs || {}).filter(d => !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
+    if (customDefs.length === 0) return null;
+    const allFields = individual.fields || {};
+    const sharedData = individual._case?.sharedData || {};
+    return React.createElement("div", { className: "crm-section" },
+      React.createElement("div", {
+        className: "crm-section-header",
+        style: { borderLeftColor: 'var(--purple)' }
+      },
+        React.createElement(I, { n: "grid", s: 14, c: "var(--purple)" }),
+        React.createElement("span", { className: "crm-section-label" }, "Custom Fields"),
+        React.createElement("span", { className: "crm-section-count", style: { color: 'var(--purple)' } }, customDefs.length)
+      ),
+      React.createElement("div", { className: "crm-section-body" },
+        customDefs.map(d => {
+          const fieldData = allFields[d.key];
+          return React.createElement(CrmFieldRow, {
+            key: d.key,
+            fieldDef: { key: d.key, label: d.label || d.key, data_type: d.data_type || 'text', source: 'custom', sensitive: d.sensitive, options: d.options },
+            value: fieldData?.value || sharedData[d.key] || '',
+            disclosed: fieldData ? fieldData.disclosed : undefined,
+            eoOp: fieldData?.eo_op || null,
+            frame: fieldData?.frame || null,
+            onSave: v => onFieldEdit && onFieldEdit(individual, d.key, v),
+            roomId: individual.bridgeRoom || individual.id,
+            onRestore: onFieldEdit ? (key, v) => onFieldEdit(individual, key, v) : null
+          });
+        })
+      )
+    );
+  })()
+  ), tab === 'notes' && /*#__PURE__*/React.createElement("div", {
     className: "profile-section"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -39991,7 +40354,8 @@ const ProviderApp = ({
     canAllocateResource: canAllocateResource,
     onAllocate: handleProfileAllocate,
     fieldDefs: fieldDefs,
-    onFieldEdit: handleDbCellEdit
+    onFieldEdit: handleDbCellEdit,
+    activeTeamObj: activeTeamObj
   }), /*#__PURE__*/React.createElement(NoteCreateModal, {
     open: newNoteModal,
     onClose: () => setNewNoteModal(false),
