@@ -4663,7 +4663,8 @@ const ProviderApp = ({
       } catch (e) {
         showToast('Restore failed: ' + e.message, 'error');
       }
-    }
+    },
+    onAllocate: handleProfileAllocate
   }), /*#__PURE__*/React.createElement(NoteCreateModal, {
     open: newNoteModal,
     onClose: () => setNewNoteModal(false),
@@ -9059,7 +9060,8 @@ const ProviderApp = ({
     canViewResource: canViewResource,
     canControlResource: canControlResource,
     canAllocateResource: canAllocateResource,
-    individuals: cases
+    individuals: cases,
+    onAllocate: handleProfileAllocate
   }), view === 'activity' && /*#__PURE__*/React.createElement(ActivityStream, {
     session: session
   }), view === 'transparency' && /*#__PURE__*/React.createElement(TransparencyPage, {

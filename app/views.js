@@ -3002,7 +3002,12 @@ const IndividualsView = ({
   openEmailVerifyModal,
   orgChannels,
   ORG_TYPE_LABELS,
-  ORG_ROLE_LABELS
+  ORG_ROLE_LABELS,
+  onAllocate,
+  resourceTypes,
+  resourceRelations,
+  resourceInventory,
+  canAllocateResource
 }) => {
   const [dtTab, setDtTab] = useState('individuals');
   const [selectedRow, setSelectedRow] = useState(null);
@@ -3228,11 +3233,7 @@ const IndividualsView = ({
     type: 'internal'
   }))];
   return /*#__PURE__*/React.createElement("div", {
-    className: "anim-up",
-    style: {
-      maxWidth: 1200,
-      margin: '0 auto'
-    }
+    className: "anim-up"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
@@ -3327,7 +3328,14 @@ const IndividualsView = ({
     provenanceField: provenanceField,
     setProvenanceField: setProvenanceField,
     svc: svc,
-    onRestoreField: null
+    onRestoreField: null,
+    onAllocate: onAllocate,
+    resourceTypes: resourceTypes,
+    resourceRelations: resourceRelations,
+    resourceInventory: resourceInventory,
+    orgRoom: orgRoom,
+    orgRole: orgRole,
+    canAllocateResource: canAllocateResource
   }));
 };
 
@@ -3350,7 +3358,8 @@ const ResourcesTableView = ({
   canViewResource,
   canControlResource,
   canAllocateResource,
-  individuals
+  individuals,
+  onAllocate
 }) => {
   const [selectedRow, setSelectedRow] = useState(null);
   const [panelTab, setPanelTab] = useState('details');
@@ -3552,11 +3561,7 @@ const ResourcesTableView = ({
   };
   const selectedRes = selectedRow ? resources.find(r => r.id === selectedRow) : null;
   return /*#__PURE__*/React.createElement("div", {
-    className: "anim-up",
-    style: {
-      maxWidth: 1200,
-      margin: '0 auto'
-    }
+    className: "anim-up"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
@@ -3682,7 +3687,16 @@ const ResourcesTableView = ({
     allocations: allAllocations || [],
     onClose: () => setSelectedRow(null),
     panelTab: panelTab,
-    setPanelTab: setPanelTab
+    setPanelTab: setPanelTab,
+    onAllocate: onAllocate,
+    individuals: individuals,
+    resourceTypes: resourceTypes,
+    resourceRelations: resourceRelations,
+    resourceInventory: resourceInventory,
+    orgRoom: orgRoom,
+    orgRole: orgRole,
+    canAllocateResource: canAllocateResource,
+    svc: svc
   }));
 };
 

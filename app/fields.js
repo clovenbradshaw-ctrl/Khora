@@ -1649,12 +1649,56 @@ const CreateTableModal = ({ open, onClose, team, svc, teams, showToast }) => {
 };
 
 /* ─── CustomTableView — view + add records for a team custom table ─── */
-const CustomTableView = ({ table, team, svc, showToast, onBack }) => {
+const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addingRow, setAddingRow] = useState(false);
   const [newRowData, setNewRowData] = useState({});
   const [saving, setSaving] = useState(false);
+  const [addingColumn, setAddingColumn] = useState(false);
+  const [newColData, setNewColData] = useState({ label: '', key: '', data_type: 'text', description: '', required: false, sensitive: false, options: '' });
+  const [savingCol, setSavingCol] = useState(false);
+  const [localTable, setLocalTable] = useState(tableProp);
+  React.useEffect(() => { setLocalTable(tableProp); }, [tableProp]);
+  const table = localTable || tableProp;
+
+  const handleAddColumn = async () => {
+    if (!newColData.label.trim()) { showToast('Column label is required', 'warning'); return; }
+    const colKey = newColData.key.trim() || fieldLabelToKey(newColData.label);
+    if ((table.columns || []).some(c => c.key === colKey)) { showToast('Column key "' + colKey + '" already exists', 'warning'); return; }
+    if (newColData.description.trim().length < 10) { showToast('Description must be at least 10 characters (governance requirement)', 'warning'); return; }
+    setSavingCol(true);
+    try {
+      const newCol = {
+        key: colKey,
+        label: newColData.label.trim(),
+        data_type: newColData.data_type,
+        description: newColData.description.trim(),
+        required: newColData.required,
+        sensitive: newColData.sensitive,
+        options: newColData.data_type.includes('select') ? newColData.options.split(',').map(o => o.trim()).filter(Boolean) : []
+      };
+      const updatedTable = {
+        ...table,
+        columns: [...(table.columns || []), newCol],
+        version: (table.version || 1) + 1,
+        change_log: [...(table.change_log || []), {
+          version: (table.version || 1) + 1,
+          summary: 'Added column "' + newCol.label + '"',
+          by: svc.userId,
+          ts: Date.now()
+        }]
+      };
+      await svc.setState(team.roomId, EVT.TEAM_TABLE_DEF, updatedTable, table.id);
+      setLocalTable(updatedTable);
+      setNewColData({ label: '', key: '', data_type: 'text', description: '', required: false, sensitive: false, options: '' });
+      setAddingColumn(false);
+      showToast('Column "' + newCol.label + '" added', 'success');
+    } catch (e) {
+      showToast('Failed to add column: ' + e.message, 'error');
+    }
+    setSavingCol(false);
+  };
 
   // Load existing records from Matrix state
   React.useEffect(() => {
@@ -1729,13 +1773,74 @@ const CustomTableView = ({ table, team, svc, showToast, onBack }) => {
           React.createElement('strong', { style: { color: govColor } }, consentMode.label, ' governance'), ' \u00B7 ', team.name,
           table.rollup_to_parent && React.createElement('span', { style: { marginLeft: 6, color: 'var(--teal)', fontSize: 10, fontWeight: 600 } }, '\u21A5 rolls up'))
       ),
-      React.createElement('button', {
-        className: 'b-pri b-sm', onClick: () => setAddingRow(true),
-        style: { display: 'flex', alignItems: 'center', gap: 4 }
-      }, React.createElement(I, { n: 'plus', s: 11 }), 'Add Row')
+      React.createElement('div', { style: { display: 'flex', gap: 6 } },
+        React.createElement('button', {
+          className: 'b-gho b-sm', onClick: () => { setAddingColumn(true); setAddingRow(false); },
+          style: { display: 'flex', alignItems: 'center', gap: 4 }
+        }, React.createElement(I, { n: 'plus', s: 11 }), 'Add Column'),
+        React.createElement('button', {
+          className: 'b-pri b-sm', onClick: () => { setAddingRow(true); setAddingColumn(false); },
+          style: { display: 'flex', alignItems: 'center', gap: 4 }
+        }, React.createElement(I, { n: 'plus', s: 11 }), 'Add Row'))
     ),
     // Description
     React.createElement('p', { style: { fontSize: 12, color: 'var(--tx-1)', marginBottom: 12, lineHeight: 1.5 } }, table.description),
+
+    // Add column inline form
+    addingColumn && React.createElement('div', { style: { background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', padding: '14px 16px', marginBottom: 16 } },
+      React.createElement('div', { style: { fontWeight: 700, fontSize: 12, marginBottom: 10 } }, 'New Column'),
+      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, marginBottom: 10 } },
+        React.createElement('div', null,
+          React.createElement('span', { className: 'section-label', style: { fontSize: 9 } }, 'LABEL *'),
+          React.createElement('input', {
+            value: newColData.label,
+            onChange: e => {
+              const label = e.target.value;
+              setNewColData(d => ({ ...d, label, key: d._keyEdited ? d.key : fieldLabelToKey(label) }));
+            },
+            placeholder: 'e.g. Encounter Date', style: { fontSize: 12 }
+          })),
+        React.createElement('div', null,
+          React.createElement('span', { className: 'section-label', style: { fontSize: 9 } }, 'TYPE'),
+          React.createElement('select', {
+            value: newColData.data_type,
+            onChange: e => setNewColData(d => ({ ...d, data_type: e.target.value })),
+            style: { fontSize: 12 }
+          }, TABLE_COLUMN_TYPES.map(t => React.createElement('option', { key: t.id, value: t.id }, t.label)))),
+        React.createElement('div', null,
+          React.createElement('span', { className: 'section-label', style: { fontSize: 9 } }, 'KEY (auto)'),
+          React.createElement('input', {
+            value: newColData.key || fieldLabelToKey(newColData.label || ''),
+            onChange: e => setNewColData(d => ({ ...d, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'), _keyEdited: true })),
+            placeholder: 'field_key', style: { fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--tx-2)' }
+          })),
+        React.createElement('div', { style: { gridColumn: '1 / -1' } },
+          React.createElement('span', { className: 'section-label', style: { fontSize: 9 } }, 'DESCRIPTION * (min 10 chars)'),
+          React.createElement('input', {
+            value: newColData.description,
+            onChange: e => setNewColData(d => ({ ...d, description: e.target.value })),
+            placeholder: 'Describe the purpose and expected content of this column', style: { fontSize: 12 }
+          })),
+        newColData.data_type.includes('select') && React.createElement('div', { style: { gridColumn: '1 / -1' } },
+          React.createElement('span', { className: 'section-label', style: { fontSize: 9 } }, 'OPTIONS (comma-separated)'),
+          React.createElement('input', {
+            value: newColData.options,
+            onChange: e => setNewColData(d => ({ ...d, options: e.target.value })),
+            placeholder: 'e.g. Active, Inactive, Pending', style: { fontSize: 12 }
+          })),
+        React.createElement('div', { style: { display: 'flex', gap: 16, alignItems: 'center' } },
+          React.createElement('label', { style: { fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' } },
+            React.createElement('input', { type: 'checkbox', checked: newColData.required, onChange: e => setNewColData(d => ({ ...d, required: e.target.checked })) }),
+            'Required'),
+          React.createElement('label', { style: { fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' } },
+            React.createElement('input', { type: 'checkbox', checked: newColData.sensitive, onChange: e => setNewColData(d => ({ ...d, sensitive: e.target.checked })) }),
+            'Sensitive / PII'))
+      ),
+      React.createElement('div', { style: { display: 'flex', gap: 8 } },
+        React.createElement('button', { className: 'b-gho b-sm', onClick: () => { setAddingColumn(false); setNewColData({ label: '', key: '', data_type: 'text', description: '', required: false, sensitive: false, options: '' }); } }, 'Cancel'),
+        React.createElement('button', { className: 'b-pri b-sm', disabled: savingCol, onClick: handleAddColumn },
+          savingCol ? 'Saving...' : 'Add Column'))
+    ),
 
     // Add row inline form
     addingRow && React.createElement('div', { style: { background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', padding: '14px 16px', marginBottom: 16 } },

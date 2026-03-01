@@ -481,8 +481,17 @@ const IndividualPanel = ({
   provenanceField,
   setProvenanceField,
   svc,
-  onRestoreField
+  onRestoreField,
+  onAllocate,
+  resourceTypes,
+  resourceRelations,
+  resourceInventory,
+  orgRoom,
+  orgRole,
+  canAllocateResource
 }) => {
+  const [allocModal, setAllocModal] = useState(false);
+  const [allocDraft, setAllocDraft] = useState({ resource_type_id: '', quantity: 1, notes: '' });
   if (!row) return null;
   const indNotes = (notes || []).filter(n => n.indId === row.id);
   const indAllocs = (allocations || []).filter(a => a.indId === row.id);
@@ -752,7 +761,58 @@ const IndividualPanel = ({
     }), " in the ", /*#__PURE__*/React.createElement("strong", null, "bridge room"), " \u2192 encrypted via Megolm + per-field AES-256-GCM \u2192 client + provider can read. Internal notes emit ", /*#__PURE__*/React.createElement(DtEo, {
       op: "INS"
     }), " in the ", /*#__PURE__*/React.createElement("strong", null, "roster room"), " \u2192 only org team members can read."));
-  })()), panelTab === 'allocations' && /*#__PURE__*/React.createElement(React.Fragment, null, indAllocs.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  })()), panelTab === 'allocations' && /*#__PURE__*/React.createElement(React.Fragment, null,
+  /* Allocate button */
+  onAllocate && orgRoom && (resourceTypes || []).length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label", style: { marginBottom: 0 } }, "Resource Allocations"),
+  /*#__PURE__*/React.createElement("button", {
+    className: "b-pri b-sm",
+    style: { display: 'flex', alignItems: 'center', gap: 4 },
+    onClick: () => { setAllocDraft({ resource_type_id: '', quantity: 1, notes: '' }); setAllocModal(true); }
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Allocate")),
+  /* Allocation form */
+  allocModal && /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', padding: '14px 16px', marginBottom: 16 }
+  },
+    /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 12, marginBottom: 10 } }, "Allocate Resource to ", row.name || 'Individual'),
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "RESOURCE TYPE"),
+      /*#__PURE__*/React.createElement("select", {
+        value: allocDraft.resource_type_id,
+        onChange: e => setAllocDraft(d => ({ ...d, resource_type_id: e.target.value })),
+        style: { fontSize: 12 }
+      }, /*#__PURE__*/React.createElement("option", { value: "" }, "Select a resource..."),
+        (resourceTypes || []).filter(rt => !canAllocateResource || canAllocateResource(rt, svc?.userId, orgRole)).map(rt => {
+          const relation = (resourceRelations || []).find(r => r.resource_type_id === rt.id);
+          const inv = relation ? (resourceInventory || {})[relation.id] : null;
+          return /*#__PURE__*/React.createElement("option", { key: rt.id, value: rt.id },
+            rt.name, " (", rt.unit, ")", inv ? ' \u2014 ' + (inv.available || 0) + ' available' : '');
+        }))),
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "QUANTITY"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "number", min: "1", value: allocDraft.quantity,
+        onChange: e => setAllocDraft(d => ({ ...d, quantity: e.target.value })),
+        placeholder: "1", style: { fontSize: 12 }
+      })),
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "NOTES (OPTIONAL)"),
+      /*#__PURE__*/React.createElement("input", {
+        value: allocDraft.notes,
+        onChange: e => setAllocDraft(d => ({ ...d, notes: e.target.value })),
+        placeholder: "e.g. For medical appointments", style: { fontSize: 12 }
+      })),
+    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
+      /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => setAllocModal(false) }, "Cancel"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "b-pri b-sm", disabled: !allocDraft.resource_type_id,
+        onClick: async () => {
+          const success = await onAllocate(row.id, { resource_type_id: allocDraft.resource_type_id, quantity: parseInt(allocDraft.quantity) || 1, notes: allocDraft.notes });
+          if (success !== false) { setAllocModal(false); setAllocDraft({ resource_type_id: '', quantity: 1, notes: '' }); }
+        }
+      }, "Allocate"))),
+  indAllocs.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '40px 0',
       textAlign: 'center',
@@ -869,8 +929,19 @@ const ResourcePanel = ({
   allocations,
   onClose,
   panelTab,
-  setPanelTab
+  setPanelTab,
+  onAllocate,
+  individuals,
+  resourceTypes,
+  resourceRelations,
+  resourceInventory,
+  orgRoom,
+  orgRole,
+  canAllocateResource,
+  svc
 }) => {
+  const [allocIndModal, setAllocIndModal] = useState(false);
+  const [allocIndDraft, setAllocIndDraft] = useState({ indId: '', quantity: 1, notes: '' });
   if (!row) return null;
   const resAllocs = (allocations || []).filter(a => a.resourceId === row.id);
   return /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
@@ -1079,7 +1150,55 @@ const ResourcePanel = ({
     op: "INS"
   }), " (\u25B3). Allocations emit ", /*#__PURE__*/React.createElement(DtEo, {
     op: "CON"
-  }), " (\u22C8). All events carry full provenance.")), panelTab === 'allocations' && /*#__PURE__*/React.createElement(React.Fragment, null, resAllocs.length === 0 ? /*#__PURE__*/React.createElement("div", {
+  }), " (\u22C8). All events carry full provenance.")), panelTab === 'allocations' && /*#__PURE__*/React.createElement(React.Fragment, null,
+  /* Allocate to Individual button */
+  onAllocate && orgRoom && (individuals || []).length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("span", { className: "section-label", style: { marginBottom: 0 } }, "Allocations"),
+  /*#__PURE__*/React.createElement("button", {
+    className: "b-pri b-sm",
+    style: { display: 'flex', alignItems: 'center', gap: 4 },
+    onClick: () => { setAllocIndDraft({ indId: '', quantity: 1, notes: '' }); setAllocIndModal(true); }
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Allocate to Individual")),
+  /* Allocation form */
+  allocIndModal && /*#__PURE__*/React.createElement("div", {
+    style: { background: 'var(--bg-3)', border: '1px solid var(--border-1)', borderRadius: 'var(--r)', padding: '14px 16px', marginBottom: 16 }
+  },
+    /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, fontSize: 12, marginBottom: 10 } }, "Allocate ", row.name, " to Individual"),
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "INDIVIDUAL"),
+      /*#__PURE__*/React.createElement("select", {
+        value: allocIndDraft.indId,
+        onChange: e => setAllocIndDraft(d => ({ ...d, indId: e.target.value })),
+        style: { fontSize: 12 }
+      }, /*#__PURE__*/React.createElement("option", { value: "" }, "Select an individual..."),
+        (individuals || []).map(ind => /*#__PURE__*/React.createElement("option", {
+          key: ind.bridgeRoomId || ind.id, value: ind.bridgeRoomId || ind.id
+        }, ind.sharedData?.full_name || ind.name || ind.clientUserId || 'Unknown')))),
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "QUANTITY"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "number", min: "1", value: allocIndDraft.quantity,
+        onChange: e => setAllocIndDraft(d => ({ ...d, quantity: e.target.value })),
+        placeholder: "1", style: { fontSize: 12 }
+      })),
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
+      /*#__PURE__*/React.createElement("span", { className: "section-label" }, "NOTES (OPTIONAL)"),
+      /*#__PURE__*/React.createElement("input", {
+        value: allocIndDraft.notes,
+        onChange: e => setAllocIndDraft(d => ({ ...d, notes: e.target.value })),
+        placeholder: "e.g. For medical appointments", style: { fontSize: 12 }
+      })),
+    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
+      /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => setAllocIndModal(false) }, "Cancel"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "b-pri b-sm", disabled: !allocIndDraft.indId,
+        onClick: async () => {
+          const success = await onAllocate(allocIndDraft.indId, { resource_type_id: row.id, quantity: parseInt(allocIndDraft.quantity) || 1, notes: allocIndDraft.notes });
+          if (success !== false) { setAllocIndModal(false); setAllocIndDraft({ indId: '', quantity: 1, notes: '' }); }
+        }
+      }, "Allocate"))),
+  resAllocs.length === 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '40px 0',
       textAlign: 'center',
@@ -2227,7 +2346,8 @@ const DatabaseView = ({
   onOpenTable,
   trashedIndividuals,
   onRestoreIndividual,
-  onRestoreField
+  onRestoreField,
+  onAllocate
 }) => {
   const [dbTab, setDbTab] = useState('individuals');
   const [enabledFieldCols, setEnabledFieldCols] = useState([]);
@@ -2856,7 +2976,8 @@ const DatabaseView = ({
     canViewResource: canViewResource,
     canControlResource: canControlResource,
     canAllocateResource: canAllocateResource,
-    individuals: cases
+    individuals: cases,
+    onAllocate: onAllocate
   }), dbTab === 'definitions' && /*#__PURE__*/React.createElement(FieldDictionaryView, {
     fieldDefs: fieldDefs || {},
     fieldCrosswalks: fieldCrosswalks || [],
