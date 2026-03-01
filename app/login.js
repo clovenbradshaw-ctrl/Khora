@@ -480,7 +480,7 @@ const LoginScreen = ({
           return;
         }
       }
-      const s = await KhoraAuth.login(effectiveHs, user, pass);
+      const s = await KhoraAuth.login(effectiveHs, user.replace(/^@/, '').split(':')[0], pass);
       onLogin(s);
     } catch (e) {
       setErr(e.message);
