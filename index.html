@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<!-- Content Security Policy: restricts script/connect origins to known CDNs and Matrix endpoints -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https: wss:; img-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self';">
 <title>Khora — Sovereign Case Management</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <!-- Resource hints: early DNS + connection setup for CDN origins -->
@@ -19,10 +22,11 @@
 <link rel="preload" href="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js" as="script">
 <!-- Core scripts (synchronous — needed before Babel processes JSX) -->
 <!-- Olm (libolm) — required for Megolm E2EE. Must load before Matrix SDK. -->
-<script src="https://unpkg.com/@matrix-org/olm@3.2.15/olm.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js"></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- SRI: To regenerate hashes, run: curl -s <URL> | openssl dgst -sha384 -binary | openssl base64 -A -->
+<script src="https://unpkg.com/@matrix-org/olm@3.2.15/olm.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <!-- Non-critical: username generator loaded as module (non-blocking) -->
 <script type="module">
 import { uniqueNamesGenerator, adjectives, animals } from 'https://esm.sh/unique-names-generator@4.7.1';

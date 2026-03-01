@@ -308,7 +308,8 @@ const App = () => {
   }, "Detecting role context\u2026")));
   const handleLogout = async () => {
     try {
-      localStorage.removeItem('khora_session');
+      sessionStorage.removeItem('khora_session');
+      localStorage.removeItem('khora_session'); // clean up legacy
       localStorage.removeItem('khora_active_context');
       localStorage.removeItem('khora_active_org');
       localStorage.removeItem('khora_welcomed');

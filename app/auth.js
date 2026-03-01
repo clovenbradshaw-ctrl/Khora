@@ -333,13 +333,16 @@ const KhoraAuth = {
       this._userId = res.user_id;
       this._token = res.access_token;
       this._setupTimelineListener();
+      // Security: store session in sessionStorage (clears on tab close) — never localStorage
       try {
-        localStorage.setItem('khora_session', JSON.stringify({
+        sessionStorage.setItem('khora_session', JSON.stringify({
           homeserver: baseUrl,
           accessToken: res.access_token,
           userId: res.user_id,
           deviceId: res.device_id
         }));
+        // Clean up any stale localStorage session from previous versions
+        try { localStorage.removeItem('khora_session'); } catch {}
       } catch {}
       try {
         await KhoraEncryptedCache.put('session', 'current', {
@@ -357,13 +360,15 @@ const KhoraAuth = {
       this._token = resp.access_token;
       this._userId = resp.user_id;
       this._baseUrl = baseUrl;
+      // Security: store session in sessionStorage (clears on tab close) — never localStorage
       try {
-        localStorage.setItem('khora_session', JSON.stringify({
+        sessionStorage.setItem('khora_session', JSON.stringify({
           homeserver: baseUrl,
           accessToken: resp.access_token,
           userId: resp.user_id,
           deviceId: resp.device_id || 'fallback'
         }));
+        try { localStorage.removeItem('khora_session'); } catch {}
       } catch {}
       return { userId: resp.user_id };
     }
@@ -371,10 +376,19 @@ const KhoraAuth = {
 
   // DES(matrix.session, {check: whoami}) — token_validation
   async restoreSession() {
-    const raw = localStorage.getItem('khora_session');
+    // Read from sessionStorage first; fall back to localStorage for migration from older versions
+    let raw = sessionStorage.getItem('khora_session');
+    if (!raw) {
+      raw = localStorage.getItem('khora_session');
+      if (raw) {
+        // Migrate: move to sessionStorage and remove from localStorage
+        try { sessionStorage.setItem('khora_session', raw); } catch {}
+        try { localStorage.removeItem('khora_session'); } catch {}
+      }
+    }
     if (!raw) return null;
     let saved;
-    try { saved = JSON.parse(raw); } catch { localStorage.removeItem('khora_session'); return null; }
+    try { saved = JSON.parse(raw); } catch { sessionStorage.removeItem('khora_session'); return null; }
     const { homeserver, accessToken, userId, deviceId } = saved;
     if (!homeserver || !accessToken || !userId || !deviceId) return null;
 
@@ -388,7 +402,7 @@ const KhoraAuth = {
         if (resp.ok) { tokenValid = true; break; }
         if (resp.status === 401 || resp.status === 403) {
           console.warn('Session token expired or revoked (HTTP ' + resp.status + ')');
-          localStorage.removeItem('khora_session');
+          sessionStorage.removeItem('khora_session');
           return { expired: true };
         }
         if (resp.status >= 500) {

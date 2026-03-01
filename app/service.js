@@ -135,7 +135,12 @@ class KhoraService {
         events: {
           'm.room.power_levels': 100,
           'm.room.tombstone': 100,
-          'm.room.server_acl': 100
+          'm.room.server_acl': 100,
+          // Lock Khora bridge state events to client-only (PL 100)
+          // Prevents provider from overwriting bridge metadata or field references
+          [EVT.BRIDGE_META]: 100,
+          [EVT.BRIDGE_REFS]: 100,
+          [EVT.IDENTITY]: 100
         },
         kick: 50,
         ban: 50,
@@ -234,6 +239,10 @@ class KhoraService {
         }
       }
     } else {
+      // Guard: NEVER send to encrypted rooms via REST API — this bypasses Megolm and sends plaintext
+      if (this._isRoomEncrypted(roomId)) {
+        throw new Error('Cannot send to encrypted room — E2EE SDK unavailable. Please reload the app.');
+      }
       const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(type)}/${txn}`, content);
     }
@@ -273,6 +282,10 @@ class KhoraService {
         }
       }
     } else {
+      // Guard: NEVER send messages to encrypted rooms via REST API — this bypasses Megolm
+      if (this._isRoomEncrypted(roomId)) {
+        throw new Error('Cannot send message to encrypted room — E2EE SDK unavailable. Please reload the app.');
+      }
       const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txn}`, content);
     }

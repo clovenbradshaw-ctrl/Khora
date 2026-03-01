@@ -346,18 +346,29 @@ const EmailVerification = {
   // CON(email.plaintext_code, {dest: email_inbox, via: webhook_relay}) — out_of_band_delivery
   async sendCodeViaWebhook(email, code, orgName) {
     try {
+      const payload = JSON.stringify({
+        to: email,
+        code: code,
+        org_name: orgName,
+        subject: `Your verification code for ${orgName}`,
+        expires_minutes: 15,
+        ts: Date.now()
+      });
+      // HMAC-SHA256 signature for webhook request authenticity
+      const sigKey = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode('khora-webhook-v1'),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      );
+      const sig = await crypto.subtle.sign('HMAC', sigKey, new TextEncoder().encode(payload));
+      const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
       const resp = await fetch(`${WEBHOOK_BASE}/email-verify`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Khora-Signature': sigHex,
+          'X-Khora-Timestamp': String(Date.now())
         },
-        body: JSON.stringify({
-          to: email,
-          code: code,
-          org_name: orgName,
-          subject: `Your verification code for ${orgName}`,
-          expires_minutes: 15
-        })
+        body: payload
       });
       return resp.ok;
     } catch {

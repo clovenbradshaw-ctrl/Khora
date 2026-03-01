@@ -859,7 +859,7 @@ const LoginScreen = ({
     type: "button",
     className: "b-gho b-xs",
     onClick: () => {
-      const txt = `Khora Account Credentials\n========================\nServer: ${effectiveHs}\nUsername: ${user}\nPassword: ${pass}\n\nKeep this file safe. You will need these to sign in.\n`;
+      const txt = `Khora Account Credentials\n========================\nServer: ${effectiveHs}\nUsername: ${user}\nPassword: ${pass}\n\nSECURITY WARNING: This file contains your password in plain text.\nStore it in a secure location (e.g. password manager) and delete\nthis file after saving your credentials elsewhere.\n`;
       const b = new Blob([txt], {
         type: 'text/plain'
       });

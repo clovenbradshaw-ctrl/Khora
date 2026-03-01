@@ -141,7 +141,14 @@ const KhoraBackup = (() => {
       const ai = await apiPost('/auth/info', { email }, false); if (!ai.status) return false;
       const { masterKey, loginPassword } = await deriveLoginAndMaster(rawPassword, ai.data.salt, ai.data.authVersion);
       const lr = await apiPost('/login', { email, password: loginPassword, twoFactorCode: 'XXXXXX', authVersion: ai.data.authVersion }, false);
-      if (!lr.status) return false;
+      // Detect 2FA requirement — Filen returns status:false with a 2FA-related message
+      if (!lr.status) {
+        const msg = (lr.message || '').toLowerCase();
+        if (msg.includes('two') || msg.includes('2fa') || msg.includes('factor') || msg.includes('otp')) {
+          console.warn('Filen account requires 2FA — not yet supported by Khora backup integration');
+        }
+        return false;
+      }
       S.apiKey = lr.data.apiKey; S.email = email; S.masterKeys = [masterKey];
       try { const emk = await metaEnc(masterKey, masterKey); const mkr = await apiPost('/user/masterKeys', { masterKeys: emk }); if (mkr.status && mkr.data?.keys) { const dk = await metaDec(mkr.data.keys, masterKey); if (dk) S.masterKeys = dk.split('|').filter(Boolean); } } catch {}
       const bf = await apiGet('/user/baseFolder'); if (!bf.status) throw new Error('Base folder failed'); S.baseFolderUUID = bf.data.uuid;
@@ -161,11 +168,12 @@ const KhoraBackup = (() => {
   }
 
   // ── Credential persistence ──
-  function saveCreds(m, e) { try { localStorage.setItem('khora_backup_creds', JSON.stringify({ matrixId: m, email: e, ts: Date.now() })); } catch {} }
-  function loadCreds() { try { return JSON.parse(localStorage.getItem('khora_backup_creds')); } catch { return null; } }
-  function clearCreds() { try { localStorage.removeItem('khora_backup_creds'); localStorage.removeItem('khora_backup_seen'); } catch {} }
-  function hasSeenRecovery() { try { return localStorage.getItem('khora_backup_seen') === '1'; } catch { return false; } }
-  function markRecoverySeen() { try { localStorage.setItem('khora_backup_seen', '1'); } catch {} }
+  // Security: use sessionStorage for backup creds (email/matrixId pairing) — clears on tab close
+  function saveCreds(m, e) { try { sessionStorage.setItem('khora_backup_creds', JSON.stringify({ matrixId: m, email: e, ts: Date.now() })); try { localStorage.removeItem('khora_backup_creds'); } catch {} } catch {} }
+  function loadCreds() { try { return JSON.parse(sessionStorage.getItem('khora_backup_creds')) || JSON.parse(localStorage.getItem('khora_backup_creds')); } catch { return null; } }
+  function clearCreds() { try { sessionStorage.removeItem('khora_backup_creds'); localStorage.removeItem('khora_backup_creds'); sessionStorage.removeItem('khora_backup_seen'); localStorage.removeItem('khora_backup_seen'); } catch {} }
+  function hasSeenRecovery() { try { return (sessionStorage.getItem('khora_backup_seen') || localStorage.getItem('khora_backup_seen')) === '1'; } catch { return false; } }
+  function markRecoverySeen() { try { sessionStorage.setItem('khora_backup_seen', '1'); } catch {} }
 
   // ── Room-based credential persistence (encrypted) ──
   // Encrypt the Filen password using a key derived from the Matrix ID before storing in room state
@@ -275,10 +283,12 @@ const KhoraBackup = (() => {
       const matrixId = svc.userId;
       const ok = await tryLogin(email, password);
       if (ok) {
-        S.matrixId = matrixId; S.filenPassword = password;
+        S.matrixId = matrixId;
         saveCreds(matrixId, email);
         // Save encrypted password to room data for cross-device auto-login
         try { await api.saveCredsToRoom(email, password); } catch (e) { console.warn('Could not save backup creds to room:', e.message); }
+        // Security: clear password from memory — no longer needed after auth + room save
+        S.filenPassword = null;
         emit({ event: 'connected', matrixId, email });
         return true;
       }
@@ -305,8 +315,9 @@ const KhoraBackup = (() => {
       if (!password) throw new Error('No pending password');
       const ok = await tryLogin(creds.email, password);
       if (ok) {
-        S.matrixId = creds.matrixId; S.filenPassword = password; S._pendingPassword = null;
+        S.matrixId = creds.matrixId; S._pendingPassword = null;
         try { await api.saveCredsToRoom(creds.email, password); } catch (e) { console.warn('Could not save backup creds to room:', e.message); }
+        S.filenPassword = null; // Security: clear from memory after room save
         emit({ event: 'connected', matrixId: creds.matrixId, email: creds.email });
         return true;
       }
@@ -352,7 +363,7 @@ const KhoraBackup = (() => {
         if (roomCreds) {
           const ok = await tryLogin(roomCreds.email, roomCreds.password);
           if (ok) {
-            S.matrixId = svc.userId; S.filenPassword = roomCreds.password;
+            S.matrixId = svc.userId; S.filenPassword = null;
             saveCreds(svc.userId, roomCreds.email);
             emit({ event: 'connected', matrixId: svc.userId, email: roomCreds.email });
             return true;
@@ -364,7 +375,7 @@ const KhoraBackup = (() => {
       try {
         const fp = await deriveFilenPassword(creds.matrixId);
         const ok = await tryLogin(creds.email, fp);
-        if (ok) { S.matrixId = creds.matrixId; S.filenPassword = fp; emit({ event: 'connected', matrixId: creds.matrixId, email: creds.email }); return true; }
+        if (ok) { S.matrixId = creds.matrixId; S.filenPassword = null; emit({ event: 'connected', matrixId: creds.matrixId, email: creds.email }); return true; }
       } catch {}
       return false;
     },
