@@ -3621,11 +3621,18 @@ const KhoraAuth = {
         userId: res.user_id,
         deviceId: res.device_id
       });
-      try {
-        if (typeof Olm !== 'undefined') await Olm.init();
-        await this._client.initCrypto();
-        this._client.setGlobalErrorOnUnknownDevices(false);
-      } catch (e) { console.warn('Crypto init:', e.message); }
+      // Initialize E2EE crypto — retry up to 3 times to ensure encryption is active.
+      for (let cryptoAttempt = 0; cryptoAttempt < 3; cryptoAttempt++) {
+        try {
+          if (typeof Olm !== 'undefined') await Olm.init();
+          await this._client.initCrypto();
+          this._client.setGlobalErrorOnUnknownDevices(false);
+          break;
+        } catch (e) {
+          console.warn(`Crypto init attempt ${cryptoAttempt + 1}/3:`, e.message);
+          if (cryptoAttempt < 2) await new Promise(r => setTimeout(r, 1000 * (cryptoAttempt + 1)));
+        }
+      }
       await this._client.startClient({ initialSyncLimit: 30 });
       await new Promise((resolve, reject) => {
         if (this._client.isInitialSyncComplete()) return resolve();
@@ -3718,11 +3725,18 @@ const KhoraAuth = {
       await LocalVaultCrypto.deriveKey(userId, accessToken, deviceId);
       if (typeof matrixcs !== 'undefined') {
         this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId });
-        try {
-          if (typeof Olm !== 'undefined') await Olm.init();
-          await this._client.initCrypto();
-          this._client.setGlobalErrorOnUnknownDevices(false);
-        } catch (e) { console.warn('Crypto init:', e.message); }
+        // Initialize E2EE crypto — retry up to 3 times to ensure encryption is active.
+        for (let cryptoAttempt = 0; cryptoAttempt < 3; cryptoAttempt++) {
+          try {
+            if (typeof Olm !== 'undefined') await Olm.init();
+            await this._client.initCrypto();
+            this._client.setGlobalErrorOnUnknownDevices(false);
+            break;
+          } catch (e) {
+            console.warn(`Crypto init attempt ${cryptoAttempt + 1}/3:`, e.message);
+            if (cryptoAttempt < 2) await new Promise(r => setTimeout(r, 1000 * (cryptoAttempt + 1)));
+          }
+        }
         await this._client.startClient({ initialSyncLimit: 30 });
         await new Promise((resolve, reject) => {
           if (this._client.isInitialSyncComplete()) return resolve();
@@ -4376,18 +4390,33 @@ class KhoraService {
     }
   }
 
-  // INS(matrix.timeline_event, {room}) — event_emission — with crypto fallback for E2EE errors
+  // Check if a room has encryption enabled — used to block unencrypted sends
+  _isRoomEncrypted(roomId) {
+    if (this.client) {
+      const room = this.client.getRoom(roomId);
+      return room ? room.hasEncryptionStateEvent() : true; // default to encrypted (safe assumption)
+    }
+    return true; // Assume encrypted when we can't check (safe default)
+  }
+
+  // INS(matrix.timeline_event, {room}) — event_emission — never falls back to unencrypted
   async sendEvent(roomId, type, content) {
     if (this.client) {
+      // Guard: refuse to send if room is encrypted but crypto is not available
+      if (!this.hasCrypto && this._isRoomEncrypted(roomId)) {
+        throw new Error('Cannot send to encrypted room — E2EE is not initialized. Please reload the app.');
+      }
       try {
         await this._withRetry(() => this.client.sendEvent(roomId, type, content));
       } catch (e) {
-        // Fallback to REST API if SDK sendEvent fails (e.g. crypto/encryption errors)
+        // On crypto errors: retry once via the SDK (which handles encryption).
+        // NEVER fall back to the REST API — that bypasses Megolm and sends plaintext.
         const msg = (e?.message || '').toLowerCase();
-        if (msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm')) {
-          console.warn('sendEvent crypto fallback for', type, ':', e.message);
-          const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
-          await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(type)}/${txn}`, content);
+        const isCryptoError = msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm');
+        if (isCryptoError) {
+          console.warn('sendEvent: encryption error, retrying via SDK:', e.message);
+          await new Promise(r => setTimeout(r, 1500));
+          await this._withRetry(() => this.client.sendEvent(roomId, type, content));
         } else {
           throw e;
         }
@@ -4413,7 +4442,24 @@ class KhoraService {
       content['m.relates_to'] = { 'm.in_reply_to': { event_id: replyTo.id } };
     }
     if (this.client) {
-      await this._withRetry(() => this.client.sendMessage(roomId, content));
+      // Guard: refuse to send if room is encrypted but crypto is not available
+      if (!this.hasCrypto && this._isRoomEncrypted(roomId)) {
+        throw new Error('Cannot send message to encrypted room — E2EE is not initialized. Please reload the app.');
+      }
+      try {
+        await this._withRetry(() => this.client.sendMessage(roomId, content));
+      } catch (e) {
+        // On crypto errors: retry once via the SDK (preserves encryption).
+        const msg = (e?.message || '').toLowerCase();
+        const isCryptoError = msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm');
+        if (isCryptoError) {
+          console.warn('sendMessage: encryption error, retrying via SDK:', e.message);
+          await new Promise(r => setTimeout(r, 1500));
+          await this._withRetry(() => this.client.sendMessage(roomId, content));
+        } else {
+          throw e;
+        }
+      }
     } else {
       const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txn}`, content);
@@ -24479,11 +24525,11 @@ const ClientApp = ({
         color: 'var(--tx-2)'
       }
     }, pp.title), /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-green"
-    }, /*#__PURE__*/React.createElement(I, {
+      className: svc.hasCrypto ? "tag tag-green" : "tag tag-red"
+    }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, {
       n: "lock",
       s: 9
-    }), "E2EE")), orgInfo?.verified ? /*#__PURE__*/React.createElement("div", {
+    }), svc.hasCrypto ? "E2EE" : "Unencrypted")), orgInfo?.verified ? /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         alignItems: 'center',
@@ -25373,7 +25419,7 @@ const ClientApp = ({
               /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: isActive ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
               /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, flexWrap: 'wrap' } },
                 /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, padding: '1px 5px', borderRadius: 10, background: 'var(--teal-dim)', color: 'var(--teal)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' } }, "Provider"),
-                /*#__PURE__*/React.createElement("span", { className: "tag tag-green", style: { fontSize: 7 } }, /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), "E2EE")
+                /*#__PURE__*/React.createElement("span", { className: svc.hasCrypto ? "tag tag-green" : "tag tag-gold", style: { fontSize: 7 } }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), svc.hasCrypto ? "E2EE" : "No E2EE")
               )
             )
           ));
@@ -25475,14 +25521,14 @@ const ClientApp = ({
         flexWrap: 'wrap'
       }
     }, /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-green",
+      className: svc.hasCrypto ? "tag tag-green" : "tag tag-gold",
       style: {
         fontSize: 8
       }
-    }, /*#__PURE__*/React.createElement(I, {
+    }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, {
       n: "lock",
       s: 8
-    }), "E2EE"), isTeamDM ? /*#__PURE__*/React.createElement(ConnectionBadges, {
+    }), svc.hasCrypto ? "E2EE" : "No E2EE"), isTeamDM ? /*#__PURE__*/React.createElement(ConnectionBadges, {
       userType: dm?.peerType || 'provider',
       teamName: dm?.teamName,
       size: "xs"
@@ -25610,7 +25656,7 @@ const ClientApp = ({
     }, /*#__PURE__*/React.createElement("input", {
       value: inboxMsgText,
       onChange: e => setInboxMsgText(e.target.value),
-      placeholder: "Type a message (E2EE)...",
+      placeholder: svc.hasCrypto ? "Type a message (E2EE)..." : "Type a message...",
       onKeyDown: e => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -25917,7 +25963,7 @@ const ClientApp = ({
   }, /*#__PURE__*/React.createElement("input", {
     value: msgText,
     onChange: e => setMsgText(e.target.value),
-    placeholder: "Message (E2EE)...",
+    placeholder: svc.hasCrypto ? "Message (E2EE)..." : "Message...",
     onKeyDown: e => {
       if (e.key === 'Enter' && !e.shiftKey) handleSendBridgeMsg();
     },
@@ -40047,7 +40093,7 @@ const ProviderApp = ({
           /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: isActive ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
           /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, flexWrap: 'wrap' } },
             /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, padding: '1px 5px', borderRadius: 10, background: `var(--${tc}-dim)`, color: `var(--${tc})`, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' } }, convoTypeLabel(type)),
-            type === 'case' && /*#__PURE__*/React.createElement("span", { className: "tag tag-green", style: { fontSize: 7 } }, /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), "E2EE"),
+            type === 'case' && /*#__PURE__*/React.createElement("span", { className: svc.hasCrypto ? "tag tag-green" : "tag tag-gold", style: { fontSize: 7 } }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), svc.hasCrypto ? "E2EE" : "No E2EE"),
             type === 'channel' && /*#__PURE__*/React.createElement("span", { className: `tag ${orgOpacity === 'opaque' ? 'tag-red' : orgOpacity === 'translucent' ? 'tag-gold' : 'tag-green'}`, style: { fontSize: 7 } }, orgOpacity),
             type === 'team_dm' && data.teamName && /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: 'var(--tx-3)' } }, data.teamName)
           )
@@ -40123,14 +40169,14 @@ const ProviderApp = ({
         flexWrap: 'wrap'
       }
     }, /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-green",
+      className: svc.hasCrypto ? "tag tag-green" : "tag tag-gold",
       style: {
         fontSize: 8
       }
-    }, /*#__PURE__*/React.createElement(I, {
+    }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, {
       n: "lock",
       s: 8
-    }), "E2EE"), convoType === 'case' && /*#__PURE__*/React.createElement(ConnectionBadges, {
+    }), svc.hasCrypto ? "E2EE" : "No E2EE"), convoType === 'case' && /*#__PURE__*/React.createElement(ConnectionBadges, {
       userType: "client",
       teamName: caseData ? (() => { const t = teams.find(t => (t.members || []).some(m => m.userId === caseData.clientUserId)); return t?.name || null; })() : null,
       teamColors: teamColorsList,
@@ -40277,7 +40323,7 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement("input", {
       value: inboxMsgText,
       onChange: e => setInboxMsgText(e.target.value),
-      placeholder: convoType === 'channel' ? `Message as ${orgOpacity === 'transparent' ? providerProfile.display_name || 'you' : orgOpacity === 'translucent' ? orgMeta.name || 'your org' : 'anonymous org'}... (E2EE)` : 'Type a message (E2EE)...',
+      placeholder: convoType === 'channel' ? `Message as ${orgOpacity === 'transparent' ? providerProfile.display_name || 'you' : orgOpacity === 'translucent' ? orgMeta.name || 'your org' : 'anonymous org'}...${svc.hasCrypto ? ' (E2EE)' : ''}` : (svc.hasCrypto ? 'Type a message (E2EE)...' : 'Type a message...'),
       onKeyDown: e => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -41982,7 +42028,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement("input", {
     value: msgText,
     onChange: e => setMsgText(e.target.value),
-    placeholder: "Message (E2EE)...",
+    placeholder: svc.hasCrypto ? "Message (E2EE)..." : "Message...",
     onKeyDown: e => {
       if (e.key === 'Enter' && !e.shiftKey) handleSendMsg();
     },
@@ -44046,11 +44092,11 @@ const ProviderApp = ({
         marginTop: 4
       }
     }, /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-teal"
-    }, /*#__PURE__*/React.createElement(I, {
+      className: svc.hasCrypto ? "tag tag-teal" : "tag tag-gold"
+    }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, {
       n: "lock",
       s: 9
-    }), "E2EE"), /*#__PURE__*/React.createElement("span", {
+    }), svc.hasCrypto ? "E2EE" : "No E2EE"), /*#__PURE__*/React.createElement("span", {
       className: `tag ${orgOpacity === 'opaque' ? 'tag-red' : orgOpacity === 'translucent' ? 'tag-gold' : 'tag-green'}`,
       style: {
         fontSize: 9
@@ -44146,7 +44192,7 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement("input", {
       value: orgMsgText,
       onChange: e => setOrgMsgText(e.target.value),
-      placeholder: `Message as ${orgOpacity === 'transparent' ? providerProfile.display_name || 'you' : orgOpacity === 'translucent' ? orgMeta.name || 'your org' : 'anonymous org'}... (E2EE)`,
+      placeholder: `Message as ${orgOpacity === 'transparent' ? providerProfile.display_name || 'you' : orgOpacity === 'translucent' ? orgMeta.name || 'your org' : 'anonymous org'}...${svc.hasCrypto ? ' (E2EE)' : ''}`,
       onKeyDown: e => {
         if (e.key === 'Enter' && !e.shiftKey) handleSendOrgMsg();
       },

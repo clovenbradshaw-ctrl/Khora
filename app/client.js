@@ -3438,11 +3438,11 @@ const ClientApp = ({
         color: 'var(--tx-2)'
       }
     }, pp.title), /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-green"
-    }, /*#__PURE__*/React.createElement(I, {
+      className: svc.hasCrypto ? "tag tag-green" : "tag tag-red"
+    }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, {
       n: "lock",
       s: 9
-    }), "E2EE")), orgInfo?.verified ? /*#__PURE__*/React.createElement("div", {
+    }), svc.hasCrypto ? "E2EE" : "Unencrypted")), orgInfo?.verified ? /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         alignItems: 'center',
@@ -4332,7 +4332,7 @@ const ClientApp = ({
               /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: isActive ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
               /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, flexWrap: 'wrap' } },
                 /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, padding: '1px 5px', borderRadius: 10, background: 'var(--teal-dim)', color: 'var(--teal)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' } }, "Provider"),
-                /*#__PURE__*/React.createElement("span", { className: "tag tag-green", style: { fontSize: 7 } }, /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), "E2EE")
+                /*#__PURE__*/React.createElement("span", { className: svc.hasCrypto ? "tag tag-green" : "tag tag-gold", style: { fontSize: 7 } }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), svc.hasCrypto ? "E2EE" : "No E2EE")
               )
             )
           ));
@@ -4434,14 +4434,14 @@ const ClientApp = ({
         flexWrap: 'wrap'
       }
     }, /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-green",
+      className: svc.hasCrypto ? "tag tag-green" : "tag tag-gold",
       style: {
         fontSize: 8
       }
-    }, /*#__PURE__*/React.createElement(I, {
+    }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, {
       n: "lock",
       s: 8
-    }), "E2EE"), isTeamDM ? /*#__PURE__*/React.createElement(ConnectionBadges, {
+    }), svc.hasCrypto ? "E2EE" : "No E2EE"), isTeamDM ? /*#__PURE__*/React.createElement(ConnectionBadges, {
       userType: dm?.peerType || 'provider',
       teamName: dm?.teamName,
       size: "xs"
@@ -4569,7 +4569,7 @@ const ClientApp = ({
     }, /*#__PURE__*/React.createElement("input", {
       value: inboxMsgText,
       onChange: e => setInboxMsgText(e.target.value),
-      placeholder: "Type a message (E2EE)...",
+      placeholder: svc.hasCrypto ? "Type a message (E2EE)..." : "Type a message...",
       onKeyDown: e => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -4876,7 +4876,7 @@ const ClientApp = ({
   }, /*#__PURE__*/React.createElement("input", {
     value: msgText,
     onChange: e => setMsgText(e.target.value),
-    placeholder: "Message (E2EE)...",
+    placeholder: svc.hasCrypto ? "Message (E2EE)..." : "Message...",
     onKeyDown: e => {
       if (e.key === 'Enter' && !e.shiftKey) handleSendBridgeMsg();
     },

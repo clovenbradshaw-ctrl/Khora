@@ -4895,7 +4895,7 @@ const ProviderApp = ({
           /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: isActive ? 700 : 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, name),
           /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 3, marginTop: 2, flexWrap: 'wrap' } },
             /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, padding: '1px 5px', borderRadius: 10, background: `var(--${tc}-dim)`, color: `var(--${tc})`, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' } }, convoTypeLabel(type)),
-            type === 'case' && /*#__PURE__*/React.createElement("span", { className: "tag tag-green", style: { fontSize: 7 } }, /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), "E2EE"),
+            type === 'case' && /*#__PURE__*/React.createElement("span", { className: svc.hasCrypto ? "tag tag-green" : "tag tag-gold", style: { fontSize: 7 } }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, { n: "lock", s: 6 }), svc.hasCrypto ? "E2EE" : "No E2EE"),
             type === 'channel' && /*#__PURE__*/React.createElement("span", { className: `tag ${orgOpacity === 'opaque' ? 'tag-red' : orgOpacity === 'translucent' ? 'tag-gold' : 'tag-green'}`, style: { fontSize: 7 } }, orgOpacity),
             type === 'team_dm' && data.teamName && /*#__PURE__*/React.createElement("span", { style: { fontSize: 8, color: 'var(--tx-3)' } }, data.teamName)
           )
@@ -4971,14 +4971,14 @@ const ProviderApp = ({
         flexWrap: 'wrap'
       }
     }, /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-green",
+      className: svc.hasCrypto ? "tag tag-green" : "tag tag-gold",
       style: {
         fontSize: 8
       }
-    }, /*#__PURE__*/React.createElement(I, {
+    }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, {
       n: "lock",
       s: 8
-    }), "E2EE"), convoType === 'case' && /*#__PURE__*/React.createElement(ConnectionBadges, {
+    }), svc.hasCrypto ? "E2EE" : "No E2EE"), convoType === 'case' && /*#__PURE__*/React.createElement(ConnectionBadges, {
       userType: "client",
       teamName: caseData ? (() => { const t = teams.find(t => (t.members || []).some(m => m.userId === caseData.clientUserId)); return t?.name || null; })() : null,
       teamColors: teamColorsList,
@@ -5125,7 +5125,7 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement("input", {
       value: inboxMsgText,
       onChange: e => setInboxMsgText(e.target.value),
-      placeholder: convoType === 'channel' ? `Message as ${orgOpacity === 'transparent' ? providerProfile.display_name || 'you' : orgOpacity === 'translucent' ? orgMeta.name || 'your org' : 'anonymous org'}... (E2EE)` : 'Type a message (E2EE)...',
+      placeholder: convoType === 'channel' ? `Message as ${orgOpacity === 'transparent' ? providerProfile.display_name || 'you' : orgOpacity === 'translucent' ? orgMeta.name || 'your org' : 'anonymous org'}...${svc.hasCrypto ? ' (E2EE)' : ''}` : (svc.hasCrypto ? 'Type a message (E2EE)...' : 'Type a message...'),
       onKeyDown: e => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
@@ -6830,7 +6830,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement("input", {
     value: msgText,
     onChange: e => setMsgText(e.target.value),
-    placeholder: "Message (E2EE)...",
+    placeholder: svc.hasCrypto ? "Message (E2EE)..." : "Message...",
     onKeyDown: e => {
       if (e.key === 'Enter' && !e.shiftKey) handleSendMsg();
     },
@@ -8894,11 +8894,11 @@ const ProviderApp = ({
         marginTop: 4
       }
     }, /*#__PURE__*/React.createElement("span", {
-      className: "tag tag-teal"
-    }, /*#__PURE__*/React.createElement(I, {
+      className: svc.hasCrypto ? "tag tag-teal" : "tag tag-gold"
+    }, svc.hasCrypto && /*#__PURE__*/React.createElement(I, {
       n: "lock",
       s: 9
-    }), "E2EE"), /*#__PURE__*/React.createElement("span", {
+    }), svc.hasCrypto ? "E2EE" : "No E2EE"), /*#__PURE__*/React.createElement("span", {
       className: `tag ${orgOpacity === 'opaque' ? 'tag-red' : orgOpacity === 'translucent' ? 'tag-gold' : 'tag-green'}`,
       style: {
         fontSize: 9
@@ -8994,7 +8994,7 @@ const ProviderApp = ({
     }, /*#__PURE__*/React.createElement("input", {
       value: orgMsgText,
       onChange: e => setOrgMsgText(e.target.value),
-      placeholder: `Message as ${orgOpacity === 'transparent' ? providerProfile.display_name || 'you' : orgOpacity === 'translucent' ? orgMeta.name || 'your org' : 'anonymous org'}... (E2EE)`,
+      placeholder: `Message as ${orgOpacity === 'transparent' ? providerProfile.display_name || 'you' : orgOpacity === 'translucent' ? orgMeta.name || 'your org' : 'anonymous org'}...${svc.hasCrypto ? ' (E2EE)' : ''}`,
       onKeyDown: e => {
         if (e.key === 'Enter' && !e.shiftKey) handleSendOrgMsg();
       },

@@ -307,11 +307,20 @@ const KhoraAuth = {
         userId: res.user_id,
         deviceId: res.device_id
       });
-      try {
-        if (typeof Olm !== 'undefined') await Olm.init();
-        await this._client.initCrypto();
-        this._client.setGlobalErrorOnUnknownDevices(false);
-      } catch (e) { console.warn('Crypto init:', e.message); }
+      // Initialize E2EE crypto — retry up to 3 times to ensure encryption is active.
+      // If all retries fail, the session still starts but hasCrypto will be false
+      // and the UI will reflect that messages cannot be encrypted.
+      for (let cryptoAttempt = 0; cryptoAttempt < 3; cryptoAttempt++) {
+        try {
+          if (typeof Olm !== 'undefined') await Olm.init();
+          await this._client.initCrypto();
+          this._client.setGlobalErrorOnUnknownDevices(false);
+          break;
+        } catch (e) {
+          console.warn(`Crypto init attempt ${cryptoAttempt + 1}/3:`, e.message);
+          if (cryptoAttempt < 2) await new Promise(r => setTimeout(r, 1000 * (cryptoAttempt + 1)));
+        }
+      }
       await this._client.startClient({ initialSyncLimit: 30 });
       await new Promise((resolve, reject) => {
         if (this._client.isInitialSyncComplete()) return resolve();
@@ -406,11 +415,18 @@ const KhoraAuth = {
       await LocalVaultCrypto.deriveKey(userId, accessToken, deviceId);
       if (typeof matrixcs !== 'undefined') {
         this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId });
-        try {
-          if (typeof Olm !== 'undefined') await Olm.init();
-          await this._client.initCrypto();
-          this._client.setGlobalErrorOnUnknownDevices(false);
-        } catch (e) { console.warn('Crypto init:', e.message); }
+        // Initialize E2EE crypto — retry up to 3 times to ensure encryption is active.
+        for (let cryptoAttempt = 0; cryptoAttempt < 3; cryptoAttempt++) {
+          try {
+            if (typeof Olm !== 'undefined') await Olm.init();
+            await this._client.initCrypto();
+            this._client.setGlobalErrorOnUnknownDevices(false);
+            break;
+          } catch (e) {
+            console.warn(`Crypto init attempt ${cryptoAttempt + 1}/3:`, e.message);
+            if (cryptoAttempt < 2) await new Promise(r => setTimeout(r, 1000 * (cryptoAttempt + 1)));
+          }
+        }
         await this._client.startClient({ initialSyncLimit: 30 });
         await new Promise((resolve, reject) => {
           if (this._client.isInitialSyncComplete()) return resolve();

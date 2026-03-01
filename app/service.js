@@ -202,18 +202,33 @@ class KhoraService {
     }
   }
 
-  // INS(matrix.timeline_event, {room}) — event_emission — with crypto fallback for E2EE errors
+  // Check if a room has encryption enabled — used to block unencrypted sends
+  _isRoomEncrypted(roomId) {
+    if (this.client) {
+      const room = this.client.getRoom(roomId);
+      return room ? room.hasEncryptionStateEvent() : true; // default to encrypted (safe assumption)
+    }
+    return true; // Assume encrypted when we can't check (safe default)
+  }
+
+  // INS(matrix.timeline_event, {room}) — event_emission — never falls back to unencrypted
   async sendEvent(roomId, type, content) {
     if (this.client) {
+      // Guard: refuse to send if room is encrypted but crypto is not available
+      if (!this.hasCrypto && this._isRoomEncrypted(roomId)) {
+        throw new Error('Cannot send to encrypted room — E2EE is not initialized. Please reload the app.');
+      }
       try {
         await this._withRetry(() => this.client.sendEvent(roomId, type, content));
       } catch (e) {
-        // Fallback to REST API if SDK sendEvent fails (e.g. crypto/encryption errors)
+        // On crypto errors: retry once via the SDK (which handles encryption).
+        // NEVER fall back to the REST API — that bypasses Megolm and sends plaintext.
         const msg = (e?.message || '').toLowerCase();
-        if (msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm')) {
-          console.warn('sendEvent crypto fallback for', type, ':', e.message);
-          const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
-          await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(type)}/${txn}`, content);
+        const isCryptoError = msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm');
+        if (isCryptoError) {
+          console.warn('sendEvent: encryption error, retrying via SDK:', e.message);
+          await new Promise(r => setTimeout(r, 1500));
+          await this._withRetry(() => this.client.sendEvent(roomId, type, content));
         } else {
           throw e;
         }
@@ -239,7 +254,24 @@ class KhoraService {
       content['m.relates_to'] = { 'm.in_reply_to': { event_id: replyTo.id } };
     }
     if (this.client) {
-      await this._withRetry(() => this.client.sendMessage(roomId, content));
+      // Guard: refuse to send if room is encrypted but crypto is not available
+      if (!this.hasCrypto && this._isRoomEncrypted(roomId)) {
+        throw new Error('Cannot send message to encrypted room — E2EE is not initialized. Please reload the app.');
+      }
+      try {
+        await this._withRetry(() => this.client.sendMessage(roomId, content));
+      } catch (e) {
+        // On crypto errors: retry once via the SDK (preserves encryption).
+        const msg = (e?.message || '').toLowerCase();
+        const isCryptoError = msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm');
+        if (isCryptoError) {
+          console.warn('sendMessage: encryption error, retrying via SDK:', e.message);
+          await new Promise(r => setTimeout(r, 1500));
+          await this._withRetry(() => this.client.sendMessage(roomId, content));
+        } else {
+          throw e;
+        }
+      }
     } else {
       const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txn}`, content);
