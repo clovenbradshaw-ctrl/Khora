@@ -741,20 +741,20 @@ const CreateFieldModal = ({ open, onClose, onSave, onPropose, fieldDefs, categor
   const [saving, setSaving] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
 
-  if (!open) return null;
-
   const ns = namespace || 'org';
   const uri = `khora:${ns}/${key || fieldLabelToKey(label)}`;
   const computedKey = key || fieldLabelToKey(label);
   const defLen = definition.length;
   const isValid = label.trim().length > 0 && computedKey.length > 0 && defLen >= 20 && dataType;
 
-  // Check for duplicate URIs / keys
+  // Check for duplicate URIs / keys — must be before any early return (Rules of Hooks)
   React.useEffect(() => {
     if (!computedKey || !fieldDefs) { setDuplicateWarning(null); return; }
     const existing = Object.values(fieldDefs).find(d => d.key === computedKey || d.uri === uri);
     setDuplicateWarning(existing ? `A field with key "${computedKey}" already exists (${existing.label})` : null);
   }, [computedKey, uri, fieldDefs]);
+
+  if (!open) return null;
 
   const handleSave = async () => {
     if (!isValid || duplicateWarning) return;

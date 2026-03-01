@@ -1029,7 +1029,7 @@ const TeamDetailView = ({
       style: {
         height: '100%',
         background: 'var(--green)',
-        width: `${Math.min(100, approvalCount / threshold * 100)}%`,
+        width: `${threshold > 0 ? Math.min(100, approvalCount / threshold * 100) : 100}%`,
         borderRadius: 2,
         transition: 'width .3s'
       }
@@ -1904,13 +1904,13 @@ const ProfileActivityFeed = ({
 /* ─── CrmFieldRow — single inline-editable field row ─── */
 const CrmFieldRow = ({ fieldDef, value, disclosed, eoOp, frame, onSave, roomId, onRestore }) => {
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [msEditing, setMsEditing] = useState(false);
   const isLocked = disclosed === false;
   const hasValue = value !== undefined && value !== null && value !== '';
   const displayValue = Array.isArray(value) ? value.join(', ') : value;
 
   // Multi-select needs special handling
   if (fieldDef.data_type === 'multi_select' && !isLocked) {
-    const [msEditing, setMsEditing] = useState(false);
     const currentArr = Array.isArray(value) ? value : (value ? value.split(', ').filter(Boolean) : []);
     const toggleOpt = opt => {
       const next = currentArr.includes(opt) ? currentArr.filter(v => v !== opt) : [...currentArr, opt];

@@ -177,12 +177,13 @@ const Toast = ({
   useEffect(() => {
     const t = setTimeout(onClose, 3500);
     return () => clearTimeout(t);
-  }, []);
+  }, [onClose]);
   const c = {
     info: 'var(--blue)',
     success: 'var(--green)',
     error: 'var(--red)',
-    warn: 'var(--gold)'
+    warn: 'var(--gold)',
+    warning: 'var(--gold)'
   }[type];
   return /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
@@ -1972,7 +1973,7 @@ const BackupSettingsView = ({ showToast }) => {
       /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 8 } },
         /*#__PURE__*/React.createElement("button", { className: "b-pri b-sm", onClick: handleBridgeEnable },
           /*#__PURE__*/React.createElement(I, { n: "globe", s: 12 }), " Enable Bridge"),
-        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => {} }, "Not Now"))),
+        /*#__PURE__*/React.createElement("button", { className: "b-gho b-sm", onClick: () => setPhase('connected') }, "Not Now"))),
 
     // ── Bridge active status ──
     isBridgeActive && /*#__PURE__*/React.createElement("div", { style: { background: 'var(--bg-2)', border: '1px solid var(--border-0)', borderRadius: 'var(--r-lg)', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 } },

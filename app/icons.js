@@ -640,6 +640,10 @@ const ThemeProvider = ({
   useEffect(() => {
     document.documentElement.classList.toggle('light', theme === 'light');
     localStorage.setItem('khora-theme', theme);
+    // Sync global SWC variable for legacy components (SwTag, SwBtn, SwInput)
+    if (typeof SWC_LIGHT !== 'undefined' && typeof SWC_DARK !== 'undefined') {
+      SWC = theme === 'light' ? SWC_LIGHT : SWC_DARK;
+    }
   }, [theme]);
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: light)');
