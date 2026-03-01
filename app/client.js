@@ -1117,6 +1117,7 @@ const ClientApp = ({
   const [inboxConvo, setInboxConvo] = useState(null); // provider index for active inbox conversation
   const [inboxMessages, setInboxMessages] = useState([]);
   const [inboxMsgText, setInboxMsgText] = useState('');
+  const [inboxReplyTo, setInboxReplyTo] = useState(null); // {id, sender, body} for reply
   const [inboxTab, setInboxTab] = useState('providers'); // 'providers' | 'team'
   // ─── Team member DM state (client-side) ───
   const [clientTeamDMs, setClientTeamDMs] = useState([]); // [{roomId, peerId, peerName, teamName, peerType}]
@@ -2059,12 +2060,14 @@ const ClientApp = ({
   };
   const handleSendInboxMsg = async () => {
     if (!inboxMsgText.trim() || inboxConvo === null) return;
+    const reply = inboxReplyTo;
     // Team DM (room ID string)
     if (typeof inboxConvo === 'string') {
       await svc.sendMessage(inboxConvo, inboxMsgText, {
         [`${NS}.type`]: 'team_dm'
-      });
+      }, reply);
       setInboxMsgText('');
+      setInboxReplyTo(null);
       setTimeout(() => loadInboxMessages(inboxConvo), 500);
       return;
     }
@@ -2073,11 +2076,12 @@ const ClientApp = ({
     if (!prov) return;
     await svc.sendMessage(prov.bridgeRoomId, inboxMsgText, {
       [`${NS}.type`]: 'note'
-    });
+    }, reply);
     await emitOp(prov.bridgeRoomId, 'INS', dot('bridge', 'messages', 'client_note'), {
       body: inboxMsgText
     }, bridgeFrame(prov.bridgeRoomId));
     setInboxMsgText('');
+    setInboxReplyTo(null);
     setTimeout(() => loadInboxMessages(prov.bridgeRoomId), 500);
   };
   // ─── Client-side team DM functions ───
@@ -4521,14 +4525,14 @@ const ClientApp = ({
           border: `1px solid ${isOwn ? 'rgba(62,201,176,.2)' : 'var(--border-0)'}`,
           transition: 'transform .1s'
         }
-      }, /*#__PURE__*/React.createElement("p", {
+      }, /*#__PURE__*/React.createElement(ReplyQuote, { msg, allMessages: inboxMessages }), /*#__PURE__*/React.createElement("p", {
         style: {
           fontSize: 12.5,
           color: 'var(--tx-0)',
           lineHeight: 1.5,
           wordBreak: 'break-word'
         }
-      }, msg.content?.body)), /*#__PURE__*/React.createElement("div", {
+      }, getReplyBody(msg.content))), /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',
@@ -4551,10 +4555,13 @@ const ClientApp = ({
       }, msg.ts ? new Date(msg.ts).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
-      }) : '')));
+      }) : ''), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setInboxReplyTo({ id: msg.id, sender: msg.sender, body: getReplyBody(msg.content) }),
+        style: { background: 'none', border: 'none', color: 'var(--tx-3)', cursor: 'pointer', fontSize: 9, fontFamily: 'var(--mono)', padding: '0 2px' }
+      }, "\u21a9 reply")));
     })), /*#__PURE__*/React.createElement("div", {
       className: "inbox-compose"
-    }, /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement(ReplyBanner, { replyTo: inboxReplyTo, onCancel: () => setInboxReplyTo(null) }), /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         gap: 8
@@ -4838,7 +4845,7 @@ const ClientApp = ({
       padding: '8px 0',
       borderBottom: '1px solid var(--border-0)'
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(ReplyQuote, { msg, allMessages: bridgeMessages }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'space-between',
@@ -4861,7 +4868,7 @@ const ClientApp = ({
       fontSize: 12.5,
       color: 'var(--tx-1)'
     }
-  }, msg.content?.body)))), /*#__PURE__*/React.createElement("div", {
+  }, getReplyBody(msg.content))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6

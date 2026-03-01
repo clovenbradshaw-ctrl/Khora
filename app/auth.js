@@ -237,6 +237,25 @@ const KhoraAuth = {
       };
       window.dispatchEvent(new CustomEvent('khora:timeline', { detail }));
     });
+    // Listen for decrypted events — encrypted messages from Element arrive as
+    // m.room.encrypted in Room.timeline (skipped above). Once the SDK decrypts
+    // them, this handler fires so we can trigger the UI refresh.
+    this._client.on('Event.decrypted', (event) => {
+      const type = event.getType();
+      if (type !== 'm.room.message' && !type.startsWith(khoraPrefix)) return;
+      const roomId = event.getRoomId?.() || event.event?.room_id;
+      if (!roomId) return;
+      const detail = {
+        eventId: event.getId(),
+        roomId,
+        type,
+        content: event.getContent(),
+        sender: event.getSender(),
+        ts: event.getTs(),
+        isOwn: event.getSender() === this._userId
+      };
+      window.dispatchEvent(new CustomEvent('khora:timeline', { detail }));
+    });
     this._client.on('RoomState.events', (event, roomState) => {
       const type = event.getType();
       if (!type.startsWith(khoraPrefix)) return;

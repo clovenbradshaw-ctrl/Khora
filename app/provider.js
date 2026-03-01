@@ -19,6 +19,7 @@ const ProviderApp = ({
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState('');
+  const [caseReplyTo, setCaseReplyTo] = useState(null); // {id, sender, body} for case reply
   const [requestText, setRequestText] = useState('');
   const [discoverModal, setDiscoverModal] = useState(false);
   const [discoverUserId, setDiscoverUserId] = useState('');
@@ -236,6 +237,7 @@ const ProviderApp = ({
   const [inboxConvo, setInboxConvo] = useState(null); // room ID of active inbox conversation
   const [inboxMessages, setInboxMessages] = useState([]);
   const [inboxMsgText, setInboxMsgText] = useState('');
+  const [inboxReplyTo, setInboxReplyTo] = useState(null); // {id, sender, body} for inbox reply
   const [inboxTab, setInboxTab] = useState('direct'); // kept for compat
   const [msgBuckets, setMsgBuckets] = useState(() => { try { return JSON.parse(localStorage.getItem('khora_msg_buckets') || '[]'); } catch { return []; } }); // [{id,label,roomIds:[]}]
   const [newBucketModal, setNewBucketModal] = useState(false);
@@ -1585,13 +1587,15 @@ const ProviderApp = ({
   };
   const handleSendMsg = async () => {
     if (!msgText.trim() || !activeCase) return;
+    const reply = caseReplyTo;
     await svc.sendMessage(activeCase, msgText, {
       [`${NS}.type`]: 'note'
-    });
+    }, reply);
     await emitOp(activeCase, 'INS', dot('bridge', 'messages', 'provider_note'), {
       body: msgText
     }, bridgeFrame(activeCase));
     setMsgText('');
+    setCaseReplyTo(null);
     setTimeout(() => loadMessages(activeCase), 500);
   };
   const handleSendRequest = async () => {
@@ -3528,6 +3532,7 @@ const ProviderApp = ({
   };
   const handleSendInboxMsg = async () => {
     if (!inboxMsgText.trim() || !inboxConvo) return;
+    const reply = inboxReplyTo;
     const isOrgChannel = orgChannels.some(ch => ch.roomId === inboxConvo);
     if (isOrgChannel) {
       if (!hasOrgMsgPermission('respond')) {
@@ -3535,7 +3540,7 @@ const ProviderApp = ({
         return;
       }
       const envelope = buildOpacityEnvelope();
-      await svc.sendMessage(inboxConvo, inboxMsgText, envelope);
+      await svc.sendMessage(inboxConvo, inboxMsgText, envelope, reply);
       await emitOp(inboxConvo, 'INS', dot('org', 'messages', 'org_message'), {
         opacity: orgOpacity,
         body_length: inboxMsgText.length
@@ -3544,16 +3549,17 @@ const ProviderApp = ({
       await svc.sendMessage(inboxConvo, inboxMsgText, {
         [`${NS}.type`]: 'team_dm',
         [`${NS}.sender_name`]: providerProfile.display_name || svc.userId
-      });
+      }, reply);
     } else {
       await svc.sendMessage(inboxConvo, inboxMsgText, {
         [`${NS}.type`]: 'note'
-      });
+      }, reply);
       await emitOp(inboxConvo, 'INS', dot('bridge', 'messages', 'provider_note'), {
         body: inboxMsgText
       }, bridgeFrame(inboxConvo));
     }
     setInboxMsgText('');
+    setInboxReplyTo(null);
     setTimeout(() => loadInboxMessages(inboxConvo), 500);
   };
   // ─── Message group (bucket) functions ───
@@ -5075,14 +5081,14 @@ const ProviderApp = ({
           border: `1px solid ${sender.isOwn ? 'rgba(201,163,82,.2)' : 'var(--border-0)'}`,
           transition: 'transform .1s'
         }
-      }, /*#__PURE__*/React.createElement("p", {
+      }, /*#__PURE__*/React.createElement(ReplyQuote, { msg, allMessages: inboxMessages }), /*#__PURE__*/React.createElement("p", {
         style: {
           fontSize: 12.5,
           color: 'var(--tx-0)',
           lineHeight: 1.5,
           wordBreak: 'break-word'
         }
-      }, msg.content?.body)), /*#__PURE__*/React.createElement("div", {
+      }, getReplyBody(msg.content))), /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',
@@ -5105,10 +5111,13 @@ const ProviderApp = ({
       }, msg.ts ? new Date(msg.ts).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
-      }) : '')));
+      }) : ''), /*#__PURE__*/React.createElement("button", {
+        onClick: () => setInboxReplyTo({ id: msg.id, sender: msg.sender, body: getReplyBody(msg.content) }),
+        style: { background: 'none', border: 'none', color: 'var(--tx-3)', cursor: 'pointer', fontSize: 9, fontFamily: 'var(--mono)', padding: '0 2px' }
+      }, "\u21a9 reply")));
     })), /*#__PURE__*/React.createElement("div", {
       className: "inbox-compose"
-    }, convoType === 'case' || convoType === 'team_dm' || hasOrgMsgPermission('respond') ? /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement(ReplyBanner, { replyTo: inboxReplyTo, onCancel: () => setInboxReplyTo(null) }), convoType === 'case' || convoType === 'team_dm' || hasOrgMsgPermission('respond') ? /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',
         gap: 8
@@ -6787,7 +6796,7 @@ const ProviderApp = ({
       padding: '8px 0',
       borderBottom: '1px solid var(--border-0)'
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(ReplyQuote, { msg, allMessages: messages }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'space-between',
@@ -6805,12 +6814,15 @@ const ProviderApp = ({
       fontSize: 9,
       color: 'var(--tx-3)'
     }
-  }, msg.ts ? new Date(msg.ts).toLocaleString() : '')), /*#__PURE__*/React.createElement("p", {
+  }, msg.ts ? new Date(msg.ts).toLocaleString() : ''), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setCaseReplyTo({ id: msg.id, sender: msg.sender, body: getReplyBody(msg.content) }),
+    style: { background: 'none', border: 'none', color: 'var(--tx-3)', cursor: 'pointer', fontSize: 9, fontFamily: 'var(--mono)', padding: '0 2px' }
+  }, "\u21a9 reply")), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 12.5,
       color: 'var(--tx-1)'
     }
-  }, msg.content?.body)))), /*#__PURE__*/React.createElement("div", {
+  }, getReplyBody(msg.content))))), /*#__PURE__*/React.createElement(ReplyBanner, { replyTo: caseReplyTo, onCancel: () => setCaseReplyTo(null) }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 6
@@ -8936,7 +8948,7 @@ const ProviderApp = ({
           padding: '10px 0',
           borderBottom: '1px solid var(--border-0)'
         }
-      }, /*#__PURE__*/React.createElement("div", {
+      }, /*#__PURE__*/React.createElement(ReplyQuote, { msg, allMessages: channelMessages }), /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           justifyContent: 'space-between',
@@ -8973,7 +8985,7 @@ const ProviderApp = ({
           color: 'var(--tx-1)',
           lineHeight: 1.5
         }
-      }, msg.content?.body));
+      }, getReplyBody(msg.content)));
     })), hasOrgMsgPermission('respond') ? /*#__PURE__*/React.createElement("div", {
       style: {
         display: 'flex',

@@ -223,13 +223,21 @@ class KhoraService {
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(type)}/${txn}`, content);
     }
   }
-  async sendMessage(roomId, body, extra = {}) {
+  async sendMessage(roomId, body, extra = {}, replyTo = null) {
     const content = {
       msgtype: 'm.text',
       body,
       ...extra,
       timestamp: Date.now()
     };
+    if (replyTo && replyTo.id) {
+      const quoteLine = (replyTo.body || '').split('\n')[0];
+      content.body = `> <${replyTo.sender}> ${quoteLine}\n\n${body}`;
+      content.format = 'org.matrix.custom.html';
+      const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      content.formatted_body = `<mx-reply><blockquote><a href="https://matrix.to/#/${replyTo.sender}">${replyTo.sender}</a><br/>${esc(replyTo.body)}</blockquote></mx-reply>${esc(body)}`;
+      content['m.relates_to'] = { 'm.in_reply_to': { event_id: replyTo.id } };
+    }
     if (this.client) {
       await this._withRetry(() => this.client.sendMessage(roomId, content));
     } else {
