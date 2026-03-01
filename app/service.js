@@ -92,14 +92,7 @@ class KhoraService {
       }));
       return r.room_id;
     } else {
-      const r = await this._api('POST', '/createRoom', {
-        name,
-        topic,
-        visibility: 'private',
-        preset: 'private_chat',
-        initial_state
-      });
-      return r.room_id;
+      throw new Error('Cannot create room — Matrix SDK is not initialized. E2EE is required.');
     }
   }
 
@@ -147,8 +140,7 @@ class KhoraService {
       const r = await this._withRetry(() => this.client.createRoom(opts));
       return r.room_id;
     } else {
-      const r = await this._api('POST', '/createRoom', opts);
-      return r.room_id;
+      throw new Error('Cannot create room — Matrix SDK is not initialized. E2EE is required.');
     }
   }
   async setPowerLevel(roomId, userId, level) {
@@ -234,8 +226,7 @@ class KhoraService {
         }
       }
     } else {
-      const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
-      await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(type)}/${txn}`, content);
+      throw new Error('Cannot send event — Matrix SDK is not initialized. E2EE is required.');
     }
   }
   async sendMessage(roomId, body, extra = {}, replyTo = null) {
@@ -273,8 +264,7 @@ class KhoraService {
         }
       }
     } else {
-      const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
-      await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txn}`, content);
+      throw new Error('Cannot send message — Matrix SDK is not initialized. E2EE is required.');
     }
   }
   async getMessages(roomId, limit = 40) {

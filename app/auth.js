@@ -301,25 +301,33 @@ const KhoraAuth = {
       const res = await this._client.login('m.login.password', { user, password: pass });
       await LocalVaultCrypto.deriveKey(res.user_id, res.access_token, res.device_id);
       await this._purgeUnencryptedStores();
+      const cryptoStore = new matrixcs.IndexedDBCryptoStore(indexedDB, 'khora-matrix-crypto');
       this._client = matrixcs.createClient({
         baseUrl,
         accessToken: res.access_token,
         userId: res.user_id,
-        deviceId: res.device_id
+        deviceId: res.device_id,
+        cryptoStore
       });
-      // Initialize E2EE crypto — retry up to 3 times to ensure encryption is active.
-      // If all retries fail, the session still starts but hasCrypto will be false
-      // and the UI will reflect that messages cannot be encrypted.
+      // Initialize E2EE crypto — MANDATORY. Retry up to 3 times.
+      // If all retries fail, abort login. Khora requires E2EE.
+      let cryptoInitialized = false;
       for (let cryptoAttempt = 0; cryptoAttempt < 3; cryptoAttempt++) {
         try {
           if (typeof Olm !== 'undefined') await Olm.init();
           await this._client.initCrypto();
           this._client.setGlobalErrorOnUnknownDevices(false);
+          cryptoInitialized = true;
           break;
         } catch (e) {
           console.warn(`Crypto init attempt ${cryptoAttempt + 1}/3:`, e.message);
           if (cryptoAttempt < 2) await new Promise(r => setTimeout(r, 1000 * (cryptoAttempt + 1)));
         }
+      }
+      if (!cryptoInitialized || !this._client.isCryptoEnabled()) {
+        try { this._client.stopClient(); } catch {}
+        this._client = null;
+        throw new Error('End-to-end encryption could not be initialized. Khora requires E2EE to protect your data. Please reload and try again.');
       }
       await this._client.startClient({ initialSyncLimit: 30 });
       await new Promise((resolve, reject) => {
@@ -351,21 +359,7 @@ const KhoraAuth = {
       } catch {}
       return { userId: res.user_id };
     } else {
-      const resp = await this._api('POST', '/login', {
-        type: 'm.login.password', user, password: pass
-      }, true);
-      this._token = resp.access_token;
-      this._userId = resp.user_id;
-      this._baseUrl = baseUrl;
-      try {
-        localStorage.setItem('khora_session', JSON.stringify({
-          homeserver: baseUrl,
-          accessToken: resp.access_token,
-          userId: resp.user_id,
-          deviceId: resp.device_id || 'fallback'
-        }));
-      } catch {}
-      return { userId: resp.user_id };
+      throw new Error('Matrix SDK is not loaded. Khora requires the Matrix SDK for end-to-end encryption.');
     }
   },
 
@@ -414,18 +408,24 @@ const KhoraAuth = {
       this._baseUrl = homeserver;
       await LocalVaultCrypto.deriveKey(userId, accessToken, deviceId);
       if (typeof matrixcs !== 'undefined') {
-        this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId });
-        // Initialize E2EE crypto — retry up to 3 times to ensure encryption is active.
+        const cryptoStore = new matrixcs.IndexedDBCryptoStore(indexedDB, 'khora-matrix-crypto');
+        this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId, cryptoStore });
+        // Initialize E2EE crypto — MANDATORY. Retry up to 3 times.
+        let cryptoInitialized = false;
         for (let cryptoAttempt = 0; cryptoAttempt < 3; cryptoAttempt++) {
           try {
             if (typeof Olm !== 'undefined') await Olm.init();
             await this._client.initCrypto();
             this._client.setGlobalErrorOnUnknownDevices(false);
+            cryptoInitialized = true;
             break;
           } catch (e) {
             console.warn(`Crypto init attempt ${cryptoAttempt + 1}/3:`, e.message);
             if (cryptoAttempt < 2) await new Promise(r => setTimeout(r, 1000 * (cryptoAttempt + 1)));
           }
+        }
+        if (!cryptoInitialized || !this._client.isCryptoEnabled()) {
+          throw new Error('End-to-end encryption could not be initialized. Please reload and try again.');
         }
         await this._client.startClient({ initialSyncLimit: 30 });
         await new Promise((resolve, reject) => {
