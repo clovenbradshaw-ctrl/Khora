@@ -2381,10 +2381,6 @@ const ClientApp = ({
     id: 'transparency',
     icon: 'eye',
     label: 'Transparency'
-  }, {
-    id: 'backup',
-    icon: 'cloud',
-    label: 'Backup'
   }].map(item => /*#__PURE__*/React.createElement("div", {
     key: item.id,
     onClick: () => {
