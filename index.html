@@ -3709,7 +3709,7 @@ const KhoraAuth = {
     this._baseUrl = baseUrl;
     KhoraE2EE.requireSDK();
     this._client = matrixcs.createClient({ baseUrl });
-    const res = await this._client.login('m.login.password', { user, password: pass });
+    const res = await this._client.login('m.login.password', { identifier: { type: 'm.id.user', user }, password: pass });
     await LocalVaultCrypto.deriveKey(res.user_id, res.access_token, res.device_id);
     await this._purgeUnencryptedStores();
     const cryptoStore = KhoraE2EE.createCryptoStore();
@@ -20260,47 +20260,11 @@ const LoginScreen = ({
     setErr('');
     try {
       if (mode === 'register') {
-        const baseUrl = effectiveHs.startsWith('http') ? effectiveHs : `https://${effectiveHs}`;
-        // Probe server for supported registration auth flows
-        const probe = await fetch(`${baseUrl}/_matrix/client/v3/register`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({})
-        });
-        const probeData = await probe.json().catch(() => ({}));
-        const flows = probeData.flows || [];
-        const canDummy = flows.some(f => f.stages && f.stages.length === 1 && f.stages[0] === 'm.login.dummy');
-        if (canDummy) {
-          const resp = await fetch(`${baseUrl}/_matrix/client/v3/register`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              username: user.replace(/^@/, '').split(':')[0],
-              password: pass,
-              auth: {
-                type: 'm.login.dummy',
-                session: probeData.session
-              }
-            })
-          });
-          if (!resp.ok) {
-            const e = await resp.json().catch(() => ({}));
-            throw new Error(e.error || `Registration failed (${resp.status}). Try logging in if account exists.`);
-          }
-        } else {
-          setExtReg({
-            server: effectiveHs,
-            username: user.replace(/^@/, '').split(':')[0]
-          });
-          setLoading(false);
-          return;
-        }
+        setExtReg({ server: effectiveHs, username: user.replace(/^@/, '').split(':')[0] });
+        setLoading(false);
+        return;
       }
-      const s = await KhoraAuth.login(effectiveHs, user, pass);
+      const s = await KhoraAuth.login(effectiveHs, user.replace(/^@/, '').split(':')[0], pass);
       onLogin(s);
     } catch (e) {
       setErr(e.message);
@@ -20454,166 +20418,55 @@ const LoginScreen = ({
       padding: 20,
       marginBottom: 16
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: 'var(--mono)',
-      fontSize: 10,
-      color: 'var(--tx-2)',
-      letterSpacing: '.1em',
-      textTransform: 'uppercase',
-      marginBottom: 6
-    }
-  }, "\u25CF STEP 1"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: 'var(--serif)',
-      fontSize: 18,
-      fontWeight: 700,
-      color: 'var(--tx-0)',
-      marginBottom: 8
-    }
-  }, "Create your account on ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: 'var(--teal)'
-    }
-  }, extReg.server)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12.5,
-      color: 'var(--tx-1)',
-      lineHeight: 1.6,
-      marginBottom: 16
-    }
-  }, "This server requires verification (like email or CAPTCHA). Create your account on their website first, then come back to sign in."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: 'var(--mono)',
-      fontSize: 9.5,
-      color: 'var(--tx-2)',
-      letterSpacing: '.1em',
-      textTransform: 'uppercase',
-      marginBottom: 4
-    }
-  }, "YOUR USERNAME"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      background: 'var(--bg-1)',
-      border: '1px solid var(--border-1)',
-      borderRadius: 'var(--r)',
-      padding: '10px 12px'
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      flex: 1,
-      fontFamily: 'var(--mono)',
-      fontSize: 14,
-      color: 'var(--tx-0)',
-      fontWeight: 600
-    }
-  }, extReg.username), /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "b-gho b-xs",
-    onClick: () => {
-      navigator.clipboard.writeText(extReg.username);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    },
-    style: {
-      flexShrink: 0,
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 4
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: copied ? "check" : "copy",
-    s: 12
-  }), " ", copied ? "Copied" : "Copy"))), /*#__PURE__*/React.createElement("button", {
+  },
+  /* STEP 1 */
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--tx-2)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }
+  }, "\u25CF STEP 1"),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 8 }
+  }, "Create a free account on Element"),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12.5, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 10 }
+  }, "Khora is built on the Matrix network \u2014 the same encrypted platform that powers Element. Think of Element as Signal meets Slack: a secure messaging app you can also use for team chat."),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12.5, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 16 }
+  }, "Creating an account on Element is free and only takes a minute. Remember your username and password \u2014 you'll use the same credentials here on Khora."),
+  /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "b-pri",
-    onClick: () => window.open('https://' + extReg.server, '_blank'),
-    style: {
-      width: '100%',
-      padding: 10,
-      fontSize: 13,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6
-    }
-  }, "Open ", extReg.server, " ", /*#__PURE__*/React.createElement(I, {
-    n: "external-link",
-    s: 14
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderTop: '1px solid var(--border-0)',
-      margin: '20px 0'
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: 'var(--mono)',
-      fontSize: 10,
-      color: 'var(--tx-2)',
-      letterSpacing: '.1em',
-      textTransform: 'uppercase',
-      marginBottom: 6
-    }
-  }, "\u25CF STEP 2"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: 'var(--serif)',
-      fontSize: 18,
-      fontWeight: 700,
-      color: 'var(--tx-0)',
-      marginBottom: 8
-    }
-  }, "Sign in here"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12.5,
-      color: 'var(--tx-1)',
-      lineHeight: 1.6,
-      marginBottom: 16
-    }
-  }, "Once your account exists on the server, come back and sign in with the same username and password."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => window.open('https://app.element.io/#/register', '_blank'),
+    style: { width: '100%', padding: 10, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }
+  }, "Create account on Element ", /*#__PURE__*/React.createElement(I, { n: "external-link", s: 14 })),
+
+  /* Divider */
+  /*#__PURE__*/React.createElement("div", { style: { borderTop: '1px solid var(--border-0)', margin: '20px 0' } }),
+
+  /* STEP 2 */
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--tx-2)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }
+  }, "\u25CF STEP 2"),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 8 }
+  }, "Come back to Khora and sign in"),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12.5, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 10 }
+  }, "Once you've set up your Element account, come back here to ", /*#__PURE__*/React.createElement("strong", { style: { color: 'var(--tx-0)' } }, "khora.us"), " and sign in with the exact same username and password."),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12.5, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 16 }
+  }, "Element is great for messaging and team chat. Khora is where you do your case management work \u2014 same account, different tools."),
+  /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "b-pri",
-    onClick: () => {
-      setExtReg(null);
-      setMode('login');
-      setErr('');
-    },
-    style: {
-      width: '100%',
-      padding: 10,
-      fontSize: 13,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      marginBottom: 10
-    }
-  }, "I've created my account ", /*#__PURE__*/React.createElement(I, {
-    n: "arrow-right",
-    s: 14
-  })), /*#__PURE__*/React.createElement("button", {
+    onClick: () => { setExtReg(null); setMode('login'); setErr(''); },
+    style: { width: '100%', padding: 10, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10 }
+  }, "I've created my account \u2014 sign in ", /*#__PURE__*/React.createElement(I, { n: "arrow-right", s: 14 })),
+  /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "b-gho",
     onClick: () => setExtReg(null),
-    style: {
-      width: '100%',
-      padding: 8,
-      fontSize: 12,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      color: 'var(--tx-2)'
-    }
-  }, /*#__PURE__*/React.createElement(I, {
-    n: "arrow-left",
-    s: 12
-  }), " Pick a different server")), mode === 'register' && !extReg && /*#__PURE__*/React.createElement("div", {
+    style: { width: '100%', padding: 8, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, color: 'var(--tx-2)' }
+  }, /*#__PURE__*/React.createElement(I, { n: "arrow-left", s: 12 }), " Back")), mode === 'register' && !extReg && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',

@@ -298,7 +298,7 @@ const KhoraAuth = {
     this._baseUrl = baseUrl;
     KhoraE2EE.requireSDK();
     this._client = matrixcs.createClient({ baseUrl });
-    const res = await this._client.login('m.login.password', { user, password: pass });
+    const res = await this._client.login('m.login.password', { identifier: { type: 'm.id.user', user }, password: pass });
     await LocalVaultCrypto.deriveKey(res.user_id, res.access_token, res.device_id);
     await this._purgeUnencryptedStores();
     const cryptoStore = KhoraE2EE.createCryptoStore();
