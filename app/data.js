@@ -2530,10 +2530,10 @@ const DatabaseView = ({
       React.createElement(I, { n: "database", s: 48, c: "var(--border-1)" }),
       React.createElement("h2", {
         style: { fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 700, marginTop: 16, marginBottom: 8 }
-      }, "Select a Team"),
+      }, "Enter a Team Workspace"),
       React.createElement("p", {
         style: { color: 'var(--tx-2)', fontSize: 13, maxWidth: 440, margin: '0 auto 24px', lineHeight: 1.5 }
-      }, "The database is team-specific. Select a team to view and manage its individuals, notes, resources, and tables. Data from linked teams will be clearly marked."),
+      }, "Choose a team workspace to access its individuals, notes, resources, and tables. Data from linked teams will be clearly marked."),
       React.createElement("div", {
         style: { display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360, margin: '0 auto' }
       },

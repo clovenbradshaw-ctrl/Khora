@@ -3781,7 +3781,7 @@ const ProviderApp = ({
         /*#__PURE__*/React.createElement("button", {
           className: "team-ctx-pill",
           onClick: () => onSwitchContext('client')
-        }, /*#__PURE__*/React.createElement(I, { n: "user", s: 10 }), "Personal"),
+        }, /*#__PURE__*/React.createElement(I, { n: "user", s: 10 }), "My Workspace"),
         teams.map(t => { const _tpActive = activeTeamContext === t.roomId; const _tpColor = `hsl(${t.color_hue || 260}, 60%, 55%)`; return /*#__PURE__*/React.createElement("button", {
           key: t.roomId,
           className: "team-ctx-pill" + (_tpActive ? " active" : ""),
@@ -3837,14 +3837,23 @@ const ProviderApp = ({
       alignItems: 'center',
       justifyContent: 'center'
     }
-  }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 28 })), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement(SpinningDodeca, { size: 28 })), /*#__PURE__*/React.createElement("div", {
+    style: { flex: 1, overflow: 'hidden' }
+  }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontFamily: 'var(--serif)',
       fontWeight: 700,
-      fontSize: 15,
-      flex: 1
+      fontSize: teamMode ? 14.5 : 15,
+      color: teamMode ? `hsl(${teamMode.color_hue || 260}, 60%, 50%)` : 'var(--tx-0)',
+      display: 'block',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
     }
-  }, "Khora"), /*#__PURE__*/React.createElement("button", {
+  }, teamMode ? teamMode.name : "Khora"),
+  teamMode && /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--sans)', display: 'block', marginTop: 1 }
+  }, "Khora")), /*#__PURE__*/React.createElement("button", {
     className: "sidebar-collapse-btn",
     onClick: toggleSidebar,
     title: "Collapse sidebar"
@@ -3853,13 +3862,7 @@ const ProviderApp = ({
     onNotifClick: handleNotifClick,
     onDismiss: n => setNotifications(prev => prev.filter(x => x.id !== n.id)),
     onDismissAll: handleDismissAllNotifs
-  })), teamMode && /*#__PURE__*/React.createElement("div", {
-    style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '5px 8px', borderRadius: 'var(--r)', background: `hsla(${teamMode.color_hue || 260}, 60%, 55%, 0.1)` }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: { width: 7, height: 7, borderRadius: '50%', background: `hsl(${teamMode.color_hue || 260}, 60%, 55%)`, flexShrink: 0 }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: { fontSize: 10.5, fontWeight: 700, color: `hsl(${teamMode.color_hue || 260}, 60%, 50%)`, fontFamily: 'var(--mono)', letterSpacing: '0.05em', textTransform: 'uppercase', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
-  }, teamMode.name)), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     onClick: () => setShareContactModal(true),
     style: {
       marginTop: 10,
@@ -4037,7 +4040,7 @@ const ProviderApp = ({
       /*#__PURE__*/React.createElement("button", {
         className: "team-ctx-pill",
         onClick: () => onSwitchContext('client')
-      }, /*#__PURE__*/React.createElement(I, { n: "user", s: 10 }), "Personal"),
+      }, /*#__PURE__*/React.createElement(I, { n: "user", s: 10 }), "My Workspace"),
       teams.map(t => { const _tpActive = activeTeamContext === t.roomId; const _tpColor = `hsl(${t.color_hue || 260}, 60%, 55%)`; return /*#__PURE__*/React.createElement("button", {
         key: t.roomId,
         className: "team-ctx-pill" + (_tpActive ? " active" : ""),
@@ -4484,13 +4487,6 @@ const ProviderApp = ({
       padding: 24
     }
   }, view === 'dashboard' && !activeCase && /*#__PURE__*/React.createElement(React.Fragment, null,
-    activeTeamObj && /*#__PURE__*/React.createElement("div", {
-      style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', marginBottom: 12, background: `hsla(${activeTeamObj.color_hue || 260}, 60%, 55%, 0.08)`, border: `1px solid hsla(${activeTeamObj.color_hue || 260}, 60%, 55%, 0.2)`, borderRadius: 'var(--r-lg)' }
-    }, /*#__PURE__*/React.createElement(I, { n: "users", s: 14, c: `hsl(${activeTeamObj.color_hue || 260}, 60%, 55%)` }),
-      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: 600 } }, "Viewing as: ", activeTeamObj.name),
-      /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-3)' } }, "\u00B7 ", (activeTeamObj.members || []).length, " members"),
-      /*#__PURE__*/React.createElement("button", { onClick: () => switchTeamContext(null), className: "b-gho b-xs", style: { marginLeft: 'auto', fontSize: 10 } }, "Clear filter")
-    ),
     /*#__PURE__*/React.createElement(DashboardOverview, {
       cases: activeTeamObj ? cases.filter(c => { const a = caseAssignments[c.bridgeRoomId]; return activeTeamMemberIds.includes(a?.primary || c.meta?.provider); }) : cases,
       clientRecords: teamFilteredClientRecords,
@@ -4782,12 +4778,6 @@ const ProviderApp = ({
   }), view === 'inbox' && !activeCase && /*#__PURE__*/React.createElement("div", {
     className: "anim-up inbox-wrap"
   },
-    activeTeamObj && /*#__PURE__*/React.createElement("div", {
-      style: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', marginBottom: 12, background: `hsla(${activeTeamObj.color_hue || 260}, 60%, 55%, 0.08)`, border: `1px solid hsla(${activeTeamObj.color_hue || 260}, 60%, 55%, 0.2)`, borderRadius: 'var(--r-lg)' }
-    }, /*#__PURE__*/React.createElement(I, { n: "users", s: 14, c: `hsl(${activeTeamObj.color_hue || 260}, 60%, 55%)` }),
-      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: 600 } }, "Filtered to: ", activeTeamObj.name),
-      /*#__PURE__*/React.createElement("button", { onClick: () => switchTeamContext(null), className: "b-gho b-xs", style: { marginLeft: 'auto', fontSize: 10 } }, "Clear filter")
-    ),
     /*#__PURE__*/React.createElement("div", {
     className: "inbox-header"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
