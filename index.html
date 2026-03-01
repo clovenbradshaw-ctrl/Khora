@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
 <!-- Content Security Policy: restricts script/connect origins to known CDNs and Matrix endpoints -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https: wss:; img-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https: wss:; img-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self';">
 <title>Khora — Sovereign Case Management</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <!-- Resource hints: early DNS + connection setup for CDN origins -->
@@ -22,11 +22,12 @@
 <link rel="preload" href="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js" as="script">
 <!-- Core scripts (synchronous — needed before Babel processes JSX) -->
 <!-- Olm (libolm) — required for Megolm E2EE. Must load before Matrix SDK. -->
-<!-- SRI: To regenerate hashes, run: curl -s <URL> | openssl dgst -sha384 -binary | openssl base64 -A -->
-<script src="https://unpkg.com/@matrix-org/olm@3.2.15/olm.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<!-- SRI: When adding integrity hashes, also add crossorigin="anonymous" to each tag -->
+<!-- To generate: curl -s <URL> | openssl dgst -sha384 -binary | openssl base64 -A -->
+<script src="https://unpkg.com/@matrix-org/olm@3.2.15/olm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/matrix-js-sdk@34.11.1/lib/browser-matrix.min.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <!-- Non-critical: username generator loaded as module (non-blocking) -->
 <script type="module">
 import { uniqueNamesGenerator, adjectives, animals } from 'https://esm.sh/unique-names-generator@4.7.1';
@@ -2613,18 +2614,29 @@ const EmailVerification = {
   // CON(email.plaintext_code, {dest: email_inbox, via: webhook_relay}) — out_of_band_delivery
   async sendCodeViaWebhook(email, code, orgName) {
     try {
+      const payload = JSON.stringify({
+        to: email,
+        code: code,
+        org_name: orgName,
+        subject: `Your verification code for ${orgName}`,
+        expires_minutes: 15,
+        ts: Date.now()
+      });
+      // HMAC-SHA256 signature for webhook request authenticity
+      const sigKey = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode('khora-webhook-v1'),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      );
+      const sig = await crypto.subtle.sign('HMAC', sigKey, new TextEncoder().encode(payload));
+      const sigHex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
       const resp = await fetch(`${WEBHOOK_BASE}/email-verify`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Khora-Signature': sigHex,
+          'X-Khora-Timestamp': String(Date.now())
         },
-        body: JSON.stringify({
-          to: email,
-          code: code,
-          org_name: orgName,
-          subject: `Your verification code for ${orgName}`,
-          expires_minutes: 15
-        })
+        body: payload
       });
       return resp.ok;
     } catch {
@@ -3649,13 +3661,16 @@ const KhoraAuth = {
       this._userId = res.user_id;
       this._token = res.access_token;
       this._setupTimelineListener();
+      // Security: store session in sessionStorage (clears on tab close) — never localStorage
       try {
-        localStorage.setItem('khora_session', JSON.stringify({
+        sessionStorage.setItem('khora_session', JSON.stringify({
           homeserver: baseUrl,
           accessToken: res.access_token,
           userId: res.user_id,
           deviceId: res.device_id
         }));
+        // Clean up any stale localStorage session from previous versions
+        try { localStorage.removeItem('khora_session'); } catch {}
       } catch {}
       try {
         await KhoraEncryptedCache.put('session', 'current', {
@@ -3673,13 +3688,15 @@ const KhoraAuth = {
       this._token = resp.access_token;
       this._userId = resp.user_id;
       this._baseUrl = baseUrl;
+      // Security: store session in sessionStorage (clears on tab close) — never localStorage
       try {
-        localStorage.setItem('khora_session', JSON.stringify({
+        sessionStorage.setItem('khora_session', JSON.stringify({
           homeserver: baseUrl,
           accessToken: resp.access_token,
           userId: resp.user_id,
           deviceId: resp.device_id || 'fallback'
         }));
+        try { localStorage.removeItem('khora_session'); } catch {}
       } catch {}
       return { userId: resp.user_id };
     }
@@ -3687,10 +3704,19 @@ const KhoraAuth = {
 
   // DES(matrix.session, {check: whoami}) — token_validation
   async restoreSession() {
-    const raw = localStorage.getItem('khora_session');
+    // Read from sessionStorage first; fall back to localStorage for migration from older versions
+    let raw = sessionStorage.getItem('khora_session');
+    if (!raw) {
+      raw = localStorage.getItem('khora_session');
+      if (raw) {
+        // Migrate: move to sessionStorage and remove from localStorage
+        try { sessionStorage.setItem('khora_session', raw); } catch {}
+        try { localStorage.removeItem('khora_session'); } catch {}
+      }
+    }
     if (!raw) return null;
     let saved;
-    try { saved = JSON.parse(raw); } catch { localStorage.removeItem('khora_session'); return null; }
+    try { saved = JSON.parse(raw); } catch { sessionStorage.removeItem('khora_session'); return null; }
     const { homeserver, accessToken, userId, deviceId } = saved;
     if (!homeserver || !accessToken || !userId || !deviceId) return null;
 
@@ -3703,7 +3729,7 @@ const KhoraAuth = {
         if (resp.ok) { tokenValid = true; break; }
         if (resp.status === 401 || resp.status === 403) {
           console.warn('Session token expired or revoked (HTTP ' + resp.status + ')');
-          localStorage.removeItem('khora_session');
+          sessionStorage.removeItem('khora_session');
           return { expired: true };
         }
         if (resp.status >= 500) {
@@ -3918,7 +3944,14 @@ const KhoraBackup = (() => {
       const ai = await apiPost('/auth/info', { email }, false); if (!ai.status) return false;
       const { masterKey, loginPassword } = await deriveLoginAndMaster(rawPassword, ai.data.salt, ai.data.authVersion);
       const lr = await apiPost('/login', { email, password: loginPassword, twoFactorCode: 'XXXXXX', authVersion: ai.data.authVersion }, false);
-      if (!lr.status) return false;
+      // Detect 2FA requirement — Filen returns status:false with a 2FA-related message
+      if (!lr.status) {
+        const msg = (lr.message || '').toLowerCase();
+        if (msg.includes('two') || msg.includes('2fa') || msg.includes('factor') || msg.includes('otp')) {
+          console.warn('Filen account requires 2FA — not yet supported by Khora backup integration');
+        }
+        return false;
+      }
       S.apiKey = lr.data.apiKey; S.email = email; S.masterKeys = [masterKey];
       try { const emk = await metaEnc(masterKey, masterKey); const mkr = await apiPost('/user/masterKeys', { masterKeys: emk }); if (mkr.status && mkr.data?.keys) { const dk = await metaDec(mkr.data.keys, masterKey); if (dk) S.masterKeys = dk.split('|').filter(Boolean); } } catch {}
       const bf = await apiGet('/user/baseFolder'); if (!bf.status) throw new Error('Base folder failed'); S.baseFolderUUID = bf.data.uuid;
@@ -3936,11 +3969,12 @@ const KhoraBackup = (() => {
       return r.message || 'Registration failed';
     } catch (e) { return e.message; }
   }
-  function saveCreds(m, e) { try { localStorage.setItem('khora_backup_creds', JSON.stringify({ matrixId: m, email: e, ts: Date.now() })); } catch {} }
-  function loadCreds() { try { return JSON.parse(localStorage.getItem('khora_backup_creds')); } catch { return null; } }
-  function clearCreds() { try { localStorage.removeItem('khora_backup_creds'); localStorage.removeItem('khora_backup_seen'); } catch {} }
-  function hasSeenRecovery() { try { return localStorage.getItem('khora_backup_seen') === '1'; } catch { return false; } }
-  function markRecoverySeen() { try { localStorage.setItem('khora_backup_seen', '1'); } catch {} }
+  // Security: use sessionStorage for backup creds (email/matrixId pairing) — clears on tab close
+  function saveCreds(m, e) { try { sessionStorage.setItem('khora_backup_creds', JSON.stringify({ matrixId: m, email: e, ts: Date.now() })); try { localStorage.removeItem('khora_backup_creds'); } catch {} } catch {} }
+  function loadCreds() { try { return JSON.parse(sessionStorage.getItem('khora_backup_creds')) || JSON.parse(localStorage.getItem('khora_backup_creds')); } catch { return null; } }
+  function clearCreds() { try { sessionStorage.removeItem('khora_backup_creds'); localStorage.removeItem('khora_backup_creds'); sessionStorage.removeItem('khora_backup_seen'); localStorage.removeItem('khora_backup_seen'); } catch {} }
+  function hasSeenRecovery() { try { return (sessionStorage.getItem('khora_backup_seen') || localStorage.getItem('khora_backup_seen')) === '1'; } catch { return false; } }
+  function markRecoverySeen() { try { sessionStorage.setItem('khora_backup_seen', '1'); } catch {} }
   async function encryptForRoom(plaintext, matrixId) {
     const keyData = await pbkdf2Bits(matrixId, 'khora-backup-room-creds-v1', 100000, 'SHA-256', 256);
     const key = await crypto.subtle.importKey('raw', keyData, 'AES-GCM', false, ['encrypt']);
@@ -4029,9 +4063,11 @@ const KhoraBackup = (() => {
       const matrixId = svc.userId;
       const ok = await tryLogin(email, password);
       if (ok) {
-        S.matrixId = matrixId; S.filenPassword = password;
+        S.matrixId = matrixId;
         saveCreds(matrixId, email);
         try { await api.saveCredsToRoom(email, password); } catch (e) { console.warn('Could not save backup creds to room:', e.message); }
+        // Security: clear password from memory — no longer needed after auth + room save
+        S.filenPassword = null;
         emit({ event: 'connected', matrixId, email });
         return true;
       }
@@ -4053,8 +4089,9 @@ const KhoraBackup = (() => {
       if (!password) throw new Error('No pending password');
       const ok = await tryLogin(creds.email, password);
       if (ok) {
-        S.matrixId = creds.matrixId; S.filenPassword = password; S._pendingPassword = null;
+        S.matrixId = creds.matrixId; S._pendingPassword = null;
         try { await api.saveCredsToRoom(creds.email, password); } catch (e) { console.warn('Could not save backup creds to room:', e.message); }
+        S.filenPassword = null; // Security: clear from memory after room save
         emit({ event: 'connected', matrixId: creds.matrixId, email: creds.email });
         return true;
       }
@@ -4092,7 +4129,7 @@ const KhoraBackup = (() => {
         if (roomCreds) {
           const ok = await tryLogin(roomCreds.email, roomCreds.password);
           if (ok) {
-            S.matrixId = svc.userId; S.filenPassword = roomCreds.password;
+            S.matrixId = svc.userId; S.filenPassword = null;
             saveCreds(svc.userId, roomCreds.email);
             emit({ event: 'connected', matrixId: svc.userId, email: roomCreds.email });
             return true;
@@ -4103,7 +4140,7 @@ const KhoraBackup = (() => {
       try {
         const fp = await deriveFilenPassword(creds.matrixId);
         const ok = await tryLogin(creds.email, fp);
-        if (ok) { S.matrixId = creds.matrixId; S.filenPassword = fp; emit({ event: 'connected', matrixId: creds.matrixId, email: creds.email }); return true; }
+        if (ok) { S.matrixId = creds.matrixId; S.filenPassword = null; emit({ event: 'connected', matrixId: creds.matrixId, email: creds.email }); return true; }
       } catch {}
       return false;
     },
@@ -4327,7 +4364,12 @@ class KhoraService {
         events: {
           'm.room.power_levels': 100,
           'm.room.tombstone': 100,
-          'm.room.server_acl': 100
+          'm.room.server_acl': 100,
+          // Lock Khora bridge state events to client-only (PL 100)
+          // Prevents provider from overwriting bridge metadata or field references
+          [EVT.BRIDGE_META]: 100,
+          [EVT.BRIDGE_REFS]: 100,
+          [EVT.IDENTITY]: 100
         },
         kick: 50,
         ban: 50,
@@ -4426,6 +4468,10 @@ class KhoraService {
         }
       }
     } else {
+      // Guard: NEVER send to encrypted rooms via REST API — this bypasses Megolm and sends plaintext
+      if (this._isRoomEncrypted(roomId)) {
+        throw new Error('Cannot send to encrypted room — E2EE SDK unavailable. Please reload the app.');
+      }
       const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/${encodeURIComponent(type)}/${txn}`, content);
     }
@@ -4465,6 +4511,10 @@ class KhoraService {
         }
       }
     } else {
+      // Guard: NEVER send messages to encrypted rooms via REST API — this bypasses Megolm
+      if (this._isRoomEncrypted(roomId)) {
+        throw new Error('Cannot send message to encrypted room — E2EE SDK unavailable. Please reload the app.');
+      }
       const txn = 'txn_' + Date.now() + Math.random().toString(36).slice(2);
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txn}`, content);
     }
@@ -20662,7 +20712,7 @@ const LoginScreen = ({
     type: "button",
     className: "b-gho b-xs",
     onClick: () => {
-      const txt = `Khora Account Credentials\n========================\nServer: ${effectiveHs}\nUsername: ${user}\nPassword: ${pass}\n\nKeep this file safe. You will need these to sign in.\n`;
+      const txt = `Khora Account Credentials\n========================\nServer: ${effectiveHs}\nUsername: ${user}\nPassword: ${pass}\n\nSECURITY WARNING: This file contains your password in plain text.\nStore it in a secure location (e.g. password manager) and delete\nthis file after saving your credentials elsewhere.\n`;
       const b = new Blob([txt], {
         type: 'text/plain'
       });
@@ -48670,7 +48720,8 @@ const App = () => {
   }, "Detecting role context\u2026")));
   const handleLogout = async () => {
     try {
-      localStorage.removeItem('khora_session');
+      sessionStorage.removeItem('khora_session');
+      localStorage.removeItem('khora_session'); // clean up legacy
       localStorage.removeItem('khora_active_context');
       localStorage.removeItem('khora_active_org');
       localStorage.removeItem('khora_welcomed');
