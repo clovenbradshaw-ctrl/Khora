@@ -38,7 +38,7 @@ The core architectural idea is **client data sovereignty**: the person being ser
 | Layer | Technology |
 |-------|-----------|
 | **UI** | React 18, Babel standalone (in-browser JSX transpilation) |
-| **Protocol** | Matrix (via matrix-js-sdk v34.11.1) |
+| **Protocol** | Matrix (via matrix-js-sdk v28.2.0) |
 | **Encryption** | Web Crypto API — AES-256-GCM per field, Megolm E2EE per room |
 | **Local Storage** | IndexedDB (encrypted at rest via HKDF-derived key) |
 | **Session** | sessionStorage (Matrix access token, device ID) |
