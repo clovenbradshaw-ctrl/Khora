@@ -137,7 +137,7 @@ const WelcomeScreen = ({
     color: 'var(--tx-0)',
     marginBottom: 4
   }
-}, "Create your account"), /*#__PURE__*/React.createElement("div", {
+}, "Create a free account on Element"), /*#__PURE__*/React.createElement("div", {
   style: {
     fontSize: 12.5,
     color: 'var(--tx-1)',
@@ -147,22 +147,18 @@ const WelcomeScreen = ({
   style: {
     color: 'var(--tx-0)'
   }
-}, "\"Create Account\""), " tab. Pick a username and password, or use the ", /*#__PURE__*/React.createElement("strong", {
+}, "\"Create Account\""), " tab. You'll be directed to ", /*#__PURE__*/React.createElement("strong", {
   style: {
     color: 'var(--tx-0)'
   }
-}, "dice"), " and ", /*#__PURE__*/React.createElement("strong", {
-  style: {
-    color: 'var(--tx-0)'
-  }
-}, "key"), " buttons to generate random ones. Creating your account signs you in automatically."), /*#__PURE__*/React.createElement("div", {
+}, "Element"), " to create a free account \u2014 it only takes a minute. Remember your username and password."), /*#__PURE__*/React.createElement("div", {
   style: {
     fontSize: 11.5,
     color: 'var(--tx-2)',
     lineHeight: 1.5,
     marginTop: 6
   }
-}, "Your account lives on an open network \u2014 like email, you can connect with anyone regardless of which server they use. For extra privacy, use a random username since your server can see metadata."))), /*#__PURE__*/React.createElement("div", {
+}, "Element is also great for direct messaging if you want to chat with people securely."))), /*#__PURE__*/React.createElement("div", {
   style: {
     display: 'flex',
     gap: 14,
@@ -191,24 +187,24 @@ const WelcomeScreen = ({
     color: 'var(--tx-0)',
     marginBottom: 4
   }
-}, "Save your credentials"), /*#__PURE__*/React.createElement("div", {
+}, "Come back to Khora and sign in"), /*#__PURE__*/React.createElement("div", {
   style: {
     fontSize: 12.5,
     color: 'var(--tx-1)',
     lineHeight: 1.6
   }
-}, "After filling in your username and password, use the ", /*#__PURE__*/React.createElement("strong", {
+}, "Once you've created your Element account, come back here and use the ", /*#__PURE__*/React.createElement("strong", {
   style: {
     color: 'var(--tx-0)'
   }
-}, "\"Save credentials\""), " button to download a file with your login details. Keep it somewhere safe \u2014 you'll need it to sign in on other devices."), /*#__PURE__*/React.createElement("div", {
+}, "\"Sign In\""), " tab with the same username and password. Khora is where you do your case management work."), /*#__PURE__*/React.createElement("div", {
   style: {
     fontSize: 11.5,
     color: 'var(--tx-2)',
     lineHeight: 1.5,
     marginTop: 6
   }
-}, "Already have an account from another app on this network (like Element)? Use the \"Sign In\" tab instead \u2014 it works too."))), /*#__PURE__*/React.createElement("div", {
+}, "Same account, different tools \u2014 Element for direct messaging, Khora for case management."))), /*#__PURE__*/React.createElement("div", {
   style: {
     display: 'flex',
     gap: 14
@@ -309,7 +305,6 @@ const LoginScreen = ({
   const [pass, setPass] = useState('');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
-  const [extReg, setExtReg] = useState(null); // null or { server, username }
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -323,11 +318,6 @@ const LoginScreen = ({
     setLoading(true);
     setErr('');
     try {
-      if (mode === 'register') {
-        setExtReg({ server: effectiveHs, username: user.replace(/^@/, '').split(':')[0] });
-        setLoading(false);
-        return;
-      }
       const s = await KhoraAuth.login(effectiveHs, user.replace(/^@/, '').split(':')[0], pass);
       onLogin(s);
     } catch (e) {
@@ -523,7 +513,6 @@ const LoginScreen = ({
     onClick: () => {
       setMode('login');
       setErr('');
-      setExtReg(null);
       setRegUIA(null); setRegError(''); setRegCaptchaToken(''); setRegEmailSid(null); setRegTermsOk(false);
     }
   }, "Sign In"), /*#__PURE__*/React.createElement("div", {
@@ -531,10 +520,9 @@ const LoginScreen = ({
     onClick: () => {
       setMode('register');
       setErr('');
-      setExtReg(null);
       setRegUIA(null); setRegError(''); setRegCaptchaToken(''); setRegEmailSid(null); setRegTermsOk(false);
     }
-  }, "Create Account")), extReg && /*#__PURE__*/React.createElement("div", {
+  }, "Create Account")), mode === 'register' && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
@@ -575,70 +563,18 @@ const LoginScreen = ({
   }, "Come back to Khora and sign in"),
   /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 12.5, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 10 }
-  }, "Once you've set up your Element account, come back here to ", /*#__PURE__*/React.createElement("strong", { style: { color: 'var(--tx-0)' } }, "khora.us"), " and sign in with the exact same username and password."),
+  }, "Once you've created your Element account, come back here to ", /*#__PURE__*/React.createElement("strong", { style: { color: 'var(--tx-0)' } }, "Khora"), " and sign in with the exact same username and password."),
   /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 12.5, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 16 }
-  }, "Element is great for messaging and team chat. Khora is where you do your case management work \u2014 same account, different tools."),
+  }, "Element is great for direct messaging if you want to chat with people securely. Khora is where you do your case management work \u2014 same account, different tools."),
   /*#__PURE__*/React.createElement("button", {
     type: "button",
     className: "b-pri",
-    onClick: () => { setExtReg(null); setMode('login'); setErr(''); },
-    style: { width: '100%', padding: 10, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 10 }
-  }, "I've created my account \u2014 sign in ", /*#__PURE__*/React.createElement(I, { n: "arrow-right", s: 14 })),
-  /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    className: "b-gho",
-    onClick: () => setExtReg(null),
-    style: { width: '100%', padding: 8, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, color: 'var(--tx-2)' }
-  }, /*#__PURE__*/React.createElement(I, { n: "arrow-left", s: 12 }), " Back")),
+    onClick: () => { setMode('login'); setErr(''); },
+    style: { width: '100%', padding: 10, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }
+  }, "I've created my account \u2014 sign in ", /*#__PURE__*/React.createElement(I, { n: "arrow-right", s: 14 }))),
 
-mode === 'register' && !extReg && /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: 'var(--teal-dim)',
-      border: '1px solid rgba(62,201,176,.15)',
-      borderRadius: 'var(--r)',
-      padding: '12px 14px',
-      marginBottom: 16,
-      fontSize: 12,
-      color: 'var(--tx-1)',
-      lineHeight: 1.7
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontWeight: 600,
-      color: 'var(--tx-0)',
-      marginBottom: 4
-    }
-  }, "What is a Matrix account?"), /*#__PURE__*/React.createElement("div", null, "Khora runs on ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: 'var(--tx-0)'
-    }
-  }, "Matrix"), " \u2014 an open network, like email. You pick a server to host your account, and you can connect with anyone on the network regardless of which server they use."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 8
-    }
-  }, "All servers use ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: 'var(--tx-0)'
-    }
-  }, "end-to-end encryption"), " \u2014 your data is encrypted on your device before it's sent, so no server operator can read it. The main differences between servers are speed, location, and who runs them."), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 8,
-      fontSize: 11.5,
-      color: 'var(--tx-2)'
-    }
-  }, "Since your server can see ", /*#__PURE__*/React.createElement("em", null, "metadata"), " (who you talk to, when you're online), consider using a ", /*#__PURE__*/React.createElement("strong", {
-    style: {
-      color: 'var(--tx-1)'
-    }
-  }, "random username"), " \u2014 click the dice icon below to generate one. Browse servers at ", /*#__PURE__*/React.createElement("a", {
-    href: "https://servers.joinmatrix.org/",
-    target: "_blank",
-    rel: "noopener",
-    style: {
-      color: 'var(--teal)'
-    }
-  }, "servers.joinmatrix.org"), ".")), !extReg && /*#__PURE__*/React.createElement("form", {
+mode === 'login' && /*#__PURE__*/React.createElement("form", {
     onSubmit: go
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1070,12 +1006,12 @@ mode === 'register' && !extReg && /*#__PURE__*/React.createElement("div", {
 
   /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, textAlign: 'center', marginTop: 20, fontSize: 12, color: 'var(--tx-3)' }
-  }, "Browse available servers at ", /*#__PURE__*/React.createElement("a", {
-    href: "https://servers.joinmatrix.org/",
+  }, "Create a free account at ", /*#__PURE__*/React.createElement("a", {
+    href: "https://app.element.io/#/register",
     target: "_blank",
     rel: "noopener",
     style: { color: 'var(--teal)' }
-  }, "servers.joinmatrix.org"), ".")),
+  }, "app.element.io"), " to get started.")),
 
   /* ── Footer ── */
   /*#__PURE__*/React.createElement("div", {
