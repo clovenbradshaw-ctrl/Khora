@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
 <!-- Content Security Policy: restricts script/connect origins to known CDNs and Matrix endpoints -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https: wss:; img-src 'self' data: blob:; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://esm.sh https://www.google.com https://www.gstatic.com 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; connect-src https: wss:; img-src 'self' data: blob:; worker-src 'self' blob:; frame-src https://www.google.com https://www.recaptcha.net; object-src 'none'; base-uri 'self';">
 <title>Khora — Sovereign Case Management</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <!-- Resource hints: early DNS + connection setup for CDN origins -->
@@ -20241,12 +20241,13 @@ const LoginScreen = ({
   onLogin
 }) => {
   const [mode, setMode] = useState('login'); // login | register
-  const [hs, setHs] = useState('hyphae.social');
+  const [hs, setHs] = useState('matrix.org');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [extReg, setExtReg] = useState(null); // null or { server, username }
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Extract host server from username if present (e.g. @user:matrix.org -> matrix.org)
@@ -20756,17 +20757,35 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "download",
     s: 12
-  }), " Save credentials")), !hideHs && /*#__PURE__*/React.createElement("div", {
+  }), " Save credentials")), mode === 'login' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14,
+      textAlign: 'right'
+    }
+  }, /*#__PURE__*/React.createElement("a", {
+    href: "https://app.element.io/#/forgot_password",
+    target: "_blank",
+    rel: "noopener",
+    style: { fontSize: 12, color: 'var(--teal)', textDecoration: 'none', fontFamily: 'var(--mono)' }
+  }, "Forgot password?")), !hideHs && /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setShowAdvanced(!showAdvanced),
+    className: "b-gho b-xs",
+    style: { display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--tx-3)', fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.04em', marginBottom: showAdvanced ? 8 : 0 }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: showAdvanced ? "chevronDown" : "chevronRight",
+    s: 12
+  }), " Advanced"), showAdvanced && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
   }, "SERVER"), /*#__PURE__*/React.createElement("input", {
     value: hs,
     onChange: e => setHs(e.target.value),
     placeholder: "e.g. matrix.org"
-  })), err && /*#__PURE__*/React.createElement("div", {
+  }))), err && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--red-dim)',
       border: '1px solid rgba(232,93,93,.2)',
@@ -23411,8 +23430,7 @@ const ClientApp = ({
       { id: 'resources', icon: 'layers', label: 'My Resources' },
       { id: 'records', icon: 'shield', label: 'My Records', badge: pendingClaims.length, badgeClass: 'nav-badge-gold' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
-      { id: 'transparency', icon: 'eye', label: 'Transparency' },
-      { id: 'backup', icon: 'cloud', label: 'Backup' }
+      { id: 'transparency', icon: 'eye', label: 'Transparency' }
     ],
     onMoreNavigate: id => { setView(id); setActiveBridge(null); }
   },
@@ -26053,8 +26071,6 @@ const ClientApp = ({
     session: session
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  }), view === 'backup' && !activeBridge && /*#__PURE__*/React.createElement(BackupSettingsView, {
-    showToast: showToast
   })), /*#__PURE__*/React.createElement(Modal, {
     open: !!claimVerifyModal,
     onClose: () => { setClaimVerifyModal(null); setClaimVerifyCode(''); setClaimVerifyError(''); },
@@ -38226,7 +38242,7 @@ const ProviderApp = ({
   };
   const getInviteUrl = roomId => `https://matrix.to/#/${roomId}`;
   const getSetupInstructions = roomId => {
-    const hs = svc._baseUrl ? svc._baseUrl.replace(/^https?:\/\//, '') : 'hyphae.social';
+    const hs = svc._baseUrl ? svc._baseUrl.replace(/^https?:\/\//, '') : 'matrix.org';
     const link = getInviteUrl(roomId);
     return `You've been invited to securely manage your information on Khora.\n\nTo get started:\n\n1. Create a free Matrix account:\n   Go to https://${hs} and click "Create Account"\n   (Matrix is a secure, decentralized messaging protocol — your data stays on the server you choose)\n\n2. Download a Matrix client (optional):\n   Web: https://app.element.io\n   Mobile: Search "Element" in your app store\n   Or use any Matrix-compatible app\n\n3. Sign in with your new account\n\n4. Accept the room invitation:\n   The invite should appear automatically in your Matrix client.\n   You can also open this link: ${link}\n   (Note: this is a private room — the invite must be accepted from the account specified above)\n\n5. You will have full control of this room — you can remove anyone from it at any time.\n\nQuestions? Contact your provider for help getting set up.`;
   };
@@ -39743,7 +39759,6 @@ const ProviderApp = ({
       { id: 'hierarchy', icon: 'globe', label: 'My Network' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' },
-      { id: 'backup', icon: 'cloud', label: 'Backup' },
       ...(orgRoom ? [{ id: 'org-settings', icon: 'briefcase', label: 'Organization' }] : [])
     ],
     onMoreNavigate: id => { setView(id); setActiveCase(null); setActiveIndividual(null); setActiveResourceProfile(null); }
@@ -45031,8 +45046,6 @@ const ProviderApp = ({
     session: session
   }), view === 'transparency' && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  }), view === 'backup' && /*#__PURE__*/React.createElement(BackupSettingsView, {
-    showToast: showToast
   }))), /*#__PURE__*/React.createElement(Modal, {
     open: discoverModal,
     onClose: () => setDiscoverModal(false),
@@ -49222,8 +49235,8 @@ const App = () => {
       setWelcomed(true);
       try { localStorage.setItem('khora_welcomed', '1'); } catch {}
       await detectContexts();
-      // Silently reconnect encrypted backup if previously set up
-      KhoraBackup.autoConnect().catch(() => {});
+      // Backup auto-connect disabled for now
+      // KhoraBackup.autoConnect().catch(() => {});
     } catch (e) { console.warn('Session restore error:', e?.message); } finally {
       setRestoring(false);
     }
@@ -49235,8 +49248,8 @@ const App = () => {
     setSession(s);
     // Detect contexts + roles from room membership (MVP §Screen 1)
     await detectContexts();
-    // Silently reconnect encrypted backup if previously set up
-    KhoraBackup.autoConnect().catch(() => {});
+    // Backup auto-connect disabled for now
+    // KhoraBackup.autoConnect().catch(() => {});
   };
   if (restoring || detectingRoles) return /*#__PURE__*/React.createElement("div", {
     className: "grid-bg",

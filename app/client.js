@@ -2218,8 +2218,7 @@ const ClientApp = ({
       { id: 'resources', icon: 'layers', label: 'My Resources' },
       { id: 'records', icon: 'shield', label: 'My Records', badge: pendingClaims.length, badgeClass: 'nav-badge-gold' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
-      { id: 'transparency', icon: 'eye', label: 'Transparency' },
-      { id: 'backup', icon: 'cloud', label: 'Backup' }
+      { id: 'transparency', icon: 'eye', label: 'Transparency' }
     ],
     onMoreNavigate: id => { setView(id); setActiveBridge(null); }
   },
@@ -4867,8 +4866,6 @@ const ClientApp = ({
     session: session
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  }), view === 'backup' && !activeBridge && /*#__PURE__*/React.createElement(BackupSettingsView, {
-    showToast: showToast
   })), /*#__PURE__*/React.createElement(Modal, {
     open: !!claimVerifyModal,
     onClose: () => { setClaimVerifyModal(null); setClaimVerifyCode(''); setClaimVerifyError(''); },

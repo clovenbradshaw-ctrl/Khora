@@ -304,18 +304,115 @@ const LoginScreen = ({
   onLogin
 }) => {
   const [mode, setMode] = useState('login'); // login | register
-  const [hs, setHs] = useState('hyphae.social');
+  const [hs, setHs] = useState('matrix.org');
   const [user, setUser] = useState('');
   const [pass, setPass] = useState('');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
   const [extReg, setExtReg] = useState(null); // null or { server, username }
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [regUIA, setRegUIA] = useState(null);
+  const [regCaptchaToken, setRegCaptchaToken] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regEmailSid, setRegEmailSid] = useState(null);
+  const [regEmailSecret, setRegEmailSecret] = useState('');
+  const [regTermsOk, setRegTermsOk] = useState(false);
+  const [regSubmitting, setRegSubmitting] = useState(false);
+  const [regError, setRegError] = useState('');
 
   // Extract host server from username if present (e.g. @user:matrix.org -> matrix.org)
   const userHost = user.includes(':') ? user.split(':').slice(1).join(':') : '';
   const effectiveHs = userHost || hs;
   const hideHs = !!userHost;
+  const regCurrentStage = regUIA ? (regUIA.flow.find(s => !(regUIA.completed || []).includes(s)) || null) : null;
+  const regStageIndex = regUIA && regCurrentStage ? regUIA.flow.filter(s => s !== 'm.login.dummy').indexOf(regCurrentStage) : -1;
+  const regStageNames = { 'm.login.recaptcha': 'Verify you\u2019re human', 'm.login.terms': 'Accept terms of service', 'm.login.email.identity': 'Verify your email', 'm.login.dummy': 'Finalizing\u2026' };
+
+  const submitRegStage = async (authData) => {
+    setRegSubmitting(true);
+    setRegError('');
+    try {
+      const resp = await fetch(`${regUIA.baseUrl}/_matrix/client/v3/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: regUIA.username, password: regUIA.password, auth: { ...authData, session: regUIA.session } }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        try { const s = await KhoraAuth.login(effectiveHs, regUIA.username, regUIA.password); onLogin(s); }
+        catch (e) { setRegError(e.message); }
+        setRegSubmitting(false);
+        return;
+      }
+      if (resp.status === 401 && data.completed) {
+        setRegUIA(prev => ({ ...prev, completed: data.completed || prev.completed, session: data.session || prev.session, params: data.params || prev.params }));
+        setRegCaptchaToken('');
+        setRegTermsOk(false);
+        setRegSubmitting(false);
+        return;
+      }
+      throw new Error(data.error || `Registration step failed (${resp.status})`);
+    } catch (e) { setRegError(e.message); setRegSubmitting(false); }
+  };
+
+  const sendRegEmail = async () => {
+    setRegSubmitting(true);
+    setRegError('');
+    try {
+      const secret = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+      setRegEmailSecret(secret);
+      const resp = await fetch(`${regUIA.baseUrl}/_matrix/client/v3/register/email/requestToken`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_secret: secret, email: regEmail, send_attempt: 1 }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || `Failed to send verification email (${resp.status})`);
+      setRegEmailSid(data.sid);
+    } catch (e) { setRegError(e.message); }
+    setRegSubmitting(false);
+  };
+
+  // Auto-submit reCAPTCHA token once solved
+  useEffect(() => {
+    if (regCaptchaToken && regCurrentStage === 'm.login.recaptcha' && !regSubmitting) {
+      submitRegStage({ type: 'm.login.recaptcha', response: regCaptchaToken });
+    }
+  }, [regCaptchaToken]);
+
+  // Auto-submit dummy stage (no user interaction needed)
+  useEffect(() => {
+    if (regCurrentStage === 'm.login.dummy' && !regSubmitting) {
+      submitRegStage({ type: 'm.login.dummy' });
+    }
+  }, [regCurrentStage]);
+
+  // Load and render Google reCAPTCHA widget
+  useEffect(() => {
+    if (regCurrentStage !== 'm.login.recaptcha' || !regUIA) return;
+    const siteKey = regUIA.params?.['m.login.recaptcha']?.public_key;
+    if (!siteKey) return;
+    let cancelled = false;
+    const renderWidget = () => {
+      if (cancelled) return;
+      const el = document.getElementById('khora-recaptcha');
+      if (!el || el.hasChildNodes()) return;
+      if (window.grecaptcha?.render) {
+        try { grecaptcha.render(el, { sitekey: siteKey, callback: (t) => { if (!cancelled) setRegCaptchaToken(t); } }); }
+        catch (e) { console.warn('reCAPTCHA render:', e); }
+      }
+    };
+    if (!document.querySelector('script[src*="recaptcha/api.js"]')) {
+      window._khoraRecaptchaReady = renderWidget;
+      const sc = document.createElement('script');
+      sc.src = 'https://www.google.com/recaptcha/api.js?onload=_khoraRecaptchaReady&render=explicit';
+      sc.async = true;
+      document.head.appendChild(sc);
+    } else { setTimeout(renderWidget, 100); }
+    return () => { cancelled = true; };
+  }, [regCurrentStage]);
+
   const go = async e => {
     e.preventDefault();
     setLoading(true);
@@ -354,10 +451,31 @@ const LoginScreen = ({
             throw new Error(e.error || `Registration failed (${resp.status}). Try logging in if account exists.`);
           }
         } else {
-          setExtReg({
-            server: effectiveHs,
-            username: user.replace(/^@/, '').split(':')[0]
-          });
+          // Check if we can handle this server's auth flow natively
+          const _supported = new Set(['m.login.recaptcha', 'm.login.terms', 'm.login.email.identity', 'm.login.dummy']);
+          const _nativeFlows = flows
+            .filter(f => f.stages && f.stages.every(s => _supported.has(s)))
+            .sort((a, b) => {
+              const ae = a.stages.includes('m.login.email.identity') ? 1 : 0;
+              const be = b.stages.includes('m.login.email.identity') ? 1 : 0;
+              return ae !== be ? ae - be : a.stages.length - b.stages.length;
+            });
+          if (_nativeFlows.length > 0) {
+            setRegUIA({
+              session: probeData.session,
+              flow: _nativeFlows[0].stages,
+              params: probeData.params || {},
+              completed: [],
+              baseUrl,
+              username: user.replace(/^@/, '').split(':')[0],
+              password: pass,
+            });
+          } else {
+            setExtReg({
+              server: effectiveHs,
+              username: user.replace(/^@/, '').split(':')[0]
+            });
+          }
           setLoading(false);
           return;
         }
@@ -558,6 +676,7 @@ const LoginScreen = ({
       setMode('login');
       setErr('');
       setExtReg(null);
+      setRegUIA(null); setRegError(''); setRegCaptchaToken(''); setRegEmailSid(null); setRegTermsOk(false);
     }
   }, "Sign In"), /*#__PURE__*/React.createElement("div", {
     className: `tab ${mode === 'register' ? 'active' : ''}`,
@@ -565,6 +684,7 @@ const LoginScreen = ({
       setMode('register');
       setErr('');
       setExtReg(null);
+      setRegUIA(null); setRegError(''); setRegCaptchaToken(''); setRegEmailSid(null); setRegTermsOk(false);
     }
   }, "Create Account")), extReg && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -733,7 +853,140 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "arrow-left",
     s: 12
-  }), " Pick a different server")), mode === 'register' && !extReg && /*#__PURE__*/React.createElement("div", {
+  }), " Pick a different server")),
+
+/* ── Native registration (UIA multi-step flow) ── */
+regUIA && /*#__PURE__*/React.createElement("div", {
+  style: { background: 'var(--teal-dim)', border: '1px solid rgba(62,201,176,.15)', borderRadius: 'var(--r)', padding: 20, marginBottom: 16 }
+},
+
+/* Step indicator */
+/*#__PURE__*/React.createElement("div", {
+  style: { fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--tx-2)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }
+}, '\u25CF STEP ', regStageIndex + 1, ' OF ', regUIA.flow.filter(function(s){return s !== 'm.login.dummy';}).length),
+
+/*#__PURE__*/React.createElement("div", {
+  style: { fontFamily: 'var(--serif)', fontSize: 18, fontWeight: 700, color: 'var(--tx-0)', marginBottom: 12 }
+}, regStageNames[regCurrentStage] || 'Processing\u2026'),
+
+/* Progress bar */
+/*#__PURE__*/React.createElement("div", {
+  style: { height: 3, background: 'var(--bg-2)', borderRadius: 2, marginBottom: 20, overflow: 'hidden' }
+}, /*#__PURE__*/React.createElement("div", {
+  style: { height: '100%', background: 'linear-gradient(90deg, var(--teal), var(--gold))', borderRadius: 2, transition: 'width .3s',
+    width: (function(){ var total = regUIA.flow.filter(function(s){return s !== 'm.login.dummy';}).length; return total > 0 ? ((regUIA.completed.filter(function(s){return s !== 'm.login.dummy';}).length / total) * 100) + '%' : '0%'; })() }
+})),
+
+/* ── reCAPTCHA stage ── */
+regCurrentStage === 'm.login.recaptcha' && /*#__PURE__*/React.createElement("div", null,
+  /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 14, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 16 }
+  }, "Complete the verification below to prove you\u2019re human."),
+  /*#__PURE__*/React.createElement("div", {
+    id: 'khora-recaptcha',
+    style: { display: 'flex', justifyContent: 'center', padding: '8px 0 16px' }
+  }),
+  regSubmitting && /*#__PURE__*/React.createElement("div", {
+    style: { textAlign: 'center', padding: 8 }
+  }, /*#__PURE__*/React.createElement(Spin, { s: 16 }), /*#__PURE__*/React.createElement("span", {
+    style: { fontSize: 12, color: 'var(--tx-2)', marginLeft: 8 }
+  }, "Verifying\u2026"))),
+
+/* ── Terms stage ── */
+regCurrentStage === 'm.login.terms' && /*#__PURE__*/React.createElement("div", null,
+  /*#__PURE__*/React.createElement("p", {
+    style: { fontSize: 14, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 12 }
+  }, "Please review and accept the terms of service to continue."),
+  regUIA.params && regUIA.params['m.login.terms'] && regUIA.params['m.login.terms'].policies && /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 16 }
+  }, Object.entries(regUIA.params['m.login.terms'].policies).map(function(entry) {
+    var key = entry[0], policy = entry[1];
+    if (key === 'version') return null;
+    var lang = policy.en || policy[Object.keys(policy).find(function(k){return k !== 'version';})];
+    if (!lang) return null;
+    return /*#__PURE__*/React.createElement("a", {
+      key: key, href: lang.url, target: '_blank', rel: 'noopener',
+      style: { display: 'flex', alignItems: 'center', gap: 6, color: 'var(--teal)', fontSize: 13, marginBottom: 6, textDecoration: 'underline' }
+    }, /*#__PURE__*/React.createElement(I, { n: "external-link", s: 12 }), lang.name || key);
+  })),
+  /*#__PURE__*/React.createElement("label", {
+    style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--tx-0)', cursor: 'pointer', marginBottom: 16 }
+  },
+    /*#__PURE__*/React.createElement("input", { type: 'checkbox', checked: regTermsOk, onChange: function(e) { setRegTermsOk(e.target.checked); } }),
+    "I have read and agree to the above terms"),
+  /*#__PURE__*/React.createElement("button", {
+    type: 'button', className: 'b-pri', disabled: !regTermsOk || regSubmitting,
+    onClick: function() { submitRegStage({ type: 'm.login.terms' }); },
+    style: { width: '100%', padding: 10, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }
+  }, regSubmitting ? /*#__PURE__*/React.createElement(Spin, { s: 14 }) : null, regSubmitting ? ' Submitting\u2026' : 'Accept & Continue')),
+
+/* ── Email verification stage ── */
+regCurrentStage === 'm.login.email.identity' && /*#__PURE__*/React.createElement("div", null,
+  !regEmailSid ? /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("p", {
+      style: { fontSize: 14, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 12 }
+    }, "Enter your email address. We\u2019ll send a verification link."),
+    /*#__PURE__*/React.createElement("div", { style: { marginBottom: 14 } },
+      /*#__PURE__*/React.createElement("span", { className: 'section-label' }, "EMAIL"),
+      /*#__PURE__*/React.createElement("input", {
+        type: 'email', value: regEmail,
+        onChange: function(e) { setRegEmail(e.target.value); },
+        placeholder: 'you@example.com', style: { width: '100%' }
+      })),
+    /*#__PURE__*/React.createElement("button", {
+      type: 'button', className: 'b-pri', disabled: !regEmail || regSubmitting,
+      onClick: sendRegEmail,
+      style: { width: '100%', padding: 10, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }
+    }, regSubmitting ? /*#__PURE__*/React.createElement(Spin, { s: 14 }) : /*#__PURE__*/React.createElement(I, { n: 'send', s: 14 }),
+      regSubmitting ? ' Sending\u2026' : ' Send verification email')
+  ) : /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("div", {
+      style: { textAlign: 'center', marginBottom: 16, color: 'var(--teal)' }
+    }, /*#__PURE__*/React.createElement(I, { n: 'mail', s: 32 })),
+    /*#__PURE__*/React.createElement("p", {
+      style: { fontSize: 14, color: 'var(--tx-0)', lineHeight: 1.6, marginBottom: 8, fontWeight: 600, textAlign: 'center' }
+    }, "Check your inbox"),
+    /*#__PURE__*/React.createElement("p", {
+      style: { fontSize: 13, color: 'var(--tx-1)', lineHeight: 1.6, marginBottom: 16, textAlign: 'center' }
+    }, "We sent a verification link to ", /*#__PURE__*/React.createElement("strong", {
+      style: { color: 'var(--tx-0)' }
+    }, regEmail), ". Click it, then come back and press the button below."),
+    /*#__PURE__*/React.createElement("button", {
+      type: 'button', className: 'b-pri', disabled: regSubmitting,
+      onClick: function() { submitRegStage({ type: 'm.login.email.identity', threepid_creds: { sid: regEmailSid, client_secret: regEmailSecret }, threepidCreds: { sid: regEmailSid, client_secret: regEmailSecret } }); },
+      style: { width: '100%', padding: 10, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }
+    }, regSubmitting ? /*#__PURE__*/React.createElement(Spin, { s: 14 }) : /*#__PURE__*/React.createElement(I, { n: 'check', s: 14 }),
+      regSubmitting ? ' Verifying\u2026' : ' I\u2019ve verified my email'))),
+
+/* ── Dummy / finalizing stage ── */
+regCurrentStage === 'm.login.dummy' && /*#__PURE__*/React.createElement("div", {
+  style: { textAlign: 'center', padding: 16 }
+}, /*#__PURE__*/React.createElement(Spin, { s: 20 }),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 13, color: 'var(--tx-2)', marginTop: 10 }
+  }, "Finalizing registration\u2026")),
+
+/* ── All stages complete — signing in ── */
+!regCurrentStage && /*#__PURE__*/React.createElement("div", {
+  style: { textAlign: 'center', padding: 16 }
+}, /*#__PURE__*/React.createElement(Spin, { s: 20 }),
+  /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 13, color: 'var(--tx-2)', marginTop: 10 }
+  }, "Signing in\u2026")),
+
+/* Error display */
+regError && /*#__PURE__*/React.createElement("div", {
+  style: { background: 'var(--red-dim)', border: '1px solid rgba(232,93,93,.2)', borderRadius: 'var(--r)', padding: '9px 14px', fontSize: 12.5, color: 'var(--red)', marginTop: 12 }
+}, regError),
+
+/* Cancel button */
+/*#__PURE__*/React.createElement("button", {
+  type: 'button', className: 'b-gho',
+  onClick: function() { setRegUIA(null); setRegError(''); setRegCaptchaToken(''); setRegEmailSid(null); setRegTermsOk(false); },
+  style: { width: '100%', padding: 8, fontSize: 12, marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, color: 'var(--tx-2)' }
+}, /*#__PURE__*/React.createElement(I, { n: "arrow-left", s: 12 }), " Cancel registration")),
+
+mode === 'register' && !extReg && !regUIA && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
@@ -779,7 +1032,7 @@ const LoginScreen = ({
     style: {
       color: 'var(--teal)'
     }
-  }, "servers.joinmatrix.org"), ".")), !extReg && /*#__PURE__*/React.createElement("form", {
+  }, "servers.joinmatrix.org"), ".")), !extReg && !regUIA && /*#__PURE__*/React.createElement("form", {
     onSubmit: go
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -877,17 +1130,35 @@ const LoginScreen = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "download",
     s: 12
-  }), " Save credentials")), !hideHs && /*#__PURE__*/React.createElement("div", {
+  }), " Save credentials")), mode === 'login' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14,
+      textAlign: 'right'
+    }
+  }, /*#__PURE__*/React.createElement("a", {
+    href: "https://app.element.io/#/forgot_password",
+    target: "_blank",
+    rel: "noopener",
+    style: { fontSize: 12, color: 'var(--teal)', textDecoration: 'none', fontFamily: 'var(--mono)' }
+  }, "Forgot password?")), !hideHs && /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    onClick: () => setShowAdvanced(!showAdvanced),
+    className: "b-gho b-xs",
+    style: { display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--tx-3)', fontSize: 11, fontFamily: 'var(--mono)', letterSpacing: '.04em', marginBottom: showAdvanced ? 8 : 0 }
+  }, /*#__PURE__*/React.createElement(I, {
+    n: showAdvanced ? "chevronDown" : "chevronRight",
+    s: 12
+  }), " Advanced"), showAdvanced && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
   }, "SERVER"), /*#__PURE__*/React.createElement("input", {
     value: hs,
     onChange: e => setHs(e.target.value),
     placeholder: "e.g. matrix.org"
-  })), err && /*#__PURE__*/React.createElement("div", {
+  }))), err && /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--red-dim)',
       border: '1px solid rgba(232,93,93,.2)',

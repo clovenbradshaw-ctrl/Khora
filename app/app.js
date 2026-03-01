@@ -95,8 +95,8 @@ const App = () => {
       setWelcomed(true);
       try { localStorage.setItem('khora_welcomed', '1'); } catch {}
       await detectContexts();
-      // Silently reconnect encrypted backup if previously set up
-      KhoraBackup.autoConnect().catch(() => {});
+      // Backup auto-connect disabled for now
+      // KhoraBackup.autoConnect().catch(() => {});
     } catch (e) { console.warn('Session restore error:', e?.message); } finally {
       setRestoring(false);
     }
@@ -108,8 +108,8 @@ const App = () => {
     setSession(s);
     // Detect contexts + roles from room membership (MVP §Screen 1)
     await detectContexts();
-    // Silently reconnect encrypted backup if previously set up
-    KhoraBackup.autoConnect().catch(() => {});
+    // Backup auto-connect disabled for now
+    // KhoraBackup.autoConnect().catch(() => {});
   };
   if (restoring || detectingRoles) return /*#__PURE__*/React.createElement("div", {
     className: "grid-bg",
