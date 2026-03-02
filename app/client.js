@@ -2520,7 +2520,8 @@ const ClientApp = ({
       padding: 24,
       minWidth: 0
     }
-  }, view === 'dashboard' && !activeBridge && /*#__PURE__*/React.createElement(PersonalDashboard, {
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, { viewKey: view, onReset: () => { setView('dashboard'); setActiveBridge(null); } },
+  view === 'dashboard' && !activeBridge && /*#__PURE__*/React.createElement(PersonalDashboard, {
     session: session,
     providers: providers,
     observations: observations,
@@ -4892,7 +4893,7 @@ const ClientApp = ({
     session: session
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  })), /*#__PURE__*/React.createElement(Modal, {
+  }))), /*#__PURE__*/React.createElement(Modal, {
     open: !!claimVerifyModal,
     onClose: () => { setClaimVerifyModal(null); setClaimVerifyCode(''); setClaimVerifyError(''); },
     title: "Verify Your Identity",
