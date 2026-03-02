@@ -1203,6 +1203,8 @@ const ProviderApp = ({
   const handleDbCellEdit = (row, fieldKey, newValue) => {
     const oldValue = row[fieldKey] || row.fields && row.fields[fieldKey]?.value || '';
     if (newValue === oldValue) return;
+    // Normalize: profile page sends 'full_name', table sends 'name'
+    const isNameField = fieldKey === 'name' || fieldKey === 'full_name';
     // Debounce: clear existing timer for this row+field, set a new one
     const timerKey = row.id + ':' + fieldKey;
     if (cellEditTimerRef.current[timerKey]) clearTimeout(cellEditTimerRef.current[timerKey]);
@@ -1219,9 +1221,16 @@ const ProviderApp = ({
           epistemic: 'MEANT',
           role: orgRole || 'provider'
         });
+        // Helper: update activeIndividual if it matches this row
+        const syncActiveIndividual = (updater) => {
+          setActiveIndividual(prev => {
+            if (!prev || (prev.bridgeRoom || prev.id) !== roomId) return prev;
+            return updater(prev);
+          });
+        };
         // Persist the edit to Matrix state
         if (row._case) {
-          if (fieldKey === 'name') {
+          if (isNameField) {
             // Update full_name in bridge shared data
             const updatedData = {
               ...row._case.sharedData,
@@ -1236,6 +1245,11 @@ const ProviderApp = ({
                 ? { ...c, sharedData: { ...c.sharedData, full_name: newValue } }
                 : c
             ));
+            syncActiveIndividual(prev => ({
+              ...prev,
+              name: newValue,
+              _case: { ...prev._case, sharedData: { ...prev._case.sharedData, full_name: newValue } }
+            }));
             // Update client_name in ROSTER_ASSIGN for org room
             if (orgRoom && caseAssignments[roomId]) {
               const updatedAssignments = {
@@ -1270,6 +1284,11 @@ const ProviderApp = ({
                 ? { ...c, meta: { ...c.meta, status: newValue } }
                 : c
             ));
+            syncActiveIndividual(prev => ({
+              ...prev,
+              status: newValue,
+              _case: prev._case ? { ...prev._case, meta: { ...prev._case.meta, status: newValue } } : prev._case
+            }));
           } else if (fieldKey === 'priority') {
             // Update priority in ROSTER_ASSIGN
             if (orgRoom && caseAssignments[roomId]) {
@@ -1285,6 +1304,10 @@ const ProviderApp = ({
               });
               setCaseAssignments(updatedAssignments);
             }
+            syncActiveIndividual(prev => ({
+              ...prev,
+              priority: newValue
+            }));
           } else {
             // Dynamic field — update shared data in bridge
             const updatedData = {
@@ -1300,14 +1323,24 @@ const ProviderApp = ({
                 ? { ...c, sharedData: { ...c.sharedData, [fieldKey]: newValue } }
                 : c
             ));
+            syncActiveIndividual(prev => ({
+              ...prev,
+              fields: { ...prev.fields, [fieldKey]: { ...(prev.fields?.[fieldKey] || {}), value: newValue, eo_op: oldValue ? 'ALT' : 'INS' } },
+              _case: prev._case ? { ...prev._case, sharedData: { ...prev._case.sharedData, [fieldKey]: newValue } } : prev._case
+            }));
           }
         } else if (row._clientRecord) {
           // Client record rows — update identity state
           const updates = {
             ...row._clientRecord
           };
-          if (fieldKey === 'name') updates.client_name = newValue;
+          if (isNameField) updates.client_name = newValue;
           await svc.setState(row.id, EVT.IDENTITY, updates);
+          syncActiveIndividual(prev => ({
+            ...prev,
+            name: isNameField ? newValue : prev.name,
+            _clientRecord: updates
+          }));
         }
       } catch (e) {
         console.warn('Cell edit event failed:', e.message);
