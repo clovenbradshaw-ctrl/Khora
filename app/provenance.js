@@ -85,7 +85,7 @@ const classifyEvent = (ev, roomInfo) => {
     op: content.op || 'INS',
     epistemic: content.frame?.epistemic || 'GIVEN',
     label: `${content.op} Operation`,
-    desc: content.target || ''
+    desc: typeof content.target === 'string' ? content.target : ''
   };
   if (ev.isState && ev.isState()) {
     switch (type) {
@@ -1249,9 +1249,9 @@ const ActionLog = ({
   const roomTypes = [...new Set(events.map(ev => ev.roomInfo.type))].sort();
   const targetEntries = [...new Set(
     events
-      .filter(ev => ev.type === EVT.OP && ev.content?.target)
+      .filter(ev => ev.type === EVT.OP && ev.content?.target && typeof ev.content.target === 'string')
       .map(ev => {
-        const parts = (ev.content.target || '').split('.');
+        const parts = ev.content.target.split('.');
         return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0];
       })
       .filter(Boolean)
@@ -1259,7 +1259,8 @@ const ActionLog = ({
   let filtered = events;
   if (filter !== 'all') filtered = filtered.filter(ev => ev.roomInfo.type === filter);
   if (targetFilter !== 'all') filtered = filtered.filter(ev => {
-    const parts = (ev.content?.target || '').split('.');
+    const t = typeof ev.content?.target === 'string' ? ev.content.target : '';
+    const parts = t.split('.');
     const key = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : parts[0];
     return key === targetFilter;
   });
