@@ -301,7 +301,7 @@ const KhoraAuth = {
     const res = await this._client.login('m.login.password', { identifier: { type: 'm.id.user', user }, password: pass });
     await LocalVaultCrypto.deriveKey(res.user_id, res.access_token, res.device_id);
     await this._purgeUnencryptedStores();
-    const cryptoStore = KhoraE2EE.createCryptoStore();
+    let cryptoStore = KhoraE2EE.createCryptoStore();
     this._client = matrixcs.createClient({
       baseUrl,
       accessToken: res.access_token,
@@ -310,7 +310,24 @@ const KhoraAuth = {
       cryptoStore
     });
     // E2EE is MANDATORY — abort login if crypto init fails
-    await KhoraE2EE.initMandatoryCrypto(this._client);
+    // Recovery: if init fails, clear crypto store and retry with fresh client
+    try {
+      await KhoraE2EE.initMandatoryCrypto(this._client);
+    } catch (cryptoErr) {
+      console.warn('Crypto init failed, clearing store and retrying:', cryptoErr.message);
+      try { this._client.stopClient(); } catch {}
+      try { indexedDB.deleteDatabase(KhoraE2EE.CRYPTO_STORE_NAME); } catch {}
+      await new Promise(r => setTimeout(r, 500));
+      cryptoStore = KhoraE2EE.createCryptoStore();
+      this._client = matrixcs.createClient({
+        baseUrl,
+        accessToken: res.access_token,
+        userId: res.user_id,
+        deviceId: res.device_id,
+        cryptoStore
+      });
+      await KhoraE2EE.initMandatoryCrypto(this._client);
+    }
     await this._client.startClient({ initialSyncLimit: 30 });
     await new Promise((resolve, reject) => {
       if (this._client.isInitialSyncComplete()) return resolve();
@@ -398,10 +415,21 @@ const KhoraAuth = {
       this._baseUrl = homeserver;
       await LocalVaultCrypto.deriveKey(userId, accessToken, deviceId);
       KhoraE2EE.requireSDK();
-      const cryptoStore = KhoraE2EE.createCryptoStore();
+      let cryptoStore = KhoraE2EE.createCryptoStore();
       this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId, cryptoStore });
       // E2EE is MANDATORY — abort restore if crypto init fails
-      await KhoraE2EE.initMandatoryCrypto(this._client);
+      // Recovery: if init fails, clear crypto store and retry with fresh client
+      try {
+        await KhoraE2EE.initMandatoryCrypto(this._client);
+      } catch (cryptoErr) {
+        console.warn('Crypto init failed on restore, clearing store and retrying:', cryptoErr.message);
+        try { this._client.stopClient(); } catch {}
+        try { indexedDB.deleteDatabase(KhoraE2EE.CRYPTO_STORE_NAME); } catch {}
+        await new Promise(r => setTimeout(r, 500));
+        cryptoStore = KhoraE2EE.createCryptoStore();
+        this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId, cryptoStore });
+        await KhoraE2EE.initMandatoryCrypto(this._client);
+      }
       await this._client.startClient({ initialSyncLimit: 30 });
       await new Promise((resolve, reject) => {
         if (this._client.isInitialSyncComplete()) return resolve();

@@ -48,19 +48,37 @@ const KhoraE2EE = {
     let initialized = false;
     for (let attempt = 0; attempt < this.MAX_INIT_RETRIES; attempt++) {
       try {
-        if (typeof Olm !== 'undefined') await Olm.init();
-        await client.initCrypto();
-        client.setGlobalErrorOnUnknownDevices(false);
+        if (typeof Olm !== 'undefined') {
+          try { await Olm.init(); } catch (olmErr) {
+            console.warn('Olm.init() warning:', olmErr.message);
+          }
+        }
+        // Try available crypto init methods (initCrypto deprecated in newer SDK versions)
+        if (typeof client.initCrypto === 'function') {
+          await client.initCrypto();
+        } else if (typeof client.initRustCrypto === 'function') {
+          await client.initRustCrypto();
+        } else {
+          throw new Error('No crypto initialization method available on Matrix client');
+        }
+        // setGlobalErrorOnUnknownDevices may not exist in all SDK versions
+        if (typeof client.setGlobalErrorOnUnknownDevices === 'function') {
+          try { client.setGlobalErrorOnUnknownDevices(false); } catch {}
+        }
         initialized = true;
         break;
       } catch (e) {
         console.warn(`E2EE crypto init attempt ${attempt + 1}/${this.MAX_INIT_RETRIES}:`, e.message);
+        // On second failure, try clearing a potentially corrupted crypto store
+        if (attempt === 1) {
+          try { indexedDB.deleteDatabase(this.CRYPTO_STORE_NAME); } catch {}
+        }
         if (attempt < this.MAX_INIT_RETRIES - 1) {
           await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         }
       }
     }
-    if (!initialized || !client.isCryptoEnabled()) {
+    if (!initialized || (typeof client.isCryptoEnabled === 'function' && !client.isCryptoEnabled())) {
       try { client.stopClient(); } catch {}
       throw new Error('End-to-end encryption could not be initialized. Khora requires E2EE to protect your data. Please reload and try again.');
     }
