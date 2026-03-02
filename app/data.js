@@ -2598,7 +2598,7 @@ const BulkAddFieldsModal = ({ open, onClose, selectedIds, individuals, fieldDefs
   // Determine which fields are already set on ALL selected individuals
   const allHaveField = key => selectedInds.every(ind => {
     const f = ind.fields?.[key];
-    const sd = ind._case?.sharedData?.[key];
+    const sd = ind._case?.sharedData?.[key] || ind._clientRecord?.[key];
     return (f?.value || sd || (key === 'full_name' ? ind.name : ''));
   });
 
@@ -2884,6 +2884,18 @@ const DatabaseView = ({
         }
       });
     }
+    // Merge IDENTITY fields from client record as base layer
+    // (ROSTER_ASSIGN values already in crmFields take precedence)
+    const IDENTITY_META_KEYS = new Set([
+      'account_type', 'owner', 'previous_owner', 'created', 'roomId',
+      'client_name', 'client_matrix_id', 'notes', 'status', 'imported',
+      'sync_status', 'team_id', 'team_name', 'import_source', 'import_batch'
+    ]);
+    Object.entries(r).forEach(([k, v]) => {
+      if (!IDENTITY_META_KEYS.has(k) && !crmFields[k] && v !== undefined && v !== null && v !== '') {
+        crmFields[k] = { value: v, disclosed: true, eo_op: 'INS', frame: 'MEANT', room: 'identity', editable: true, history: [] };
+      }
+    });
     return {
       id: r.roomId,
       name: r.client_name || 'Unknown',

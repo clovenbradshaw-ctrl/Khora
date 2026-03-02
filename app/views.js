@@ -2048,7 +2048,7 @@ const CrmFieldRow = ({ fieldDef, value, disclosed, eoOp, frame, onSave, roomId, 
 const CrmSection = ({ section, fields, individual, onFieldEdit, onRestore, fieldDefs }) => {
   const [collapsed, setCollapsed] = useState(false);
   const allFields = individual.fields || {};
-  const sharedData = individual._case?.sharedData || {};
+  const sharedData = individual._case?.sharedData || individual._clientRecord || {};
   const filledCount = section.fields.filter(f => {
     const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
     return val !== undefined && val !== null && val !== '';
@@ -2289,7 +2289,7 @@ const IndividualProfilePage = ({
         style: { fontSize: 11, color: 'var(--tx-2)', fontFamily: 'var(--mono)' }
       }, (() => {
         const allFields = individual.fields || {};
-        const sharedData = individual._case?.sharedData || {};
+        const sharedData = individual._case?.sharedData || individual._clientRecord || {};
         const total = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.length, 0);
         const filled = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.filter(f => {
           const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
@@ -2302,7 +2302,7 @@ const IndividualProfilePage = ({
       }, React.createElement("div", {
         style: { height: '100%', borderRadius: 2, background: 'var(--teal)', transition: 'width .3s', width: (() => {
           const allFields = individual.fields || {};
-          const sharedData = individual._case?.sharedData || {};
+          const sharedData = individual._case?.sharedData || individual._clientRecord || {};
           const total = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.length, 0);
           const filled = CRM_PROFILE_SECTIONS.reduce((s, sec) => s + sec.fields.filter(f => {
             const val = allFields[f.key]?.value || sharedData[f.key] || (f.key === 'full_name' ? individual.name : '');
@@ -2335,7 +2335,7 @@ const IndividualProfilePage = ({
     const customDefs = Object.values(fieldDefs || {}).filter(d => d && typeof d.key === 'string' && !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
     if (customDefs.length === 0) return null;
     const allFields = individual.fields || {};
-    const sharedData = individual._case?.sharedData || {};
+    const sharedData = individual._case?.sharedData || individual._clientRecord || {};
     return React.createElement("div", { className: "crm-section" },
       React.createElement("div", {
         className: "crm-section-header",
