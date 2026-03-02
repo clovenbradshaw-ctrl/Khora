@@ -33,16 +33,18 @@ class KhoraService {
         return await fn();
       } catch (e) {
         const msg = (e?.data?.error || e?.message || '').toLowerCase();
-        const retryMs = e?.data?.retry_after_ms;
-        if (msg.includes('too many') || msg.includes('rate') || msg.includes('limit') || retryMs) {
-          const wait = Math.min(retryMs || 1000 * Math.pow(2, attempt), 16000);
+        const retryMs = e?.data?.retry_after_ms || e?.retry_after_ms;
+        const httpStatus = e?.httpStatus || e?.statusCode || e?.status;
+        if (httpStatus === 429 || e?.errcode === 'M_LIMIT_EXCEEDED' || msg.includes('too many') || msg.includes('rate') || msg.includes('limit') || retryMs) {
+          const wait = Math.min(retryMs || 2000 * Math.pow(2, attempt), 30000);
+          console.warn(`[KhoraService] Rate limited (attempt ${attempt + 1}/${maxAttempts}), waiting ${wait}ms`);
           await new Promise(r => setTimeout(r, wait));
           continue;
         }
         throw e;
       }
     }
-    throw new Error('Rate limited — too many requests. Please try again.');
+    throw new Error('Rate limited — too many requests. Please try again in a moment.');
   }
 
   async _api(method, path, body, noAuth) {
@@ -60,7 +62,8 @@ class KhoraService {
       const r = await fetch(url, opts);
       if (r.status === 429) {
         const err = await r.json().catch(() => ({}));
-        const wait = Math.min(err.retry_after_ms || 1000 * Math.pow(2, attempt), 16000);
+        const wait = Math.min(err.retry_after_ms || 2000 * Math.pow(2, attempt), 30000);
+        console.warn(`[KhoraService] API rate limited (attempt ${attempt + 1}/5), waiting ${wait}ms`);
         await new Promise(res => setTimeout(res, wait));
         continue;
       }
