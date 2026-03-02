@@ -1999,9 +1999,13 @@ const ProviderApp = ({
       setNewClientNotes('');
       showToast('Record synced successfully', 'success');
     } catch (e) {
-      setClientRecords(prev => prev.map(r => (r.roomId === optimisticId ? { ...r, sync_status: 'error' } : r)));
+      setClientRecords(prev => prev.map(r => (r.roomId === optimisticId ? { ...r, sync_status: 'error', sync_error: e.message } : r)));
       showToast('Could not sync record. Retrying view…', 'error');
-      await loadCases();
+      try {
+        await loadCases();
+      } catch (refreshError) {
+        console.warn('Post-create refresh failed:', refreshError.message);
+      }
     }
   };
   // Quick-add individual: creates a client record with just a name (no modal)
@@ -2079,9 +2083,13 @@ const ProviderApp = ({
       } catch (e) { console.warn('Quick-add event tracking failed:', e.message); }
       showToast('Record synced successfully', 'success');
     } catch (e) {
-      setClientRecords(prev => prev.map(r => (r.roomId === optimisticId ? { ...r, sync_status: 'error' } : r)));
+      setClientRecords(prev => prev.map(r => (r.roomId === optimisticId ? { ...r, sync_status: 'error', sync_error: e.message } : r)));
       showToast('Could not sync record. Retrying view…', 'error');
-      await loadCases();
+      try {
+        await loadCases();
+      } catch (refreshError) {
+        console.warn('Post-quick-add refresh failed:', refreshError.message);
+      }
     }
   };
 
