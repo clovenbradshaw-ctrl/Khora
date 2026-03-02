@@ -5799,8 +5799,8 @@ const SchemaWorkbench = ({
 
   const tabs = [
     { id: 'columns', label: 'Columns', icon: 'grid', count: null },
-    { id: 'dictionary', label: 'Dictionary', icon: 'book', count: Object.keys(fieldDefs || {}).length + VAULT_FIELDS.length },
     { id: 'forms', label: 'Forms', icon: 'layers', count: allForms.length },
+    { id: 'dictionary', label: 'Dictionary', icon: 'book', count: Object.keys(fieldDefs || {}).length + VAULT_FIELDS.length },
     { id: 'uri_libraries', label: 'URI Libraries', icon: 'globe', count: URI_LIBRARIES.length },
     { id: 'governance', label: 'Governance', icon: 'shieldCheck', count: null }
   ];
