@@ -1315,8 +1315,11 @@ const ClientApp = ({
           };
         }
       }
+      // Create missing rooms in parallel to avoid sequential round-trips
+      const roomCreations = [];
+      let createdVault = false;
       if (!vault) {
-        vault = await svc.createRoom('[Khora Vault]', 'Personal data vault', [{
+        roomCreations.push(svc.createRoom('[Khora Vault]', 'Personal data vault', [{
           type: EVT.IDENTITY,
           state_key: '',
           content: {
@@ -1355,11 +1358,11 @@ const ClientApp = ({
           content: {
             providers: []
           }
-        }]);
-        showToast('Vault created — encrypted room ready', 'success');
+        }]).then(id => { vault = id; createdVault = true; }));
       }
+      let needsSchemaSeeding = false;
       if (!schema) {
-        schema = await svc.createRoom('[Khora Schema]', 'Schema definitions', [{
+        roomCreations.push(svc.createRoom('[Khora Schema]', 'Schema definitions', [{
           type: EVT.IDENTITY,
           state_key: '',
           content: {
@@ -1367,7 +1370,11 @@ const ClientApp = ({
             owner: svc.userId,
             created: Date.now()
           }
-        }]);
+        }]).then(id => { schema = id; needsSchemaSeeding = true; }));
+      }
+      if (roomCreations.length > 0) await Promise.all(roomCreations);
+      if (createdVault) showToast('Vault created — encrypted room ready', 'success');
+      if (needsSchemaSeeding) {
         const allSeeds = [
         // Forms — GIVEN data collection instruments
         ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)), ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
@@ -1376,9 +1383,11 @@ const ClientApp = ({
           id: 'transform_default',
           transforms: DEFAULT_TRANSFORMS
         }, 'default')]].flat();
-        for (let i = 0; i < allSeeds.length; i++) {
-          await allSeeds[i]();
-          if (i % 3 === 2) await new Promise(r => setTimeout(r, 200));
+        // Seed in parallel batches of 3 to stay under rate limits
+        for (let i = 0; i < allSeeds.length; i += 3) {
+          const batch = allSeeds.slice(i, i + 3);
+          await Promise.all(batch.map(fn => fn()));
+          if (i + 3 < allSeeds.length) await new Promise(r => setTimeout(r, 200));
         }
       }
       setVaultRoom(vault);

@@ -690,8 +690,10 @@ const ProviderApp = ({
       const selectedOrg = detectedOrgs.find(o => o.roomId === preferredOrgId) || detectedOrgs[0] || null;
       const detectedOrg = selectedOrg?.roomId || null;
       const detectedOrgRole = selectedOrg?.role || null;
+      // Create missing rooms in parallel to avoid sequential round-trips
+      const roomCreations = [];
       if (!roster) {
-        roster = await svc.createRoom('[Khora Roster]', 'Provider case index', [{
+        roomCreations.push(svc.createRoom('[Khora Roster]', 'Provider case index', [{
           type: EVT.IDENTITY,
           state_key: '',
           content: {
@@ -705,10 +707,10 @@ const ProviderApp = ({
           content: {
             cases: []
           }
-        }]);
+        }]).then(id => { roster = id; }));
       }
       if (!metricsR) {
-        metricsR = await svc.createRoom('[Khora Metrics]', 'Anonymized metrics', [{
+        roomCreations.push(svc.createRoom('[Khora Metrics]', 'Anonymized metrics', [{
           type: EVT.IDENTITY,
           state_key: '',
           content: {
@@ -716,10 +718,11 @@ const ProviderApp = ({
             owner: svc.userId,
             created: Date.now()
           }
-        }]);
+        }]).then(id => { metricsR = id; }));
       }
+      let needsSchemaSeeding = false;
       if (!schema) {
-        schema = await svc.createRoom('[Khora Schema]', 'Schema definitions', [{
+        roomCreations.push(svc.createRoom('[Khora Schema]', 'Schema definitions', [{
           type: EVT.IDENTITY,
           state_key: '',
           content: {
@@ -727,7 +730,10 @@ const ProviderApp = ({
             owner: svc.userId,
             created: Date.now()
           }
-        }]);
+        }]).then(id => { schema = id; needsSchemaSeeding = true; }));
+      }
+      if (roomCreations.length > 0) await Promise.all(roomCreations);
+      if (needsSchemaSeeding) {
         const allSeeds = [
         // Forms — GIVEN data collection instruments
         ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)), ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
@@ -738,9 +744,11 @@ const ProviderApp = ({
           id: 'transform_default',
           transforms: DEFAULT_TRANSFORMS
         }, 'default')]].flat();
-        for (let i = 0; i < allSeeds.length; i++) {
-          await allSeeds[i]();
-          if (i % 3 === 2) await new Promise(r => setTimeout(r, 200));
+        // Seed in parallel batches of 3 to stay under rate limits
+        for (let i = 0; i < allSeeds.length; i += 3) {
+          const batch = allSeeds.slice(i, i + 3);
+          await Promise.all(batch.map(fn => fn()));
+          if (i + 3 < allSeeds.length) await new Promise(r => setTimeout(r, 200));
         }
       }
       // Fallback: if metrics/schema not found by owner, check org metadata for linked room IDs
