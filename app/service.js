@@ -199,6 +199,24 @@ class KhoraService {
     }
   }
 
+  // Force-refresh device keys for all members of a room.
+  // Clears cached one-time keys and device lists so the next send
+  // fetches fresh keys from the homeserver — fixes OLM.BAD_MESSAGE_MAC errors
+  // caused by stale or corrupted one-time key signatures.
+  async _refreshRoomDeviceKeys(roomId) {
+    try {
+      const room = this.client.getRoom(roomId);
+      if (room) {
+        const members = room.getJoinedMembers().map(m => m.userId);
+        if (members.length > 0) {
+          await this.client.downloadKeys(members, true);
+        }
+      }
+    } catch (keyErr) {
+      console.warn('Failed to refresh device keys:', keyErr.message);
+    }
+  }
+
   // Check if a room has encryption enabled — used to block unencrypted sends
   _isRoomEncrypted(roomId) {
     if (this.client) {
@@ -218,12 +236,14 @@ class KhoraService {
       try {
         await this._withRetry(() => this.client.sendEvent(roomId, type, content));
       } catch (e) {
-        // On crypto errors: retry once via the SDK (which handles encryption).
+        // On crypto errors: refresh device keys and retry via the SDK.
         // NEVER fall back to the REST API — that bypasses Megolm and sends plaintext.
         const msg = (e?.message || '').toLowerCase();
-        const isCryptoError = msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm');
+        const isCryptoError = msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm') || msg.includes('bad_message_mac') || msg.includes('verify signature');
         if (isCryptoError) {
-          console.warn('sendEvent: encryption error, retrying via SDK:', e.message);
+          console.warn('sendEvent: encryption error, refreshing device keys and retrying:', e.message);
+          // Force-refresh device keys to clear stale OTKs that cause BAD_MESSAGE_MAC
+          await this._refreshRoomDeviceKeys(roomId);
           await new Promise(r => setTimeout(r, 1500));
           await this._withRetry(() => this.client.sendEvent(roomId, type, content));
         } else {
@@ -257,11 +277,13 @@ class KhoraService {
       try {
         await this._withRetry(() => this.client.sendMessage(roomId, content));
       } catch (e) {
-        // On crypto errors: retry once via the SDK (preserves encryption).
+        // On crypto errors: refresh device keys and retry (preserves encryption).
         const msg = (e?.message || '').toLowerCase();
-        const isCryptoError = msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm');
+        const isCryptoError = msg.includes('encrypt') || msg.includes('olm') || msg.includes('megolm') || msg.includes('crypto') || msg.includes('unknown devices') || msg.includes('no olm') || msg.includes('bad_message_mac') || msg.includes('verify signature');
         if (isCryptoError) {
-          console.warn('sendMessage: encryption error, retrying via SDK:', e.message);
+          console.warn('sendMessage: encryption error, refreshing device keys and retrying:', e.message);
+          // Force-refresh device keys to clear stale OTKs that cause BAD_MESSAGE_MAC
+          await this._refreshRoomDeviceKeys(roomId);
           await new Promise(r => setTimeout(r, 1500));
           await this._withRetry(() => this.client.sendMessage(roomId, content));
         } else {
