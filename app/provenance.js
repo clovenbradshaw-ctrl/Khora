@@ -1164,7 +1164,8 @@ const ActionLog = ({
                 const fakeEv = {
                   getType: () => type, getContent: () => raw.content || {},
                   getId: () => raw.event_id || `state_${roomId}_${type}_${raw.state_key || ''}`,
-                  getSender: () => raw.sender || '', getTs: () => raw.origin_server_ts || 0, isState: () => true
+                  getSender: () => raw.sender || '', getTs: () => raw.origin_server_ts || 0, isState: () => true,
+                  getStateKey: () => raw.state_key || ''
                 };
                 const cls = classifyEvent(fakeEv, roomInfo);
                 allEvents.push({ id: fakeEv.getId(), roomId, roomInfo, sender: fakeEv.getSender(),
@@ -1201,7 +1202,8 @@ const ActionLog = ({
                     const fakeEv = {
                       getType: () => type, getContent: () => raw.content || {},
                       getId: () => raw.event_id || `state_${rid}_${type}_${raw.state_key || ''}`,
-                      getSender: () => raw.sender || '', getTs: () => raw.origin_server_ts || 0, isState: () => true
+                      getSender: () => raw.sender || '', getTs: () => raw.origin_server_ts || 0, isState: () => true,
+                      getStateKey: () => raw.state_key || ''
                     };
                     const cls = classifyEvent(fakeEv, roomInfo);
                     allEvents.push({ id: fakeEv.getId(), roomId: rid, roomInfo, sender: fakeEv.getSender(),
