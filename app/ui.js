@@ -1,3 +1,51 @@
+/* ─── ViewErrorBoundary — catches render errors to prevent white-screen crashes ─── */
+class ViewErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('ViewErrorBoundary caught:', error, info);
+  }
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.viewKey !== this.props.viewKey) {
+      this.setState({ hasError: false, error: null });
+    }
+  }
+  render() {
+    if (this.state.hasError) {
+      return /*#__PURE__*/React.createElement("div", {
+        className: "anim-up",
+        style: { maxWidth: 600, margin: '60px auto', textAlign: 'center', padding: 20 }
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "card",
+        style: { padding: '40px 30px', border: '1px solid var(--red)' }
+      }, /*#__PURE__*/React.createElement(I, { n: "alert-triangle", s: 28, c: "var(--red)" }),
+      /*#__PURE__*/React.createElement("h3", {
+        style: { marginTop: 12, fontFamily: 'var(--serif)' }
+      }, "Something went wrong"),
+      /*#__PURE__*/React.createElement("p", {
+        style: { color: 'var(--tx-2)', fontSize: 13, marginTop: 8, lineHeight: 1.6 }
+      }, "This view encountered an error. Try navigating to a different section using the sidebar."),
+      this.state.error && /*#__PURE__*/React.createElement("pre", {
+        style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginTop: 12, textAlign: 'left', background: 'var(--bg-1)', padding: 10, borderRadius: 'var(--r)', overflow: 'auto', maxHeight: 80 }
+      }, String(this.state.error)),
+      /*#__PURE__*/React.createElement("button", {
+        className: "b-pri",
+        style: { marginTop: 16 },
+        onClick: () => {
+          this.setState({ hasError: false, error: null });
+          if (this.props.onReset) this.props.onReset();
+        }
+      }, "Go to Dashboard")));
+    }
+    return this.props.children;
+  }
+}
+
 const Spin = ({
   s = 18
 }) => /*#__PURE__*/React.createElement("div", {

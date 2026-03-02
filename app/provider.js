@@ -4481,7 +4481,8 @@ const ProviderApp = ({
     style: {
       padding: 24
     }
-  }, view === 'dashboard' && !activeCase && /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, { viewKey: view, onReset: () => { setView('dashboard'); setActiveCase(null); } },
+  view === 'dashboard' && !activeCase && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement(DashboardOverview, {
       cases: activeTeamObj ? cases.filter(c => { const a = caseAssignments[c.bridgeRoomId]; return activeTeamMemberIds.includes(a?.primary || c.meta?.provider); }) : cases,
       clientRecords: teamFilteredClientRecords,
@@ -9062,7 +9063,7 @@ const ProviderApp = ({
     session: session
   }), view === 'transparency' && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  }))), /*#__PURE__*/React.createElement(Modal, {
+  })))), /*#__PURE__*/React.createElement(Modal, {
     open: discoverModal,
     onClose: () => setDiscoverModal(false),
     title: "Find " + (T?.client_term || 'Individual')

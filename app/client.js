@@ -1122,6 +1122,7 @@ const ClientApp = ({
   const [clientSharingConsentModal, setClientSharingConsentModal] = useState(null); // {team} — prompts client team member to choose sharing preference
   const [myResources, setMyResources] = useState([]); // resource vault records from bridges
   const isMobile = useIsMobile();
+  const teamColorsList = useMemo(() => (myTeams || []).map(t => ({ name: t.name, color_hue: t.color_hue })), [myTeams]);
   // Contact sharing state
   const [shareContactModal, setShareContactModal] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
@@ -2240,7 +2241,7 @@ const ClientApp = ({
       { id: 'providers', icon: 'users', label: 'People' }
     ],
     activeView: activeBridge ? 'bridge' : view,
-    onNavigate: id => { setView(id); setActiveBridge(null); },
+    onNavigate: id => { setView(id); setActiveBridge(null); if (id !== 'inbox') setInboxConvo(null); },
     moreItems: [
       { id: 'observations', icon: 'clipboard', label: 'Observations' },
       { id: 'resources', icon: 'layers', label: 'My Resources' },
@@ -2248,7 +2249,7 @@ const ClientApp = ({
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' }
     ],
-    onMoreNavigate: id => { setView(id); setActiveBridge(null); }
+    onMoreNavigate: id => { setView(id); setActiveBridge(null); setInboxConvo(null); }
   },
     availableContexts && availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", { style: { padding: '8px 0', borderTop: '1px solid var(--border-0)', marginTop: 8, display: 'flex', gap: 4 } },
       [{id:'provider',label:ROLES.provider.label,icon:'briefcase'},{id:'client',label:ROLES.client.label,icon:'shield'}].filter(opt => availableContexts.includes(opt.id)).map(opt => /*#__PURE__*/React.createElement("button", {
@@ -2519,7 +2520,8 @@ const ClientApp = ({
       padding: 24,
       minWidth: 0
     }
-  }, view === 'dashboard' && !activeBridge && /*#__PURE__*/React.createElement(PersonalDashboard, {
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, { viewKey: view, onReset: () => { setView('dashboard'); setActiveBridge(null); } },
+  view === 'dashboard' && !activeBridge && /*#__PURE__*/React.createElement(PersonalDashboard, {
     session: session,
     providers: providers,
     observations: observations,
@@ -2531,6 +2533,7 @@ const ClientApp = ({
     onNavigate: v => {
       setView(v);
       setActiveBridge(null);
+      if (v !== 'inbox') setInboxConvo(null);
     }
   }), view === 'vault' && !activeBridge && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
@@ -4890,7 +4893,7 @@ const ClientApp = ({
     session: session
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  })), /*#__PURE__*/React.createElement(Modal, {
+  }))), /*#__PURE__*/React.createElement(Modal, {
     open: !!claimVerifyModal,
     onClose: () => { setClaimVerifyModal(null); setClaimVerifyCode(''); setClaimVerifyError(''); },
     title: "Verify Your Identity",

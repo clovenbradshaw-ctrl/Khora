@@ -10246,6 +10246,54 @@ const DatabaseMergeModal = ({ open, onClose, recordA, recordB, allRecords, targe
 };
 
 /* ═══════════════════ SMALL COMPONENTS ═══════════════════ */
+/* ─── ViewErrorBoundary — catches render errors to prevent white-screen crashes ─── */
+class ViewErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('ViewErrorBoundary caught:', error, info);
+  }
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.viewKey !== this.props.viewKey) {
+      this.setState({ hasError: false, error: null });
+    }
+  }
+  render() {
+    if (this.state.hasError) {
+      return /*#__PURE__*/React.createElement("div", {
+        className: "anim-up",
+        style: { maxWidth: 600, margin: '60px auto', textAlign: 'center', padding: 20 }
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "card",
+        style: { padding: '40px 30px', border: '1px solid var(--red)' }
+      }, /*#__PURE__*/React.createElement(I, { n: "alert-triangle", s: 28, c: "var(--red)" }),
+      /*#__PURE__*/React.createElement("h3", {
+        style: { marginTop: 12, fontFamily: 'var(--serif)' }
+      }, "Something went wrong"),
+      /*#__PURE__*/React.createElement("p", {
+        style: { color: 'var(--tx-2)', fontSize: 13, marginTop: 8, lineHeight: 1.6 }
+      }, "This view encountered an error. Try navigating to a different section using the sidebar."),
+      this.state.error && /*#__PURE__*/React.createElement("pre", {
+        style: { fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)', marginTop: 12, textAlign: 'left', background: 'var(--bg-1)', padding: 10, borderRadius: 'var(--r)', overflow: 'auto', maxHeight: 80 }
+      }, String(this.state.error)),
+      /*#__PURE__*/React.createElement("button", {
+        className: "b-pri",
+        style: { marginTop: 16 },
+        onClick: () => {
+          this.setState({ hasError: false, error: null });
+          if (this.props.onReset) this.props.onReset();
+        }
+      }, "Go to Dashboard")));
+    }
+    return this.props.children;
+  }
+}
+
 const Spin = ({
   s = 18
 }) => /*#__PURE__*/React.createElement("div", {
@@ -19749,7 +19797,8 @@ const ActionLog = ({
                 const fakeEv = {
                   getType: () => type, getContent: () => raw.content || {},
                   getId: () => raw.event_id || `state_${roomId}_${type}_${raw.state_key || ''}`,
-                  getSender: () => raw.sender || '', getTs: () => raw.origin_server_ts || 0, isState: () => true
+                  getSender: () => raw.sender || '', getTs: () => raw.origin_server_ts || 0, isState: () => true,
+                  getStateKey: () => raw.state_key || ''
                 };
                 const cls = classifyEvent(fakeEv, roomInfo);
                 allEvents.push({ id: fakeEv.getId(), roomId, roomInfo, sender: fakeEv.getSender(),
@@ -19786,7 +19835,8 @@ const ActionLog = ({
                     const fakeEv = {
                       getType: () => type, getContent: () => raw.content || {},
                       getId: () => raw.event_id || `state_${rid}_${type}_${raw.state_key || ''}`,
-                      getSender: () => raw.sender || '', getTs: () => raw.origin_server_ts || 0, isState: () => true
+                      getSender: () => raw.sender || '', getTs: () => raw.origin_server_ts || 0, isState: () => true,
+                      getStateKey: () => raw.state_key || ''
                     };
                     const cls = classifyEvent(fakeEv, roomInfo);
                     allEvents.push({ id: fakeEv.getId(), roomId: rid, roomInfo, sender: fakeEv.getSender(),
@@ -22103,6 +22153,7 @@ const ClientApp = ({
   const [clientSharingConsentModal, setClientSharingConsentModal] = useState(null); // {team} — prompts client team member to choose sharing preference
   const [myResources, setMyResources] = useState([]); // resource vault records from bridges
   const isMobile = useIsMobile();
+  const teamColorsList = useMemo(() => (myTeams || []).map(t => ({ name: t.name, color_hue: t.color_hue })), [myTeams]);
   // Contact sharing state
   const [shareContactModal, setShareContactModal] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
@@ -23221,7 +23272,7 @@ const ClientApp = ({
       { id: 'providers', icon: 'users', label: 'People' }
     ],
     activeView: activeBridge ? 'bridge' : view,
-    onNavigate: id => { setView(id); setActiveBridge(null); },
+    onNavigate: id => { setView(id); setActiveBridge(null); if (id !== 'inbox') setInboxConvo(null); },
     moreItems: [
       { id: 'observations', icon: 'clipboard', label: 'Observations' },
       { id: 'resources', icon: 'layers', label: 'My Resources' },
@@ -23229,7 +23280,7 @@ const ClientApp = ({
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' }
     ],
-    onMoreNavigate: id => { setView(id); setActiveBridge(null); }
+    onMoreNavigate: id => { setView(id); setActiveBridge(null); setInboxConvo(null); }
   },
     availableContexts && availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", { style: { padding: '8px 0', borderTop: '1px solid var(--border-0)', marginTop: 8, display: 'flex', gap: 4 } },
       [{id:'provider',label:ROLES.provider.label,icon:'briefcase'},{id:'client',label:ROLES.client.label,icon:'shield'}].filter(opt => availableContexts.includes(opt.id)).map(opt => /*#__PURE__*/React.createElement("button", {
@@ -23500,7 +23551,8 @@ const ClientApp = ({
       padding: 24,
       minWidth: 0
     }
-  }, view === 'dashboard' && !activeBridge && /*#__PURE__*/React.createElement(PersonalDashboard, {
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, { viewKey: view, onReset: () => { setView('dashboard'); setActiveBridge(null); } },
+  view === 'dashboard' && !activeBridge && /*#__PURE__*/React.createElement(PersonalDashboard, {
     session: session,
     providers: providers,
     observations: observations,
@@ -23512,6 +23564,7 @@ const ClientApp = ({
     onNavigate: v => {
       setView(v);
       setActiveBridge(null);
+      if (v !== 'inbox') setInboxConvo(null);
     }
   }), view === 'vault' && !activeBridge && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
@@ -25864,7 +25917,7 @@ const ClientApp = ({
     session: session
   }), view === 'transparency' && !activeBridge && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  })), /*#__PURE__*/React.createElement(Modal, {
+  }))), /*#__PURE__*/React.createElement(Modal, {
     open: !!claimVerifyModal,
     onClose: () => { setClaimVerifyModal(null); setClaimVerifyCode(''); setClaimVerifyError(''); },
     title: "Verify Your Identity",
@@ -40262,7 +40315,8 @@ const ProviderApp = ({
     style: {
       padding: 24
     }
-  }, view === 'dashboard' && !activeCase && /*#__PURE__*/React.createElement(React.Fragment, null,
+  }, /*#__PURE__*/React.createElement(ViewErrorBoundary, { viewKey: view, onReset: () => { setView('dashboard'); setActiveCase(null); } },
+  view === 'dashboard' && !activeCase && /*#__PURE__*/React.createElement(React.Fragment, null,
     /*#__PURE__*/React.createElement(DashboardOverview, {
       cases: activeTeamObj ? cases.filter(c => { const a = caseAssignments[c.bridgeRoomId]; return activeTeamMemberIds.includes(a?.primary || c.meta?.provider); }) : cases,
       clientRecords: activeTeamObj ? clientRecords.filter(cr => activeTeamMemberIds.includes(cr.created_by || cr.provider)) : clientRecords,
@@ -44835,7 +44889,7 @@ const ProviderApp = ({
     session: session
   }), view === 'transparency' && /*#__PURE__*/React.createElement(TransparencyPage, {
     onBack: () => setView('dashboard')
-  }))), /*#__PURE__*/React.createElement(Modal, {
+  })))), /*#__PURE__*/React.createElement(Modal, {
     open: discoverModal,
     onClose: () => setDiscoverModal(false),
     title: "Find " + (T?.client_term || 'Individual')
