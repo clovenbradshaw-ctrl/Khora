@@ -375,6 +375,7 @@ const DataTable = ({
   onReorder,
   onAddRow,
   addRowLabel,
+  onQuickAdd,
   editable,
   onCellEdit,
   hideColumnToggle
@@ -383,6 +384,8 @@ const DataTable = ({
   const [groupBy, setGroupBy] = useState('none');
   const [sortField, setSortField] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [quickAddActive, setQuickAddActive] = useState(false);
+  const [quickAddValue, setQuickAddValue] = useState('');
   const [visibleCols, setVisibleCols] = useState(defaultVisibleCols || columns.map(c => c.key));
   // Sync newly-added columns from defaultVisibleCols into visibleCols
   useEffect(() => {
@@ -711,10 +714,51 @@ const DataTable = ({
     options: col.options,
     type: col.data_type || col.type,
     renderDisplay: col.options || col.renderDisplay ? () => renderCell(row, col) : undefined
-  }) : renderCell(row, col))))))))), onAddRow && /*#__PURE__*/React.createElement("div", {
+  }) : renderCell(row, col))))))))),
+  // Inline quick-add row
+  onQuickAdd && quickAddActive && React.createElement("div", {
+    className: "dt-add-row dt-quick-add",
+    style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px' }
+  },
+    React.createElement(I, { n: "plus", s: 12, c: "var(--teal)" }),
+    React.createElement("input", {
+      autoFocus: true,
+      className: "dt-quick-add-input",
+      placeholder: addRowLabel ? `${addRowLabel} name...` : 'Enter name...',
+      value: quickAddValue,
+      onChange: e => setQuickAddValue(e.target.value),
+      onKeyDown: e => {
+        if (e.key === 'Enter' && quickAddValue.trim()) {
+          onQuickAdd(quickAddValue.trim());
+          setQuickAddValue('');
+        }
+        if (e.key === 'Escape') {
+          setQuickAddActive(false);
+          setQuickAddValue('');
+        }
+      },
+      style: { flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--tx-0)', fontSize: 12.5, fontFamily: 'inherit' }
+    }),
+    quickAddValue.trim() && React.createElement("button", {
+      className: "b-pri b-xs",
+      style: { display: 'flex', alignItems: 'center', gap: 3, fontSize: 10.5, padding: '3px 10px' },
+      onClick: () => {
+        onQuickAdd(quickAddValue.trim());
+        setQuickAddValue('');
+      }
+    }, React.createElement(I, { n: "plus", s: 10 }), "Add"),
+    React.createElement("button", {
+      className: "b-gho b-xs",
+      style: { fontSize: 10.5, padding: '3px 8px' },
+      onClick: () => { setQuickAddActive(false); setQuickAddValue(''); }
+    }, "Cancel")
+  ),
+  // Add row button (opens inline quick-add or falls back to modal)
+  (onQuickAdd || onAddRow) && !quickAddActive && React.createElement("div", {
     className: "dt-add-row",
-    onClick: onAddRow
-  }, "+ ", addRowLabel || 'Add row'))));
+    onClick: onQuickAdd ? () => setQuickAddActive(true) : onAddRow
+  }, "+ ", addRowLabel || 'Add row')
+  )));
 };
 
 /* ─── Individual Side Panel ─── */
@@ -2777,7 +2821,8 @@ const DatabaseView = ({
   trashedIndividuals,
   onRestoreIndividual,
   onRestoreField,
-  onAllocate
+  onAllocate,
+  onQuickAddIndividual
 }) => {
   const [dbTab, setDbTab] = useState('individuals');
   const [enabledFieldCols, setEnabledFieldCols] = useState([]);
@@ -3374,6 +3419,33 @@ const DatabaseView = ({
     showToast: showToast,
     fieldGovernanceConfig: fieldGovernanceConfig
   }),
+  // Empty state with prominent add CTA
+  allIndividuals.length === 0 && React.createElement("div", {
+    className: "card",
+    style: { textAlign: 'center', padding: '40px 20px', borderStyle: 'dashed', marginBottom: 16 }
+  },
+    React.createElement(I, { n: "users", s: 36, c: "var(--border-1)" }),
+    React.createElement("p", { style: { color: 'var(--tx-2)', marginTop: 12, fontSize: 14, fontWeight: 600 } },
+      `No ${(T?.client_term_plural || 'individuals').toLowerCase()} yet`),
+    React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 12, marginTop: 4, maxWidth: 400, margin: '4px auto 16px' } },
+      `Add ${(T?.client_term_plural || 'individuals').toLowerCase()} to start building your database. Each record is stored in a private encrypted room.`),
+    React.createElement("div", { style: { display: 'flex', gap: 8, justifyContent: 'center' } },
+      onCreateClient && React.createElement("button", {
+        className: "b-pri b-sm",
+        style: { display: 'flex', alignItems: 'center', gap: 5 },
+        onClick: onCreateClient
+      }, React.createElement(I, { n: "plus", s: 13 }), `New ${T?.client_term || 'Individual'}`),
+      onQuickAddIndividual && React.createElement("button", {
+        className: "b-gho b-sm",
+        style: { display: 'flex', alignItems: 'center', gap: 5 },
+        onClick: () => {
+          // Scroll to and activate the quick-add row in the DataTable
+          const addRow = document.querySelector('.dt-add-row');
+          if (addRow) addRow.click();
+        }
+      }, React.createElement(I, { n: "plus", s: 13 }), "Quick Add")
+    )
+  ),
   /*#__PURE__*/React.createElement(DataTable, {
     data: allIndividuals,
     columns: IND_COLS,
@@ -3418,6 +3490,7 @@ const DatabaseView = ({
     onCellEdit: onCellEdit,
     hideColumnToggle: true,
     onAddRow: onAddRow || onCreateClient,
+    onQuickAdd: onQuickAddIndividual,
     addRowLabel: `Add ${T?.client_term || 'Individual'}`
   }),
   // Bulk Add Fields Modal
