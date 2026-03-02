@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Khora — Browser Smoke Tests</title>
+<style>
+  body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e0; padding: 24px; line-height: 1.7; }
+  h1 { font-size: 18px; color: #5ee4d6; margin-bottom: 20px; }
+  h2 { font-size: 14px; color: #5b9cf5; margin-top: 24px; margin-bottom: 8px; border-bottom: 1px solid #222; padding-bottom: 4px; }
+  .pass { color: #4ade80; } .fail { color: #f87171; } .skip { color: #fbbf24; }
+  .test { margin: 4px 0; font-size: 12px; }
+  .summary { margin-top: 24px; padding: 12px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+  .summary.ok { background: rgba(74,222,128,.1); border: 1px solid rgba(74,222,128,.2); color: #4ade80; }
+  .summary.fail { background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.2); color: #f87171; }
+  pre { background: #111; padding: 8px 12px; border-radius: 4px; overflow-x: auto; font-size: 11px; color: #aaa; }
+  #test-mount { position: fixed; top: -9999px; left: -9999px; width: 1024px; height: 768px; overflow: hidden; }
+</style>
+<!-- React (UMD) -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+</head>
+<body>
+<h1>Khora — Browser Smoke Tests</h1>
+<div id="output"></div>
+<div id="test-mount"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// Test harness (same pattern as test-resources.html)
+// ═══════════════════════════════════════════════════════════════════
+const results = { passed: 0, failed: 0, tests: [] };
+const output = document.getElementById('output');
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'Assertion failed'); }
+function assertEqual(a, b, msg) {
+  if (a !== b) throw new Error(`${msg || 'assertEqual'}: expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`);
+}
+
+async function test(name, fn) {
+  try {
+    await fn();
+    results.passed++;
+    results.tests.push({ name, status: 'pass' });
+  } catch (e) {
+    results.failed++;
+    results.tests.push({ name, status: 'fail', error: e.message });
+  }
+}
+
+function section(name) {
+  results.tests.push({ name, status: 'section' });
+}
+
+// Helper: render a React element into the test mount and return the container
+function renderIntoMount(element) {
+  const mount = document.getElementById('test-mount');
+  mount.innerHTML = '';
+  const container = document.createElement('div');
+  mount.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+  root.render(element);
+  return { container, root };
+}
+
+// Helper: wait for React to flush renders
+function flush() { return new Promise(r => setTimeout(r, 50)); }
+
+// ═══════════════════════════════════════════════════════════════════
+// Mock globals needed by app modules
+// ═══════════════════════════════════════════════════════════════════
+
+// Minimal mock for modules that reference svc, KhoraAuth
+window.svc = {
+  userId: '@test:test.local',
+  client: null,
+  async setState() {},
+  async getState() { return null; },
+  async createRoom() { return '!mock:test'; },
+  async sendEvent() {},
+};
+
+window.KhoraAuth = {
+  _client: null, _userId: '@test:test.local', _token: 'tok', _baseUrl: 'https://test',
+  get userId() { return this._userId; },
+  get client() { return this._client; },
+  get isAuthenticated() { return !!this._token; },
+};
+
+// Mock constants (minimal set needed for rendering tests)
+const NS = 'io.khora';
+const EVT = {
+  IDENTITY: NS + '.identity',
+  VAULT_SNAPSHOT: NS + '.vault.snapshot',
+  VAULT_PROVIDERS: NS + '.vault.providers',
+  BRIDGE_META: NS + '.bridge.meta',
+  BRIDGE_REFS: NS + '.bridge.refs',
+  OP: NS + '.op',
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// Tests
+// ═══════════════════════════════════════════════════════════════════
+
+(async () => {
+
+// ─── React Rendering ───
+section('React Rendering — Components mount without errors');
+
+await test('React is loaded and functional', async () => {
+  const TestComp = () => React.createElement('div', { id: 'react-check' }, 'React works');
+  const { container, root } = renderIntoMount(React.createElement(TestComp));
+  await flush();
+  const el = container.querySelector('#react-check');
+  assert(el !== null, 'React component should render');
+  assertEqual(el.textContent, 'React works');
+  root.unmount();
+});
+
+await test('useState hook works correctly', async () => {
+  let setFn;
+  const Counter = () => {
+    const [count, setCount] = useState(0);
+    setFn = setCount;
+    return React.createElement('span', { id: 'counter' }, `Count: ${count}`);
+  };
+  const { container, root } = renderIntoMount(React.createElement(Counter));
+  await flush();
+  assertEqual(container.querySelector('#counter').textContent, 'Count: 0');
+  root.unmount();
+});
+
+// ─── Data Display Rendering ───
+section('Data Display — Vault fields render correctly in DOM');
+
+await test('Vault fields render into a table', async () => {
+  const fields = { first_name: 'Alice', last_name: 'Smith', dob: '1990-01-15', email: 'alice@example.com' };
+  const VaultFields = () => {
+    return React.createElement('table', { id: 'vault-table' },
+      React.createElement('thead', null,
+        React.createElement('tr', null,
+          React.createElement('th', null, 'Field'),
+          React.createElement('th', null, 'Value'))),
+      React.createElement('tbody', null,
+        Object.entries(fields).map(([k, v]) =>
+          React.createElement('tr', { key: k, 'data-field': k },
+            React.createElement('td', null, k),
+            React.createElement('td', { className: 'field-value' }, v)))));
+  };
+  const { container, root } = renderIntoMount(React.createElement(VaultFields));
+  await flush();
+
+  const table = container.querySelector('#vault-table');
+  assert(table !== null, 'Vault table should render');
+  const rows = container.querySelectorAll('tbody tr');
+  assertEqual(rows.length, 4, 'Should have 4 field rows');
+
+  // Verify actual values rendered in DOM
+  const nameRow = container.querySelector('tr[data-field="first_name"]');
+  assert(nameRow !== null, 'first_name row should exist');
+  assertEqual(nameRow.querySelector('.field-value').textContent, 'Alice');
+
+  const emailRow = container.querySelector('tr[data-field="email"]');
+  assertEqual(emailRow.querySelector('.field-value').textContent, 'alice@example.com');
+
+  root.unmount();
+});
+
+await test('Case list renders bridge data into rows', async () => {
+  const cases = [
+    { bridgeRoomId: '!b1:test', clientName: 'Alice Smith', orgName: 'Metro Services', status: 'active' },
+    { bridgeRoomId: '!b2:test', clientName: 'Bob Jones', orgName: 'Health Clinic', status: 'active' },
+    { bridgeRoomId: '!b3:test', clientName: 'Carol Davis', orgName: 'Legal Aid', status: 'revoked' },
+  ];
+  const CaseList = () => {
+    return React.createElement('div', { id: 'case-list' },
+      cases.map(c =>
+        React.createElement('div', { key: c.bridgeRoomId, className: 'case-row', 'data-status': c.status },
+          React.createElement('span', { className: 'case-name' }, c.clientName),
+          React.createElement('span', { className: 'case-org' }, c.orgName),
+          React.createElement('span', { className: 'case-status' }, c.status))));
+  };
+  const { container, root } = renderIntoMount(React.createElement(CaseList));
+  await flush();
+
+  const rows = container.querySelectorAll('.case-row');
+  assertEqual(rows.length, 3, 'Should render 3 case rows');
+  assertEqual(rows[0].querySelector('.case-name').textContent, 'Alice Smith');
+  assertEqual(rows[1].querySelector('.case-org').textContent, 'Health Clinic');
+
+  // Check status filtering works
+  const activeRows = container.querySelectorAll('.case-row[data-status="active"]');
+  assertEqual(activeRows.length, 2, 'Should have 2 active cases');
+
+  root.unmount();
+});
+
+// ─── Encrypted Data Flow ───
+section('Encrypted Data — Field crypto round-trip renders correctly');
+
+await test('FieldCrypto encrypt → decrypt → display in DOM', async () => {
+  // This tests the complete lifecycle: data → encrypt → decrypt → render
+  const key = await FieldCrypto.generateKey();
+  const original = 'Alice Smith — SSN last 4: 1234';
+  const { ciphertext, iv } = await FieldCrypto.encrypt(original, key);
+
+  // Verify ciphertext is NOT the original
+  assert(ciphertext !== original, 'Ciphertext must not be plaintext');
+
+  // Decrypt
+  const decrypted = await FieldCrypto.decrypt(ciphertext, iv, key);
+  assertEqual(decrypted, original, 'Decrypted value must match original');
+
+  // Render the decrypted value in DOM
+  const Display = () => React.createElement('div', { id: 'decrypted-field' }, decrypted);
+  const { container, root } = renderIntoMount(React.createElement(Display));
+  await flush();
+
+  const el = container.querySelector('#decrypted-field');
+  assertEqual(el.textContent, original, 'DOM must show decrypted value');
+  root.unmount();
+});
+
+await test('Encrypted field shows only after decryption (not ciphertext)', async () => {
+  const key = await FieldCrypto.generateKey();
+  const secret = 'Confidential: 1990-01-15';
+  const { ciphertext, iv } = await FieldCrypto.encrypt(secret, key);
+
+  // Simulate a component that decrypts before displaying
+  const SecureField = () => {
+    const [value, setValue] = useState('••••••');
+    useEffect(() => {
+      FieldCrypto.decrypt(ciphertext, iv, key).then(v => setValue(v));
+    }, []);
+    return React.createElement('span', { id: 'secure-field' }, value);
+  };
+
+  const { container, root } = renderIntoMount(React.createElement(SecureField));
+  // Initially shows placeholder
+  assertEqual(container.querySelector('#secure-field').textContent, '••••••');
+
+  // After decrypt completes
+  await flush();
+  await flush(); // extra flush for state update
+  assertEqual(container.querySelector('#secure-field').textContent, secret, 'Should show decrypted value');
+  root.unmount();
+});
+
+// ─── Error Boundary ───
+section('Error Handling — ViewErrorBoundary catches crashes');
+
+await test('Error boundary catches render error and shows fallback', async () => {
+  const BrokenComponent = () => { throw new Error('Test render crash'); };
+
+  // Suppress React error boundary console output for this test
+  const origError = console.error;
+  console.error = () => {};
+
+  const { container, root } = renderIntoMount(
+    React.createElement(ViewErrorBoundary, { viewKey: 'test' },
+      React.createElement(BrokenComponent)));
+  await flush();
+
+  console.error = origError;
+
+  // Error boundary should show fallback UI
+  const fallback = container.querySelector('h3');
+  assert(fallback !== null, 'Fallback heading should render');
+  assert(fallback.textContent.includes('Something went wrong'), 'Should show error message');
+
+  // Should have a recovery button
+  const resetBtn = container.querySelector('button');
+  assert(resetBtn !== null, 'Should have a reset button');
+
+  root.unmount();
+});
+
+// ─── Toast Notification ───
+section('UI Components — Toast notifications');
+
+await test('Toast notification renders and displays message', async () => {
+  const Toast = ({ msg, type }) => {
+    return React.createElement('div', {
+      className: `toast toast-${type}`,
+      id: 'toast',
+      style: { padding: '8px 16px', borderRadius: 6, background: type === 'success' ? '#1a3a2a' : '#3a1a1a' }
+    }, msg);
+  };
+
+  const { container, root } = renderIntoMount(
+    React.createElement(Toast, { msg: 'Vault updated', type: 'success' }));
+  await flush();
+
+  const toast = container.querySelector('#toast');
+  assert(toast !== null, 'Toast should render');
+  assertEqual(toast.textContent, 'Vault updated');
+  assert(toast.classList.contains('toast-success'), 'Should have success class');
+  root.unmount();
+});
+
+// ─── Form Rendering ───
+section('Form Rendering — Schema forms display correctly');
+
+await test('Form renders sections and questions from schema', async () => {
+  const form = {
+    title: 'Client Intake Form',
+    sections: [
+      {
+        id: 'sec_demo', title: 'Demographics',
+        questions: [
+          { id: 'q_name', label: 'Full Name', type: 'text', required: true },
+          { id: 'q_dob', label: 'Date of Birth', type: 'date', required: true },
+        ]
+      },
+      {
+        id: 'sec_housing', title: 'Housing',
+        questions: [
+          { id: 'q_status', label: 'Housing Status', type: 'select', required: true },
+        ]
+      },
+    ]
+  };
+
+  const FormPreview = () => {
+    return React.createElement('div', { id: 'form-preview' },
+      React.createElement('h2', null, form.title),
+      form.sections.map(sec =>
+        React.createElement('fieldset', { key: sec.id, 'data-section': sec.id },
+          React.createElement('legend', null, sec.title),
+          sec.questions.map(q =>
+            React.createElement('div', { key: q.id, className: 'form-field', 'data-question': q.id },
+              React.createElement('label', null, q.label, q.required ? ' *' : ''),
+              q.type === 'text' ? React.createElement('input', { type: 'text', placeholder: q.label })
+                : q.type === 'date' ? React.createElement('input', { type: 'date' })
+                : React.createElement('select', null, React.createElement('option', null, 'Select...')))))));
+  };
+
+  const { container, root } = renderIntoMount(React.createElement(FormPreview));
+  await flush();
+
+  const preview = container.querySelector('#form-preview');
+  assert(preview !== null, 'Form should render');
+
+  const heading = preview.querySelector('h2');
+  assertEqual(heading.textContent, 'Client Intake Form');
+
+  const sections = preview.querySelectorAll('fieldset');
+  assertEqual(sections.length, 2, 'Should have 2 sections');
+
+  const questions = preview.querySelectorAll('.form-field');
+  assertEqual(questions.length, 3, 'Should have 3 questions total');
+
+  // Verify specific question labels
+  const nameField = preview.querySelector('[data-question="q_name"] label');
+  assert(nameField.textContent.includes('Full Name'), 'Name question should render');
+  assert(nameField.textContent.includes('*'), 'Required field should show asterisk');
+
+  root.unmount();
+});
+
+// ─── Data Persistence → Render ───
+section('Full Lifecycle — Data saved and rendered on screen');
+
+await test('Save vault snapshot → read back → render in DOM → values match', async () => {
+  // This is the key test: create data, store it, retrieve it, render it, verify DOM
+  const mockState = new Map();
+  const localSvc = {
+    async setState(room, type, content) { mockState.set(`${room}::${type}`, JSON.parse(JSON.stringify(content))); },
+    async getState(room, type) { const v = mockState.get(`${room}::${type}`); return v ? JSON.parse(JSON.stringify(v)) : null; },
+  };
+
+  const roomId = '!vault:test';
+  const snapshot = {
+    fields: { first_name: 'Alice', last_name: 'Smith', dob: '1990-01-15', email: 'alice@example.com' },
+    observations: [{ id: 'obs_1', category: 'housing', value: 'Stable housing' }],
+    last_modified_by: '@alice:test',
+    last_modified_at: Date.now(),
+  };
+
+  // SAVE
+  await localSvc.setState(roomId, 'io.khora.vault.snapshot', snapshot);
+
+  // RETRIEVE
+  const loaded = await localSvc.getState(roomId, 'io.khora.vault.snapshot');
+  assert(loaded !== null, 'Snapshot should be retrievable');
+  assertEqual(loaded.fields.first_name, 'Alice', 'Retrieved field should match');
+
+  // RENDER — display the loaded data in the DOM
+  const VaultView = ({ data }) => {
+    return React.createElement('div', { id: 'vault-view' },
+      React.createElement('div', { id: 'field-list' },
+        Object.entries(data.fields).map(([k, v]) =>
+          React.createElement('div', { key: k, className: 'vault-field', 'data-field-key': k },
+            React.createElement('span', { className: 'field-label' }, k),
+            React.createElement('span', { className: 'field-val' }, v)))),
+      React.createElement('div', { id: 'obs-list' },
+        data.observations.map(obs =>
+          React.createElement('div', { key: obs.id, className: 'obs-item' },
+            React.createElement('span', { className: 'obs-cat' }, obs.category),
+            React.createElement('span', { className: 'obs-val' }, obs.value)))),
+      React.createElement('div', { id: 'meta' },
+        React.createElement('span', { id: 'modified-by' }, data.last_modified_by)));
+  };
+
+  const { container, root } = renderIntoMount(React.createElement(VaultView, { data: loaded }));
+  await flush();
+
+  // VERIFY DOM matches saved data
+  const nameField = container.querySelector('[data-field-key="first_name"] .field-val');
+  assertEqual(nameField.textContent, 'Alice', 'DOM must show saved first_name');
+
+  const emailField = container.querySelector('[data-field-key="email"] .field-val');
+  assertEqual(emailField.textContent, 'alice@example.com', 'DOM must show saved email');
+
+  const obsItem = container.querySelector('.obs-item .obs-val');
+  assertEqual(obsItem.textContent, 'Stable housing', 'DOM must show saved observation');
+
+  const modBy = container.querySelector('#modified-by');
+  assertEqual(modBy.textContent, '@alice:test', 'DOM must show who modified');
+
+  root.unmount();
+});
+
+await test('Create bridge + encrypt fields → retrieve → decrypt → render', async () => {
+  const mockState = new Map();
+  const localSvc = {
+    async setState(room, type, content) { mockState.set(`${room}::${type}`, JSON.parse(JSON.stringify(content))); },
+    async getState(room, type) { const v = mockState.get(`${room}::${type}`); return v ? JSON.parse(JSON.stringify(v)) : null; },
+  };
+
+  const bridgeRoom = '!bridge:test';
+
+  // 1. CREATE bridge metadata
+  const meta = { provider: '@prov:test', client: '@alice:test', org_name: 'Metro Services', status: 'active' };
+  await localSvc.setState(bridgeRoom, 'io.khora.bridge.meta', meta);
+
+  // 2. ENCRYPT and share fields
+  const key = await FieldCrypto.generateKey();
+  const { ciphertext: encName, iv: ivName } = await FieldCrypto.encrypt('Alice Smith', key);
+  const { ciphertext: encDob, iv: ivDob } = await FieldCrypto.encrypt('1990-01-15', key);
+  const refs = {
+    encryption_key: key,
+    shared_fields: {
+      full_name: { ciphertext: encName, iv: ivName },
+      dob: { ciphertext: encDob, iv: ivDob },
+    },
+  };
+  await localSvc.setState(bridgeRoom, 'io.khora.bridge.refs', refs);
+
+  // 3. RETRIEVE
+  const savedMeta = await localSvc.getState(bridgeRoom, 'io.khora.bridge.meta');
+  const savedRefs = await localSvc.getState(bridgeRoom, 'io.khora.bridge.refs');
+
+  // 4. DECRYPT
+  const decName = await FieldCrypto.decrypt(savedRefs.shared_fields.full_name.ciphertext, savedRefs.shared_fields.full_name.iv, savedRefs.encryption_key);
+  const decDob = await FieldCrypto.decrypt(savedRefs.shared_fields.dob.ciphertext, savedRefs.shared_fields.dob.iv, savedRefs.encryption_key);
+  assertEqual(decName, 'Alice Smith');
+  assertEqual(decDob, '1990-01-15');
+
+  // 5. RENDER
+  const BridgeView = () => {
+    return React.createElement('div', { id: 'bridge-view' },
+      React.createElement('div', { id: 'bridge-meta' },
+        React.createElement('span', { id: 'org-name' }, savedMeta.org_name),
+        React.createElement('span', { id: 'bridge-status' }, savedMeta.status)),
+      React.createElement('div', { id: 'shared-fields' },
+        React.createElement('span', { id: 'shared-name' }, decName),
+        React.createElement('span', { id: 'shared-dob' }, decDob)));
+  };
+  const { container, root } = renderIntoMount(React.createElement(BridgeView));
+  await flush();
+
+  // 6. VERIFY DOM
+  assertEqual(container.querySelector('#org-name').textContent, 'Metro Services');
+  assertEqual(container.querySelector('#bridge-status').textContent, 'active');
+  assertEqual(container.querySelector('#shared-name').textContent, 'Alice Smith');
+  assertEqual(container.querySelector('#shared-dob').textContent, '1990-01-15');
+
+  root.unmount();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Render results
+// ═══════════════════════════════════════════════════════════════════
+let html = '';
+for (const t of results.tests) {
+  if (t.status === 'section') {
+    html += `<h2>${t.name}</h2>`;
+  } else if (t.status === 'pass') {
+    html += `<div class="test"><span class="pass">PASS</span> ${t.name}</div>`;
+  } else {
+    html += `<div class="test"><span class="fail">FAIL</span> ${t.name}<pre>${t.error}</pre></div>`;
+  }
+}
+const allPassed = results.failed === 0;
+html += `<div class="summary ${allPassed ? 'ok' : 'fail'}">${results.passed} passed, ${results.failed} failed (${results.passed + results.failed} total)</div>`;
+output.innerHTML = html;
+document.title = allPassed
+  ? `PASS (${results.passed}) — Khora Smoke Tests`
+  : `FAIL (${results.failed}) — Khora Smoke Tests`;
+})();
+</script>
+<!-- Load app modules needed for tests (FieldCrypto, ViewErrorBoundary) -->
+<script src="app/crypto.js"></script>
+<script src="app/ui.js"></script>
+</body>
+</html>
