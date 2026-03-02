@@ -297,8 +297,28 @@ const KhoraAuth = {
     const baseUrl = homeserver.startsWith('http') ? homeserver : `https://${homeserver}`;
     this._baseUrl = baseUrl;
     KhoraE2EE.requireSDK();
+
+    // Recover previous device ID to preserve Megolm session key continuity.
+    // Without this, each login creates a new device and the crypto store's
+    // Megolm sessions (keyed to the old device) become unusable — causing
+    // "The sender's device has not sent us the keys" for all prior messages.
+    let savedDeviceId = null;
+    try {
+      savedDeviceId = localStorage.getItem(`khora_device:${baseUrl}:${user}`);
+    } catch {}
+
     this._client = matrixcs.createClient({ baseUrl });
-    const res = await this._client.login('m.login.password', { identifier: { type: 'm.id.user', user }, password: pass });
+    const loginData = { identifier: { type: 'm.id.user', user }, password: pass };
+    if (savedDeviceId) {
+      loginData.device_id = savedDeviceId;
+    }
+    const res = await this._client.login('m.login.password', loginData);
+
+    // Persist device ID so future logins reuse the same device,
+    // keeping the IndexedDB crypto store's Olm/Megolm keys valid.
+    try {
+      localStorage.setItem(`khora_device:${baseUrl}:${user}`, res.device_id);
+    } catch {}
     await LocalVaultCrypto.deriveKey(res.user_id, res.access_token, res.device_id);
     await this._purgeUnencryptedStores();
     let cryptoStore = KhoraE2EE.createCryptoStore();
@@ -465,8 +485,11 @@ const KhoraAuth = {
     this._userId = null;
     this._timelineListenerAttached = false;
     LocalVaultCrypto.clear();
+    try { sessionStorage.removeItem('khora_session'); } catch {}
     try { await KhoraEncryptedCache.clear(); KhoraEncryptedCache.close(); } catch {}
     try { await this._purgeUnencryptedStores(); } catch {}
+    // Note: localStorage device ID mapping is intentionally preserved —
+    // re-login reuses the same device to maintain crypto store continuity.
   },
 
   // Internal REST API method (used by login fallback path when Matrix SDK unavailable)
