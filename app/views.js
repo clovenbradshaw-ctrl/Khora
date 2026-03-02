@@ -408,6 +408,13 @@ const TeamDetailView = ({
       }];
       try {
         await svc.setState(team.roomId, EVT.TEAM_SCHEMA, currentSchema);
+        // EO provenance: ALT(schema.team.<room>, {version}) — schema_direct_update
+        await emitOp(team.roomId, 'ALT', dot('schema', 'team', team.roomId), {
+          version: currentSchema.version,
+          action: change.action,
+          summary: change.summary || change.action,
+          modified_by: svc.userId
+        }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
         onUpdateTeam({
           ...team,
           schema: currentSchema
@@ -431,6 +438,13 @@ const TeamDetailView = ({
       currentSchema.pending_changes = [...(currentSchema.pending_changes || []), pending];
       try {
         await svc.setState(team.roomId, EVT.TEAM_SCHEMA, currentSchema);
+        // EO provenance: INS(schema.pending.<id>, {proposal}) — schema_change_proposed
+        await emitOp(team.roomId, 'INS', dot('schema', 'pending', pending.id), {
+          change_id: pending.id,
+          action: change.action,
+          summary: change.summary || change.action,
+          proposed_by: svc.userId
+        }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
         onUpdateTeam({
           ...team,
           schema: currentSchema
@@ -494,6 +508,16 @@ const TeamDetailView = ({
     }
     try {
       await svc.setState(team.roomId, EVT.TEAM_SCHEMA, currentSchema);
+      // EO provenance: ALT(schema.consent_response.<changeId>, {position}) — schema_consent_recorded
+      const op = blockCount > 0 ? 'SEG' : (approvalCount >= getThreshold()) ? 'ALT' : 'ALT';
+      await emitOp(team.roomId, op, dot('schema', 'consent_response', changeId), {
+        change_id: changeId,
+        position,
+        approvals: approvalCount,
+        blocks: blockCount,
+        version: currentSchema.version,
+        responded_by: svc.userId
+      }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
       onUpdateTeam({
         ...team,
         schema: currentSchema
@@ -512,6 +536,12 @@ const TeamDetailView = ({
     };
     try {
       await svc.setState(team.roomId, EVT.TEAM_SCHEMA_RULE, newRule);
+      // EO provenance: ALT(schema.consent_mode.<room>, {mode}) — consent_mode_changed
+      await emitOp(team.roomId, 'ALT', dot('schema', 'consent_mode', team.roomId), {
+        from: schema?.consent_mode || 'lead_decides',
+        to: newMode,
+        modified_by: svc.userId
+      }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
       onUpdateTeam({
         ...team,
         schemaRule: newRule

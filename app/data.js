@@ -3329,6 +3329,10 @@ const DatabaseView = ({
       if (schemaRoom) {
         const updated = { ...fieldDefs, [def.uri]: def };
         await svc.setState(schemaRoom, EVT.FIELD_DEF, { definitions: updated });
+        // EO provenance: ALT(schema.field_defs.<uri>, {definition}) — field_def_updated
+        await emitOp(schemaRoom, 'ALT', dot('schema', 'field_defs', def.uri), {
+          uri: def.uri, label: def.label, category: def.category, modified_by: svc.userId
+        }, { type: 'schema', room: schemaRoom, epistemic: 'GIVEN', role: 'provider' });
       }
       // Add as enabled column
       setEnabledFieldCols(prev => prev.includes(def.key) ? prev : [...prev, def.key]);

@@ -4657,6 +4657,13 @@ const ProviderApp = ({
       await svc.setState(schemaRoom, EVT.FIELD_DEF, {
         definitions: updated
       });
+      // EO provenance: ALT(schema.field_defs.<uri>, {definition}) — field_def_updated
+      await emitOp(schemaRoom, 'ALT', dot('schema', 'field_defs', def.uri), {
+        uri: def.uri,
+        label: def.label,
+        category: def.category,
+        modified_by: svc.userId
+      }, { type: 'schema', room: schemaRoom, epistemic: 'GIVEN', role: 'provider' });
       setFieldDefs(updated);
     },
     onSaveCrosswalk: async xw => {
@@ -4672,10 +4679,27 @@ const ProviderApp = ({
       await svc.setState(schemaRoom, EVT.FIELD_CROSSWALK, {
         crosswalks: updated
       });
+      // EO provenance: CON(schema.crosswalks.<source>.<target>, {crosswalk}) — crosswalk_created
+      await emitOp(schemaRoom, 'CON', dot('schema', 'crosswalks', xw.source_uri, xw.target_uri), {
+        source_uri: xw.source_uri,
+        target_uri: xw.target_uri,
+        created_by: svc.userId
+      }, { type: 'schema', room: schemaRoom, epistemic: 'GIVEN', role: 'provider' });
       setFieldCrosswalks(updated);
     },
     fieldGovernanceConfig: fieldGovernanceConfig,
-    onPropose: async (proposal, room) => { if (svc) await svc.setState(room, EVT.GOV_PROPOSAL, proposal, proposal.id); },
+    onPropose: async (proposal, room) => {
+      if (svc) {
+        await svc.setState(room, EVT.GOV_PROPOSAL, proposal, proposal.id);
+        // EO provenance: DES(schema.governance.<id>, {proposal}) — governance_proposal_created
+        await emitOp(room, 'DES', dot('schema', 'governance', proposal.id), {
+          proposal_id: proposal.id,
+          type: proposal.type,
+          summary: proposal.summary,
+          proposed_by: svc.userId
+        }, { type: 'schema', room, epistemic: 'GIVEN', role: 'provider' });
+      }
+    },
     teamMode: teamMode,
     activeTeamObj: activeTeamObj,
     sidebarCollapsed: sidebarCollapsed,
@@ -5993,6 +6017,13 @@ const ProviderApp = ({
       await svc.setState(schemaRoom, EVT.FIELD_DEF, {
         definitions: updated
       });
+      // EO provenance: ALT(schema.field_defs.<uri>, {definition}) — field_def_updated
+      await emitOp(schemaRoom, 'ALT', dot('schema', 'field_defs', def.uri), {
+        uri: def.uri,
+        label: def.label,
+        category: def.category,
+        modified_by: svc.userId
+      }, { type: 'schema', room: schemaRoom, epistemic: 'GIVEN', role: 'provider' });
       setFieldDefs(updated);
     },
     onSaveCrosswalk: async xw => {
@@ -7021,6 +7052,10 @@ const ProviderApp = ({
       if (!schemaRoom) return;
       const updated = { ...fieldDefs, [def.uri]: def };
       await svc.setState(schemaRoom, EVT.FIELD_DEF, { definitions: updated });
+      // EO provenance: ALT(schema.field_defs.<uri>, {definition}) — field_def_updated
+      await emitOp(schemaRoom, 'ALT', dot('schema', 'field_defs', def.uri), {
+        uri: def.uri, label: def.label, category: def.category, modified_by: svc.userId
+      }, { type: 'schema', room: schemaRoom, epistemic: 'GIVEN', role: 'provider' });
       setFieldDefs(updated);
     }
   }), view === 'org-settings' && orgRoom && orgRole === 'admin' && /*#__PURE__*/React.createElement("div", {
