@@ -1543,14 +1543,14 @@ const ClientApp = ({
         }, vaultFrame());
       } else if (val && vaultData[key] && val !== vaultData[key]) {
         // ALT — value change within stable frame
-        await emitOp(vaultRoom, 'ALT', dot('vault', 'client_profile', key), {
+        await emitOp(vaultRoom, 'ALT', dot('vault', 'fields', key), {
           from: vaultData[key],
           to: val,
           source: 'client_input'
         }, vaultFrame());
       } else if (!val && vaultData[key]) {
         // NUL — existence removal
-        await emitOp(vaultRoom, 'NUL', dot('vault', 'client_profile', key), {
+        await emitOp(vaultRoom, 'NUL', dot('vault', 'fields', key), {
           reason: 'client_cleared',
           previous_value: vaultData[key]
         }, vaultFrame());
