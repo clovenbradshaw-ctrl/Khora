@@ -1907,7 +1907,8 @@ const CrmFieldRow = ({ fieldDef, value, disclosed, eoOp, frame, onSave, roomId, 
   const [msEditing, setMsEditing] = useState(false);
   const isLocked = disclosed === false;
   const hasValue = value !== undefined && value !== null && value !== '';
-  const displayValue = Array.isArray(value) ? value.join(', ') : value;
+  // Guard: coerce object values to strings to prevent React error #31
+  const displayValue = Array.isArray(value) ? value.join(', ') : (value !== null && typeof value === 'object') ? JSON.stringify(value) : value;
 
   // Multi-select needs special handling
   if (fieldDef.data_type === 'multi_select' && !isLocked) {
@@ -2287,7 +2288,7 @@ const IndividualProfilePage = ({
     // Gather any custom fieldDefs that match this section category
     const catMap = { case_management: 'case', identity: 'identity', contact: 'contact', demographics: 'details', housing: 'details', case_tracking: 'case', exit_outcome: 'case', details: 'details', sensitive: 'sensitive' };
     const extraFields = Object.values(fieldDefs || {}).filter(d =>
-      d.category === (catMap[section.id] || section.id) && !CRM_STANDARD_KEYS.has(d.key)
+      d && typeof d.key === 'string' && d.category === (catMap[section.id] || section.id) && !CRM_STANDARD_KEYS.has(d.key)
     );
     return React.createElement(CrmSection, {
       key: section.id,
@@ -2301,7 +2302,7 @@ const IndividualProfilePage = ({
   }),
   // Custom fields section (fieldDefs not in any standard section)
   (() => {
-    const customDefs = Object.values(fieldDefs || {}).filter(d => !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
+    const customDefs = Object.values(fieldDefs || {}).filter(d => d && typeof d.key === 'string' && !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
     if (customDefs.length === 0) return null;
     const allFields = individual.fields || {};
     const sharedData = individual._case?.sharedData || {};

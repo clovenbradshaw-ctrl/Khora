@@ -1330,17 +1330,57 @@ const ProviderApp = ({
             }));
           }
         } else if (row._clientRecord) {
-          // Client record rows — update identity state
-          const updates = {
-            ...row._clientRecord
-          };
-          if (isNameField) updates.client_name = newValue;
-          await svc.setState(row.id, EVT.IDENTITY, updates);
-          syncActiveIndividual(prev => ({
-            ...prev,
-            name: isNameField ? newValue : prev.name,
-            _clientRecord: updates
-          }));
+          // Client record rows — persist CRM fields
+          if (isNameField) {
+            const updates = { ...row._clientRecord, client_name: newValue };
+            await svc.setState(row.id, EVT.IDENTITY, updates);
+            setClientRecords(prev => prev.map(r =>
+              r.roomId === row.id ? { ...r, client_name: newValue } : r
+            ));
+            syncActiveIndividual(prev => ({
+              ...prev,
+              name: newValue,
+              _clientRecord: updates
+            }));
+            // Update client_name in ROSTER_ASSIGN
+            if (orgRoom && caseAssignments[row.id]) {
+              const updatedAssignments = { ...caseAssignments };
+              updatedAssignments[row.id] = { ...updatedAssignments[row.id], client_name: newValue };
+              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
+              setCaseAssignments(updatedAssignments);
+            }
+          } else {
+            // CRM fields (status, priority, intake_date, etc.) — store in ROSTER_ASSIGN
+            if (orgRoom) {
+              const updatedAssignments = { ...caseAssignments };
+              if (!updatedAssignments[row.id]) {
+                updatedAssignments[row.id] = {
+                  primary: svc.userId,
+                  staff: [svc.userId],
+                  client_name: row.name || row._clientRecord.client_name || 'Unknown',
+                  added: Date.now()
+                };
+              }
+              updatedAssignments[row.id] = { ...updatedAssignments[row.id], [fieldKey]: newValue };
+              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
+              setCaseAssignments(updatedAssignments);
+            }
+            // Also update identity state for status field specifically
+            if (fieldKey === 'status') {
+              const updates = { ...row._clientRecord, status: newValue };
+              await svc.setState(row.id, EVT.IDENTITY, updates);
+              setClientRecords(prev => prev.map(r =>
+                r.roomId === row.id ? { ...r, status: newValue } : r
+              ));
+            }
+            // Update local UI state
+            syncActiveIndividual(prev => ({
+              ...prev,
+              [fieldKey]: newValue,
+              fields: { ...prev.fields, [fieldKey]: { ...(prev.fields?.[fieldKey] || {}), value: newValue, eo_op: oldValue ? 'ALT' : 'INS' } },
+              _clientRecord: fieldKey === 'status' ? { ...prev._clientRecord, status: newValue } : prev._clientRecord
+            }));
+          }
         }
       } catch (e) {
         console.warn('Cell edit event failed:', e.message);
