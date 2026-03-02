@@ -196,6 +196,7 @@ const CRM_PROFILE_SECTIONS = [
     { key: 'email', label: 'Email', data_type: 'email', source: 'vault' },
     { key: 'phone', label: 'Phone', data_type: 'phone', source: 'vault' },
     { key: 'address', label: 'Address', data_type: 'text', source: 'vault', sensitive: true },
+    { key: 'fhir_emergency_contact', label: 'Emergency Contact', data_type: 'text', source: 'vault', sensitive: true },
   ]},
   { id: 'demographics', label: 'Demographics', icon: 'users', color: 'purple', fields: [
     { key: 'gender_identity', label: 'Gender Identity', data_type: 'text', source: 'crm', sensitive: true },
@@ -373,7 +374,8 @@ const DataTable = ({
   onAddRow,
   addRowLabel,
   editable,
-  onCellEdit
+  onCellEdit,
+  hideColumnToggle
 }) => {
   const [search, setSearch] = useState('');
   const [groupBy, setGroupBy] = useState('none');
@@ -554,7 +556,7 @@ const DataTable = ({
       setGroupBy(g.k);
       setGrpDd(false);
     }
-  }, g.l)))), /*#__PURE__*/React.createElement("div", {
+  }, g.l)))), !hideColumnToggle && /*#__PURE__*/React.createElement("div", {
     className: "dt-dd-wrap"
   }, /*#__PURE__*/React.createElement("button", {
     className: "b-gho b-sm",
@@ -3267,7 +3269,7 @@ const DatabaseView = ({
             setAddFieldDd(false);
             return;
           }
-          setEnabledFieldCols(prev => [...prev, d.key]);
+          setEnabledFieldCols(prev => prev.includes(d.key) ? prev : [...prev, d.key]);
         }
         setAddFieldDd(false);
       }
@@ -3378,6 +3380,7 @@ const DatabaseView = ({
     onReorder: onReorder,
     editable: true,
     onCellEdit: onCellEdit,
+    hideColumnToggle: true,
     onAddRow: onAddRow || onCreateClient,
     addRowLabel: `Add ${T?.client_term || 'Individual'}`
   }),
