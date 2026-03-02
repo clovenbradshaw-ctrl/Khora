@@ -1206,7 +1206,7 @@ const ProviderApp = ({
 
   // ─── Cell edit handler with debounced EO event tracking ───
   const handleDbCellEdit = (row, fieldKey, newValue) => {
-    const oldValue = row[fieldKey] || row.fields && row.fields[fieldKey]?.value || '';
+    const oldValue = (row[fieldKey] != null ? row[fieldKey] : (row.fields?.[fieldKey]?.value ?? ''));
     if (newValue === oldValue) return;
     // Normalize: profile page sends 'full_name', table sends 'name'
     const isNameField = fieldKey === 'name' || fieldKey === 'full_name';
@@ -1285,52 +1285,42 @@ const ProviderApp = ({
               });
               setCaseAssignments(updatedAssignments);
             }
-          } else if (fieldKey === 'status') {
-            // Update status in ROSTER_ASSIGN and local state
-            if (orgRoom && caseAssignments[roomId]) {
-              const updatedAssignments = {
-                ...caseAssignments
-              };
-              updatedAssignments[roomId] = {
-                ...updatedAssignments[roomId],
-                status: newValue
-              };
-              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, {
-                assignments: updatedAssignments
-              });
+          } else if (fieldKey === 'status' || fieldKey === 'priority' || fieldKey === 'assignedTo') {
+            // Update status/priority/assignedTo in ROSTER_ASSIGN
+            if (orgRoom) {
+              const updatedAssignments = { ...caseAssignments };
+              const clientName = row._case.sharedData?.full_name || row.name || 'Unknown';
+              if (!updatedAssignments[roomId]) {
+                updatedAssignments[roomId] = {
+                  primary: svc.userId, staff: [svc.userId],
+                  client_name: clientName, added: Date.now()
+                };
+              }
+              if (fieldKey === 'assignedTo') {
+                updatedAssignments[roomId] = {
+                  ...updatedAssignments[roomId], primary: newValue,
+                  staff: [newValue, ...(updatedAssignments[roomId].staff || []).filter(s => s !== newValue)]
+                };
+              } else {
+                updatedAssignments[roomId] = { ...updatedAssignments[roomId], [fieldKey]: newValue };
+              }
+              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
               setCaseAssignments(updatedAssignments);
             }
-            setCases(prev => prev.map(c =>
-              c.bridgeRoomId === roomId
-                ? { ...c, meta: { ...c.meta, status: newValue } }
-                : c
-            ));
-            editApplied = true;
-            syncActiveIndividual(prev => ({
-              ...prev,
-              status: newValue,
-              _case: prev._case ? { ...prev._case, meta: { ...prev._case.meta, status: newValue } } : prev._case
-            }));
-          } else if (fieldKey === 'priority') {
-            // Update priority in ROSTER_ASSIGN
-            if (orgRoom && caseAssignments[roomId]) {
-              const updatedAssignments = {
-                ...caseAssignments
-              };
-              updatedAssignments[roomId] = {
-                ...updatedAssignments[roomId],
-                priority: newValue
-              };
-              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, {
-                assignments: updatedAssignments
-              });
-              setCaseAssignments(updatedAssignments);
+            if (fieldKey === 'status') {
+              setCases(prev => prev.map(c =>
+                c.bridgeRoomId === roomId
+                  ? { ...c, meta: { ...c.meta, status: newValue } }
+                  : c
+              ));
+              syncActiveIndividual(prev => ({
+                ...prev, status: newValue,
+                _case: prev._case ? { ...prev._case, meta: { ...prev._case.meta, status: newValue } } : prev._case
+              }));
+            } else {
+              syncActiveIndividual(prev => ({ ...prev, [fieldKey]: newValue }));
             }
             editApplied = true;
-            syncActiveIndividual(prev => ({
-              ...prev,
-              priority: newValue
-            }));
           } else {
             // Dynamic field — update shared data in bridge
             const updatedData = {
@@ -1374,6 +1364,27 @@ const ProviderApp = ({
               await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
               setCaseAssignments(updatedAssignments);
             }
+          } else if (fieldKey === 'assignedTo') {
+            // Update primary assignment in ROSTER_ASSIGN for client record
+            if (orgRoom) {
+              const updatedAssignments = { ...caseAssignments };
+              const clientName = row.name || row._clientRecord.client_name || 'Unknown';
+              if (!updatedAssignments[row.id]) {
+                updatedAssignments[row.id] = {
+                  primary: newValue, staff: [newValue],
+                  client_name: clientName, added: Date.now()
+                };
+              } else {
+                updatedAssignments[row.id] = {
+                  ...updatedAssignments[row.id], primary: newValue,
+                  staff: [newValue, ...(updatedAssignments[row.id].staff || []).filter(s => s !== newValue)]
+                };
+              }
+              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
+              setCaseAssignments(updatedAssignments);
+            }
+            editApplied = true;
+            syncActiveIndividual(prev => ({ ...prev, assignedTo: newValue }));
           } else {
             // CRM fields (status, priority, intake_date, etc.) — store in ROSTER_ASSIGN
             if (orgRoom) {
