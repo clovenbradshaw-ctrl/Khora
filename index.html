@@ -3659,6 +3659,7 @@ const KhoraAuth = {
   _baseUrl: null,
   _token: null,
   _userId: null,
+  _syncPromise: null,
   _timelineListenerAttached: false,
 
   // ── Public interface (stable contract) ──
@@ -3667,6 +3668,7 @@ const KhoraAuth = {
   get baseUrl() { return this._baseUrl; },
   get client() { return this._client; },
   get isAuthenticated() { return !!(this._token && this._userId); },
+  waitForSync() { return this._syncPromise || Promise.resolve(); },
 
   _setupTimelineListener() {
     if (!this._client || this._timelineListenerAttached) return;
@@ -3881,7 +3883,12 @@ const KhoraAuth = {
         await KhoraE2EE.initMandatoryCrypto(this._client);
       }
       await this._client.startClient({ initialSyncLimit: 30 });
-      await new Promise((resolve, reject) => {
+      // Set identity and listeners immediately so the app can render
+      this._userId = userId;
+      this._token = accessToken;
+      this._setupTimelineListener();
+      // Store sync promise for background completion — don't block the UI
+      this._syncPromise = new Promise((resolve, reject) => {
         if (this._client.isInitialSyncComplete()) return resolve();
         const timeout = setTimeout(() => reject(new Error('Sync timed out')), 90000);
         this._client.on('sync', (state, prev, data) => {
@@ -3889,12 +3896,10 @@ const KhoraAuth = {
           else if (state === 'ERROR') { clearTimeout(timeout); reject(new Error(data?.error?.message || 'Sync failed')); }
         });
       });
-      this._userId = userId;
-      this._token = accessToken;
-      this._setupTimelineListener();
+      this._syncPromise.catch(e => console.warn('Background sync failed:', e.message));
       return { userId };
     } catch (e) {
-      console.warn('Session restore sync failed:', e.message);
+      console.warn('Session restore client init failed:', e.message);
       if (this._client) { try { this._client.stopClient(); } catch {} }
       this._client = null;
       this._token = null;
@@ -3913,6 +3918,7 @@ const KhoraAuth = {
     this._client = null;
     this._token = null;
     this._userId = null;
+    this._syncPromise = null;
     this._timelineListenerAttached = false;
     LocalVaultCrypto.clear();
     try { await KhoraEncryptedCache.clear(); KhoraEncryptedCache.close(); } catch {}
@@ -49256,42 +49262,43 @@ const App = () => {
     k: Date.now()
   });
 
+  // Apply scanned room data to derive contexts and roles
+  const applyScannedData = React.useCallback((scanned) => {
+    const roles = inferRolesFromRooms(scanned, svc.userId);
+    setDetectedRoles(roles);
+    let hasClient = false;
+    let hasProvider = false;
+    for (const state of Object.values(scanned || {})) {
+      const accountType = state?.[EVT.IDENTITY]?.account_type;
+      if (accountType === 'client' || accountType === 'client_record') hasClient = true;
+      if (accountType === 'provider' || accountType === 'organization' || accountType === 'schema' || accountType === 'metrics' || accountType === 'network') hasProvider = true;
+    }
+    const contexts = [];
+    if (hasProvider) contexts.push('provider');
+    if (hasClient) contexts.push('client');
+    if (contexts.length === 0) contexts.push('provider');
+    setAvailableContexts(contexts);
+    let preferred = null;
+    try {
+      preferred = localStorage.getItem('khora_active_context');
+    } catch {}
+    const next = preferred && contexts.includes(preferred) ? preferred : contexts[0];
+    setActiveContext(next);
+  }, []);
+
   // Context detection: scan rooms to infer roles (MVP §Screen 1)
-  // Uses inferRolesFromRooms for fine-grained role detection (client/provider/org_admin/network)
   const detectContexts = React.useCallback(async () => {
     setDetectingRoles(true);
     try {
       const scanned = await svc.scanRooms([EVT.ORG_ROSTER]);
-      // Fine-grained role detection via inferRolesFromRooms
-      const roles = inferRolesFromRooms(scanned, svc.userId);
-      setDetectedRoles(roles);
-
-      // Context detection for app routing (client vs provider)
-      let hasClient = false;
-      let hasProvider = false;
-      for (const state of Object.values(scanned || {})) {
-        const accountType = state?.[EVT.IDENTITY]?.account_type;
-        if (accountType === 'client' || accountType === 'client_record') hasClient = true;
-        if (accountType === 'provider' || accountType === 'organization' || accountType === 'schema' || accountType === 'metrics' || accountType === 'network') hasProvider = true;
-      }
-      const contexts = [];
-      if (hasProvider) contexts.push('provider');
-      if (hasClient) contexts.push('client');
-      if (contexts.length === 0) contexts.push('provider');
-      setAvailableContexts(contexts);
-      let preferred = null;
-      try {
-        preferred = localStorage.getItem('khora_active_context');
-      } catch {}
-      const next = preferred && contexts.includes(preferred) ? preferred : contexts[0];
-      setActiveContext(next);
+      applyScannedData(scanned);
     } catch (e) {
       console.warn('Context detection failed, defaulting to provider:', e.message);
       setAvailableContexts(['provider']);
       setActiveContext('provider');
     }
     setDetectingRoles(false);
-  }, []);
+  }, [applyScannedData]);
   const switchContext = context => {
     if (!availableContexts.includes(context)) return;
     setActiveContext(context);
@@ -49329,13 +49336,34 @@ const App = () => {
       // Ensure restored session bypasses welcome screen (even if khora_welcomed was cleared)
       setWelcomed(true);
       try { localStorage.setItem('khora_welcomed', '1'); } catch {}
-      await detectContexts();
-      // Backup auto-connect disabled for now
-      // KhoraBackup.autoConnect().catch(() => {});
+      // Use cached room data for instant rendering while sync completes in background
+      let usedCache = false;
+      try {
+        const cached = await KhoraEncryptedCache.get('rooms', 'scan_result');
+        if (cached?.data && (Date.now() - cached.ts) < 30 * 60 * 1000) {
+          applyScannedData(cached.data);
+          usedCache = true;
+        }
+      } catch {}
+      if (usedCache) {
+        // Sync completes in background — silently refresh with live data
+        KhoraAuth.waitForSync().then(async () => {
+          try {
+            const scanned = await svc.scanRooms([EVT.ORG_ROSTER]);
+            applyScannedData(scanned);
+          } catch {}
+        }).catch(() => {});
+      } else {
+        // No valid cache — wait for sync then detect contexts
+        try {
+          await KhoraAuth.waitForSync();
+        } catch {}
+        await detectContexts();
+      }
     } catch (e) { console.warn('Session restore error:', e?.message); } finally {
       setRestoring(false);
     }
-  }, [detectContexts]);
+  }, [detectContexts, applyScannedData]);
   React.useEffect(() => {
     attemptRestore();
   }, [attemptRestore]);

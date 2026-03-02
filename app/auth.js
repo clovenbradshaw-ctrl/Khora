@@ -204,6 +204,7 @@ const KhoraAuth = {
   _baseUrl: null,
   _token: null,
   _userId: null,
+  _syncPromise: null,
   _timelineListenerAttached: false,
   _cryptoListenersAttached: false,
 
@@ -213,6 +214,7 @@ const KhoraAuth = {
   get baseUrl() { return this._baseUrl; },
   get client() { return this._client; },
   get isAuthenticated() { return !!(this._token && this._userId); },
+  waitForSync() { return this._syncPromise || Promise.resolve(); },
 
   // Register real-time timeline event listener on the Matrix client.
   // Dispatches DOM CustomEvents so React components can react instantly
@@ -510,7 +512,12 @@ const KhoraAuth = {
       this._setupCryptoListeners();
       await this._client.startClient({ initialSyncLimit: 30 });
       await this._restoreKeyBackupIfConfigured();
-      await new Promise((resolve, reject) => {
+      // Set identity and listeners immediately so the app can render
+      this._userId = userId;
+      this._token = accessToken;
+      this._setupTimelineListener();
+      // Store sync promise for background completion — don't block the UI
+      this._syncPromise = new Promise((resolve, reject) => {
         if (this._client.isInitialSyncComplete()) return resolve();
         const timeout = setTimeout(() => reject(new Error('Sync timed out')), 90000);
         this._client.on('sync', (state, prev, data) => {
@@ -518,12 +525,10 @@ const KhoraAuth = {
           else if (state === 'ERROR') { clearTimeout(timeout); reject(new Error(data?.error?.message || 'Sync failed')); }
         });
       });
-      this._userId = userId;
-      this._token = accessToken;
-      this._setupTimelineListener();
+      this._syncPromise.catch(e => console.warn('Background sync failed:', e.message));
       return { userId };
     } catch (e) {
-      console.warn('Session restore sync failed:', e.message);
+      console.warn('Session restore client init failed:', e.message);
       if (this._client) { try { this._client.stopClient(); } catch {} }
       this._client = null;
       this._token = null;
@@ -542,6 +547,7 @@ const KhoraAuth = {
     this._client = null;
     this._token = null;
     this._userId = null;
+    this._syncPromise = null;
     this._timelineListenerAttached = false;
     this._cryptoListenersAttached = false;
     LocalVaultCrypto.clear();
