@@ -356,7 +356,7 @@ const StorageTransparencyBadge = ({
     },
       React.createElement(I, { n: 'database', s: 11, c: open ? 'var(--teal)' : 'var(--tx-2)' }),
       label ? `${label} — storage info` : 'Where is this stored?',
-      React.createElement(I, { n: open ? 'chevron-up' : 'chevron-down', s: 10 })
+      React.createElement(I, { n: open ? 'chevronUp' : 'chevronDown', s: 10 })
     ),
     open && React.createElement("div", { className: "stb-panel" },
       // Storage type

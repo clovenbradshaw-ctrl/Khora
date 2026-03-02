@@ -1766,8 +1766,8 @@ const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => 
         };
         await svc.setState(team.roomId, EVT.TEAM_TABLE_RECORD, updated, table.id + ':' + record.id);
         // Emit ALT event for provenance tracking
-        if (svc.emitOp) {
-          svc.emitOp(team.roomId, 'ALT', 'org.table.' + table.id + '.' + colKey, {
+        if (typeof emitOp === 'function') {
+          await emitOp(team.roomId, 'ALT', 'org.table.' + table.id + '.' + colKey, {
             record_id: record.id,
             from: oldValue ?? null,
             to: newValue

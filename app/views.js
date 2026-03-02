@@ -1227,7 +1227,7 @@ const TeamDetailView = ({
       }),
       title: "Remove field"
     }, /*#__PURE__*/React.createElement(I, {
-      n: "close",
+      n: "x",
       s: 10
     }))));
   }))), (schema.change_log || []).length > 0 && /*#__PURE__*/React.createElement("div", {

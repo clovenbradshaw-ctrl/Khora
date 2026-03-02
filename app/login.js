@@ -513,14 +513,12 @@ const LoginScreen = ({
     onClick: () => {
       setMode('login');
       setErr('');
-      setRegUIA(null); setRegError(''); setRegCaptchaToken(''); setRegEmailSid(null); setRegTermsOk(false);
     }
   }, "Sign In"), /*#__PURE__*/React.createElement("div", {
     className: `tab ${mode === 'register' ? 'active' : ''}`,
     onClick: () => {
       setMode('register');
       setErr('');
-      setRegUIA(null); setRegError(''); setRegCaptchaToken(''); setRegEmailSid(null); setRegTermsOk(false);
     }
   }, "Create Account")), mode === 'register' && /*#__PURE__*/React.createElement("div", {
     style: {
