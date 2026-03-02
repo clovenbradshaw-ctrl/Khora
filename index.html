@@ -140,7 +140,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .tab:hover:not(.active){background:var(--bg-2);color:var(--tx-1)}
 
 /* ═══ Inbox Responsive Styles ═══ */
-.inbox-wrap{margin:0 auto;width:100%;display:flex;flex-direction:column;overflow:hidden;height:calc(100vh - 80px)}
+.inbox-wrap{margin:0 auto;width:100%;display:flex;flex-direction:column;overflow:hidden}
 .inbox-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px;flex-shrink:0}
 .inbox-panel{display:flex;gap:0;border:1px solid var(--border-0);border-radius:var(--r-lg);overflow:hidden;background:var(--bg-1);flex:1;min-height:0}
 .inbox-list{width:300px;min-width:300px;border-right:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2)}
@@ -22103,6 +22103,7 @@ const ClientApp = ({
   const [clientSharingConsentModal, setClientSharingConsentModal] = useState(null); // {team} — prompts client team member to choose sharing preference
   const [myResources, setMyResources] = useState([]); // resource vault records from bridges
   const isMobile = useIsMobile();
+  const teamColorsList = useMemo(() => (myTeams || []).map(t => ({ name: t.name, color_hue: t.color_hue })), [myTeams]);
   // Contact sharing state
   const [shareContactModal, setShareContactModal] = useState(false);
   const [copiedField, setCopiedField] = useState(null);

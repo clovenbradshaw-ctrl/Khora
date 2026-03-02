@@ -1122,6 +1122,7 @@ const ClientApp = ({
   const [clientSharingConsentModal, setClientSharingConsentModal] = useState(null); // {team} — prompts client team member to choose sharing preference
   const [myResources, setMyResources] = useState([]); // resource vault records from bridges
   const isMobile = useIsMobile();
+  const teamColorsList = useMemo(() => (myTeams || []).map(t => ({ name: t.name, color_hue: t.color_hue })), [myTeams]);
   // Contact sharing state
   const [shareContactModal, setShareContactModal] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
