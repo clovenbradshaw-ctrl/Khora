@@ -2240,7 +2240,7 @@ const ClientApp = ({
       { id: 'providers', icon: 'users', label: 'People' }
     ],
     activeView: activeBridge ? 'bridge' : view,
-    onNavigate: id => { setView(id); setActiveBridge(null); },
+    onNavigate: id => { setView(id); setActiveBridge(null); if (id !== 'inbox') setInboxConvo(null); },
     moreItems: [
       { id: 'observations', icon: 'clipboard', label: 'Observations' },
       { id: 'resources', icon: 'layers', label: 'My Resources' },
@@ -2248,7 +2248,7 @@ const ClientApp = ({
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' }
     ],
-    onMoreNavigate: id => { setView(id); setActiveBridge(null); }
+    onMoreNavigate: id => { setView(id); setActiveBridge(null); setInboxConvo(null); }
   },
     availableContexts && availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", { style: { padding: '8px 0', borderTop: '1px solid var(--border-0)', marginTop: 8, display: 'flex', gap: 4 } },
       [{id:'provider',label:ROLES.provider.label,icon:'briefcase'},{id:'client',label:ROLES.client.label,icon:'shield'}].filter(opt => availableContexts.includes(opt.id)).map(opt => /*#__PURE__*/React.createElement("button", {
@@ -2531,6 +2531,7 @@ const ClientApp = ({
     onNavigate: v => {
       setView(v);
       setActiveBridge(null);
+      if (v !== 'inbox') setInboxConvo(null);
     }
   }), view === 'vault' && !activeBridge && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",

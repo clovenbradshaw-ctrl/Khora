@@ -140,7 +140,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;border-radius:var(--r)
 .tab:hover:not(.active){background:var(--bg-2);color:var(--tx-1)}
 
 /* ═══ Inbox Responsive Styles ═══ */
-.inbox-wrap{margin:0 auto;width:100%;display:flex;flex-direction:column;overflow:hidden}
+.inbox-wrap{margin:0 auto;width:100%;display:flex;flex-direction:column;overflow:hidden;height:calc(100vh - 80px)}
 .inbox-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px;flex-shrink:0}
 .inbox-panel{display:flex;gap:0;border:1px solid var(--border-0);border-radius:var(--r-lg);overflow:hidden;background:var(--bg-1);flex:1;min-height:0}
 .inbox-list{width:300px;min-width:300px;border-right:1px solid var(--border-0);display:flex;flex-direction:column;background:var(--bg-2)}
@@ -23221,7 +23221,7 @@ const ClientApp = ({
       { id: 'providers', icon: 'users', label: 'People' }
     ],
     activeView: activeBridge ? 'bridge' : view,
-    onNavigate: id => { setView(id); setActiveBridge(null); },
+    onNavigate: id => { setView(id); setActiveBridge(null); if (id !== 'inbox') setInboxConvo(null); },
     moreItems: [
       { id: 'observations', icon: 'clipboard', label: 'Observations' },
       { id: 'resources', icon: 'layers', label: 'My Resources' },
@@ -23229,7 +23229,7 @@ const ClientApp = ({
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' }
     ],
-    onMoreNavigate: id => { setView(id); setActiveBridge(null); }
+    onMoreNavigate: id => { setView(id); setActiveBridge(null); setInboxConvo(null); }
   },
     availableContexts && availableContexts.length > 1 && /*#__PURE__*/React.createElement("div", { style: { padding: '8px 0', borderTop: '1px solid var(--border-0)', marginTop: 8, display: 'flex', gap: 4 } },
       [{id:'provider',label:ROLES.provider.label,icon:'briefcase'},{id:'client',label:ROLES.client.label,icon:'shield'}].filter(opt => availableContexts.includes(opt.id)).map(opt => /*#__PURE__*/React.createElement("button", {
@@ -23512,6 +23512,7 @@ const ClientApp = ({
     onNavigate: v => {
       setView(v);
       setActiveBridge(null);
+      if (v !== 'inbox') setInboxConvo(null);
     }
   }), view === 'vault' && !activeBridge && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
