@@ -1184,6 +1184,11 @@ table.dt th.dt-sel-col,table.dt td.dt-sel-col{width:32px;min-width:32px;max-widt
 .dt-bulk-bar .dt-bulk-actions{display:flex;gap:4px;margin-left:auto}
 table.dt tr.dt-row.dragging{opacity:.4;background:var(--bg-3)}
 table.dt tr.dt-row.drag-over{border-top:2px solid var(--gold);background:var(--gold-dim)}
+table.dt tr.dt-row-creating{background:var(--blue-dim,rgba(59,130,246,.06));pointer-events:none}
+table.dt tr.dt-row-creating td{opacity:.7}
+table.dt tr.dt-row-error{background:rgba(239,68,68,.06);border-left:2px solid var(--red)}
+table.dt tr.dt-row-error td{pointer-events:auto}
+@keyframes dt-pulse{0%,100%{opacity:1}50%{opacity:.4}}
 table.dt td.dt-drag-handle{width:24px;min-width:24px;max-width:24px;padding:0 4px;cursor:grab;color:var(--tx-3);text-align:center;user-select:none}
 table.dt td.dt-drag-handle:active{cursor:grabbing}
 /* ═══ Editable cells ═══ */
@@ -27269,7 +27274,7 @@ const DataTable = ({
     colSpan: visCols.length + extraColCount
   }, '▾ ' + gName + ' (' + rows.length + ')')), rows.map(row => /*#__PURE__*/React.createElement("tr", {
     key: row.id,
-    className: 'dt-row' + (selectedId === row.id ? ' selected' : '') + (row.status === 'revoked' ? ' revoked' : '') + (dragId === row.id ? ' dragging' : '') + (dragOverId === row.id ? ' drag-over' : ''),
+    className: 'dt-row' + (selectedId === row.id ? ' selected' : '') + (row.status === 'revoked' ? ' revoked' : '') + (dragId === row.id ? ' dragging' : '') + (dragOverId === row.id ? ' drag-over' : '') + (row.sync_status === 'creating' ? ' dt-row-creating' : '') + (row.sync_status === 'error' ? ' dt-row-error' : ''),
     onClick: () => onRowClick && onRowClick(row),
     draggable: draggable ? true : undefined,
     onDragStart: draggable ? e => handleDragStart(e, row.id) : undefined,
@@ -28017,6 +28022,15 @@ const NoteCreateModal = ({
       tombstoned: false,
       ...(teamContext ? { team_id: teamContext.roomId, team_name: teamContext.name } : {})
     };
+    // Optimistic: add note to local state + close modal instantly
+    onSave && onSave(noteData);
+    setTitle('');
+    setContent('');
+    setAttachTo('');
+    setTags([]);
+    setTagSearch('');
+    setMoreOptions(false);
+    onClose();
     try {
       const targetRoom = attachTo || rosterRoom;
       if (targetRoom) {
@@ -28047,17 +28061,10 @@ const NoteCreateModal = ({
       } catch (oe) {
         console.warn('Note EO event failed:', oe.message);
       }
-      onSave && onSave(noteData);
-      showToast && showToast('Note created', 'success');
-      setTitle('');
-      setContent('');
-      setAttachTo('');
-      setTags([]);
-      setTagSearch('');
-      setMoreOptions(false);
-      onClose();
+      // Confirmation toast — server confirmed the note
+      showToast && showToast('Note saved', 'success');
     } catch (e) {
-      showToast && showToast('Failed to create note: ' + e.message, 'error');
+      showToast && showToast('Failed to save note: ' + e.message, 'error');
     }
   };
 
@@ -29213,7 +29220,8 @@ const DatabaseView = ({
     bridgeRoom: r.roomId,
     fields: {},
     transferable: false,
-    _clientRecord: r
+    _clientRecord: r,
+    sync_status: r.sync_status || null
   }));
   const allIndividuals = [...individuals, ...extraClients].filter(row => !(trashedIndividuals || {})[row.id]);
   const IND_COLS = [{
@@ -29325,32 +29333,47 @@ const DatabaseView = ({
     }
     if (k === 'name') {
       const initial = (row.name || '?')[0].toUpperCase();
+      const syncStatus = row.sync_status;
+      const avatarBg = syncStatus === 'creating' ? 'var(--blue)'
+        : syncStatus === 'error' ? 'var(--red)'
+        : row.status === 'revoked' ? 'var(--border-1)' : 'var(--green)';
       return /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',
-          gap: 8
+          gap: 8,
+          opacity: syncStatus === 'creating' ? 0.7 : 1
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           width: 24,
           height: 24,
           borderRadius: '50%',
-          background: row.status === 'revoked' ? 'var(--border-1)' : 'var(--green)',
+          background: avatarBg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: '#fff',
           fontSize: 11,
           fontWeight: 700,
-          flexShrink: 0
+          flexShrink: 0,
+          animation: syncStatus === 'creating' ? 'dt-pulse 1.5s ease-in-out infinite' : undefined
         }
-      }, initial), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      }, syncStatus === 'creating' ? /*#__PURE__*/React.createElement(Spin, { s: 12 })
+        : syncStatus === 'error' ? '!'
+        : initial), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
         style: {
           fontWeight: 600,
           fontSize: 13
         }
-      }, row.name), row.alias && /*#__PURE__*/React.createElement("div", {
+      }, row.name),
+      syncStatus === 'creating' && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: 'var(--blue)', fontWeight: 500 }
+      }, "Saving\u2026"),
+      syncStatus === 'error' && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: 'var(--red)', fontWeight: 500 }
+      }, "Failed to save"),
+      !syncStatus && row.alias && /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 11,
           color: 'var(--tx-3)'
@@ -35434,32 +35457,47 @@ const IndividualsView = ({
     const k = col.key;
     if (k === 'name') {
       const initial = (row.name || '?')[0].toUpperCase();
+      const syncStatus = row.sync_status;
+      const avatarBg = syncStatus === 'creating' ? 'var(--blue)'
+        : syncStatus === 'error' ? 'var(--red)'
+        : row.status === 'revoked' ? 'var(--border-1)' : 'var(--green)';
       return /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',
-          gap: 8
+          gap: 8,
+          opacity: syncStatus === 'creating' ? 0.7 : 1
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           width: 24,
           height: 24,
           borderRadius: '50%',
-          background: row.status === 'revoked' ? 'var(--border-1)' : 'var(--green)',
+          background: avatarBg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: '#fff',
           fontSize: 11,
           fontWeight: 700,
-          flexShrink: 0
+          flexShrink: 0,
+          animation: syncStatus === 'creating' ? 'dt-pulse 1.5s ease-in-out infinite' : undefined
         }
-      }, initial), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      }, syncStatus === 'creating' ? /*#__PURE__*/React.createElement(Spin, { s: 12 })
+        : syncStatus === 'error' ? '!'
+        : initial), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
         style: {
           fontWeight: 600,
           fontSize: 13
         }
-      }, row.name), row.alias && /*#__PURE__*/React.createElement("div", {
+      }, row.name),
+      syncStatus === 'creating' && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: 'var(--blue)', fontWeight: 500 }
+      }, "Saving\u2026"),
+      syncStatus === 'error' && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: 'var(--red)', fontWeight: 500 }
+      }, "Failed to save"),
+      !syncStatus && row.alias && /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 11,
           color: 'var(--tx-3)'
@@ -37816,59 +37854,98 @@ const ProviderApp = ({
   // ─── Client record management ───
   const handleCreateClientRecord = async () => {
     if (!newClientName.trim()) return;
+    const createdAt = Date.now();
+    const tempId = `temp:${createdAt}:${Math.random().toString(36).slice(2)}`;
+    const clientName = newClientName;
+    const clientId = newClientMatrixId.trim() || null;
+    const clientNotes = newClientNotes || undefined;
+    const optimisticRecord = {
+      roomId: tempId,
+      client_name: clientName,
+      client_matrix_id: clientId,
+      notes: clientNotes,
+      owner: svc.userId,
+      created: createdAt,
+      team_id: activeTeamContext || null,
+      team_name: activeTeamObj?.name || null,
+      sync_status: 'creating'
+    };
+    // Optimistic: add record + close modal instantly
+    setClientRecords(prev => [...prev, optimisticRecord]);
+    setCreateClientModal(false);
+    setNewClientName('');
+    setNewClientMatrixId('');
+    setNewClientNotes('');
     try {
-      const clientId = newClientMatrixId.trim() || null;
-      const roomId = await svc.createClientRoom(`[Client] ${newClientName}`, `${T.client_term} record for ${newClientName}`, [{
+      const identityBase = {
+        account_type: 'client_record',
+        owner: svc.userId,
+        created: createdAt,
+        client_name: clientName,
+        client_matrix_id: clientId,
+        notes: clientNotes,
+        status: 'created',
+        team_id: activeTeamContext || null,
+        team_name: activeTeamObj?.name || null
+      };
+      const roomId = await svc.createClientRoom(`[Client] ${clientName}`, `${T.client_term} record for ${clientName}`, [{
         type: EVT.IDENTITY,
         state_key: '',
-        content: {
-          account_type: 'client_record',
-          owner: svc.userId,
-          created: Date.now(),
-          client_name: newClientName,
-          client_matrix_id: clientId,
-          notes: newClientNotes || undefined,
-          status: 'created'
-        }
+        content: identityBase
       }], clientId);
-      // If client Matrix ID provided, invite them and set them as admin
+
+      let recordStatus = clientId ? 'invited' : 'created';
       if (clientId) {
         try {
           await svc.invite(roomId, clientId);
           await svc.setState(roomId, EVT.IDENTITY, {
-            account_type: 'client_record',
-            owner: svc.userId,
-            created: Date.now(),
-            client_name: newClientName,
-            client_matrix_id: clientId,
-            notes: newClientNotes || undefined,
+            ...identityBase,
             status: 'invited'
           });
         } catch (e) {
+          recordStatus = 'created';
           console.warn('Invite failed:', e.message);
         }
       }
-      await emitOp(roomId, 'DES', dot('org', 'client_record', newClientName), {
-        created_by: svc.userId,
-        client_id: clientId || undefined,
-        status: clientId ? 'invited' : 'created'
-      }, orgFrame());
-      const newRecord = {
+
+      setClientRecords(prev => prev.map(record => record.roomId === tempId ? {
+        ...record,
         roomId,
-        client_name: newClientName,
-        client_matrix_id: clientId,
-        notes: newClientNotes || undefined,
-        owner: svc.userId,
-        created: Date.now(),
-        status: clientId ? 'invited' : 'created'
-      };
-      setClientRecords(prev => [...prev, newRecord]);
-      setCreateClientModal(false);
-      // Emit EO event to track individual creation
+        status: recordStatus,
+        sync_status: 'confirmed'
+      } : record));
+
       try {
-        await emitOp(roomId, 'INS', dot('org', 'individuals', newClientName), {
-          designation: newClientName,
-          client_name: newClientName,
+        await emitOp(roomId, 'DES', dot('org', 'client_record', clientName), {
+          created_by: svc.userId,
+          client_id: clientId || undefined,
+          status: recordStatus,
+          team_id: activeTeamContext || undefined
+        }, orgFrame());
+      } catch (e) {
+        console.warn('Client record DES emit failed:', e.message);
+      }
+      if (activeTeamContext) {
+        try {
+          const currentIdx = await svc.getState(activeTeamContext, EVT.TEAM_RECORD_INDEX) || { records: [] };
+          if (!currentIdx.records.some(r => r.room_id === roomId)) {
+            await svc.setState(activeTeamContext, EVT.TEAM_RECORD_INDEX, {
+              records: [...currentIdx.records, {
+                room_id: roomId,
+                bridge_room_id: null,
+                created: Date.now(),
+                vault_access: 'none'
+              }]
+            });
+          }
+        } catch (e) {
+          console.warn('Team record index update failed:', e.message);
+        }
+      }
+      try {
+        await emitOp(roomId, 'INS', dot('org', 'individuals', clientName), {
+          designation: clientName,
+          client_name: clientName,
           client_matrix_id: clientId || undefined,
           edit_source: 'client_creation'
         }, {
@@ -37879,12 +37956,11 @@ const ProviderApp = ({
       } catch (e) {
         console.warn('Creation event tracking failed:', e.message);
       }
-      setNewClientName('');
-      setNewClientMatrixId('');
-      setNewClientNotes('');
-      showToast(`${T.client_term} "${newClientName}" created${clientId ? ' — invite sent' : ''}`, 'success');
+      showToast(`${T.client_term} "${clientName}" saved${clientId && recordStatus === 'invited' ? ' — invite sent' : ''}`, 'success');
     } catch (e) {
-      showToast('Failed: ' + e.message, 'error');
+      // Rollback: remove failed optimistic record
+      setClientRecords(prev => prev.filter(record => record.roomId !== tempId));
+      showToast(`Failed to create "${clientName}": ${e.message}`, 'error');
     }
   };
   // INS(claim.verification.code, {generated_by, expires}) — challenge_creation
@@ -37938,17 +38014,27 @@ const ProviderApp = ({
   // ─── Team CRUD ───
   const handleCreateTeam = async () => {
     if (!newTeamName.trim()) return;
+    const teamNameCapture = newTeamName;
+    const teamDescCapture = newTeamDesc;
+    const teamParentCapture = newTeamParentId;
+    const teamGovCapture = newTeamGovernance;
+    // Close modal instantly for responsive UX
+    setCreateTeamModal(false);
+    setNewTeamName('');
+    setNewTeamDesc('');
+    setNewTeamParentId('');
+    setNewTeamGovernance('lead_decides');
     try {
       const teamHue = distinctTeamHue(teams.length);
-      const govMode = newTeamGovernance || 'lead_decides';
-      const parentTeam = newTeamParentId ? teams.find(t => t.roomId === newTeamParentId) : null;
+      const govMode = teamGovCapture || 'lead_decides';
+      const parentTeam = teamParentCapture ? teams.find(t => t.roomId === teamParentCapture) : null;
       // Default team schema: identity + contact fields from vault
       const defaultSchemaFields = DOMAIN_CONFIG.vaultFields.filter(f => f.category === 'identity' || f.category === 'contact').map(f => ({
         uri: f.uri,
         required: f.category === 'identity',
         added_version: 1
       }));
-      const roomId = await svc.createRoom(`[Khora Team] ${newTeamName}`, newTeamDesc || `Team: ${newTeamName}`, [{
+      const roomId = await svc.createRoom(`[Khora Team] ${teamNameCapture}`, teamDescCapture || `Team: ${teamNameCapture}`, [{
         type: EVT.IDENTITY,
         state_key: '',
         content: {
@@ -37960,8 +38046,8 @@ const ProviderApp = ({
         type: EVT.TEAM_META,
         state_key: '',
         content: {
-          name: newTeamName,
-          description: newTeamDesc || '',
+          name: teamNameCapture,
+          description: teamDescCapture || '',
           color_hue: teamHue,
           created: Date.now(),
           created_by: svc.userId,
@@ -38022,7 +38108,7 @@ const ProviderApp = ({
       if (parentTeam) {
         try {
           const parentHierarchy = await svc.getState(parentTeam.roomId, EVT.TEAM_HIERARCHY) || {};
-          const updatedChildren = [...(parentHierarchy.child_teams || []), { roomId, name: newTeamName }];
+          const updatedChildren = [...(parentHierarchy.child_teams || []), { roomId, name: teamNameCapture }];
           await svc.setState(parentTeam.roomId, EVT.TEAM_HIERARCHY, {
             ...parentHierarchy,
             child_teams: updatedChildren,
@@ -38037,7 +38123,7 @@ const ProviderApp = ({
           console.warn('[Team] Failed to register child on parent hierarchy:', e.message);
         }
       }
-      await emitOp(roomId, 'DES', dot('org', 'teams', newTeamName), {
+      await emitOp(roomId, 'DES', dot('org', 'teams', teamNameCapture), {
         created_by: svc.userId,
         org: orgMeta.name || null,
         parent_team: parentTeam?.name || null,
@@ -38045,8 +38131,8 @@ const ProviderApp = ({
       }, orgFrame());
       const newTeam = {
         roomId,
-        name: newTeamName,
-        description: newTeamDesc || '',
+        name: teamNameCapture,
+        description: teamDescCapture || '',
         color_hue: teamHue,
         created: Date.now(),
         created_by: svc.userId,
@@ -38079,14 +38165,10 @@ const ProviderApp = ({
       };
       setLocalTeamColor(svc.userId, roomId, teamHue);
       setTeams(prev => [...prev, newTeam]);
-      setCreateTeamModal(false);
-      setNewTeamName('');
-      setNewTeamDesc('');
-      setNewTeamParentId('');
-      setNewTeamGovernance('lead_decides');
-      showToast(`Team "${newTeamName}" created${parentTeam ? ` under ${parentTeam.name}` : ''}`, 'success');
+      // Confirmation toast — server confirmed the team
+      showToast(`Team "${teamNameCapture}" saved${parentTeam ? ` under ${parentTeam.name}` : ''}`, 'success');
     } catch (e) {
-      showToast('Failed to create team: ' + e.message, 'error');
+      showToast(`Failed to create team "${teamNameCapture}": ${e.message}`, 'error');
     }
   };
   const handleTeamInvite = async () => {

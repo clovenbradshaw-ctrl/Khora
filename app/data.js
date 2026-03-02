@@ -272,7 +272,14 @@ const EditableCell = ({
         ref: inputRef,
         className: "dt-ecell-input",
         value: draft,
-        onChange: e => { setDraft(e.target.value); },
+        onChange: e => {
+          const newVal = e.target.value;
+          setDraft(newVal);
+          // Commit immediately — don't rely on onBlur closure which may
+          // hold a stale draft due to React batching.
+          setEditing(false);
+          if (newVal !== (value || '')) onSave && onSave(newVal);
+        },
         onBlur: commit,
         onKeyDown: e => {
           if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
@@ -692,7 +699,7 @@ const DataTable = ({
     colSpan: visCols.length + extraColCount
   }, '▾ ' + gName + ' (' + rows.length + ')')), rows.map(row => /*#__PURE__*/React.createElement("tr", {
     key: row.id,
-    className: 'dt-row' + (selectedId === row.id ? ' selected' : '') + (row.status === 'revoked' ? ' revoked' : '') + (dragId === row.id ? ' dragging' : '') + (dragOverId === row.id ? ' drag-over' : ''),
+    className: 'dt-row' + (selectedId === row.id ? ' selected' : '') + (row.status === 'revoked' ? ' revoked' : '') + (dragId === row.id ? ' dragging' : '') + (dragOverId === row.id ? ' drag-over' : '') + (row.sync_status === 'creating' ? ' dt-row-creating' : '') + (row.sync_status === 'error' ? ' dt-row-error' : ''),
     onClick: () => onRowClick && onRowClick(row),
     draggable: draggable ? true : undefined,
     onDragStart: draggable ? e => handleDragStart(e, row.id) : undefined,
@@ -1600,6 +1607,15 @@ const NoteCreateModal = ({
       tombstoned: false,
       ...(teamContext ? { team_id: teamContext.roomId, team_name: teamContext.name } : {})
     };
+    // Optimistic: add note to local state + close modal instantly
+    onSave && onSave(noteData);
+    setTitle('');
+    setContent('');
+    setAttachTo('');
+    setTags([]);
+    setTagSearch('');
+    setMoreOptions(false);
+    onClose();
     try {
       const targetRoom = attachTo || rosterRoom;
       if (targetRoom) {
@@ -1630,17 +1646,10 @@ const NoteCreateModal = ({
       } catch (oe) {
         console.warn('Note EO event failed:', oe.message);
       }
-      onSave && onSave(noteData);
-      showToast && showToast('Note created', 'success');
-      setTitle('');
-      setContent('');
-      setAttachTo('');
-      setTags([]);
-      setTagSearch('');
-      setMoreOptions(false);
-      onClose();
+      // Confirmation toast — server confirmed the note
+      showToast && showToast('Note saved', 'success');
     } catch (e) {
-      showToast && showToast('Failed to create note: ' + e.message, 'error');
+      showToast && showToast('Failed to save note: ' + e.message, 'error');
     }
   };
 
@@ -2892,7 +2901,8 @@ const DatabaseView = ({
       bridgeRoom: r.roomId,
       fields: crmFields,
       transferable: false,
-      _clientRecord: r
+      _clientRecord: r,
+      sync_status: r.sync_status || null
     };
   });
   const allIndividuals = [...individuals, ...extraClients].filter(row => !(trashedIndividuals || {})[row.id]);
@@ -3012,32 +3022,47 @@ const DatabaseView = ({
     }
     if (k === 'name') {
       const initial = (row.name || '?')[0].toUpperCase();
+      const syncStatus = row.sync_status;
+      const avatarBg = syncStatus === 'creating' ? 'var(--blue)'
+        : syncStatus === 'error' ? 'var(--red)'
+        : row.status === 'revoked' ? 'var(--border-1)' : 'var(--green)';
       return /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           alignItems: 'center',
-          gap: 8
+          gap: 8,
+          opacity: syncStatus === 'creating' ? 0.7 : 1
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           width: 24,
           height: 24,
           borderRadius: '50%',
-          background: row.status === 'revoked' ? 'var(--border-1)' : 'var(--green)',
+          background: avatarBg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           color: '#fff',
           fontSize: 11,
           fontWeight: 700,
-          flexShrink: 0
+          flexShrink: 0,
+          animation: syncStatus === 'creating' ? 'dt-pulse 1.5s ease-in-out infinite' : undefined
         }
-      }, initial), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      }, syncStatus === 'creating' ? /*#__PURE__*/React.createElement(Spin, { s: 12 })
+        : syncStatus === 'error' ? '!'
+        : initial), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
         style: {
           fontWeight: 600,
           fontSize: 13
         }
-      }, row.name), row.alias && /*#__PURE__*/React.createElement("div", {
+      }, row.name),
+      syncStatus === 'creating' && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: 'var(--blue)', fontWeight: 500 }
+      }, "Saving\u2026"),
+      syncStatus === 'error' && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: 'var(--red)', fontWeight: 500 }
+      }, "Failed to save"),
+      !syncStatus && row.alias && /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 11,
           color: 'var(--tx-3)'

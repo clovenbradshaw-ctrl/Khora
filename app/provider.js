@@ -1206,22 +1206,28 @@ const ProviderApp = ({
 
   // ─── Cell edit handler with debounced EO event tracking ───
   const handleDbCellEdit = (row, fieldKey, newValue) => {
-    const oldValue = row[fieldKey] || row.fields && row.fields[fieldKey]?.value || '';
+    const oldValue = (row[fieldKey] != null ? row[fieldKey] : (row.fields?.[fieldKey]?.value ?? ''));
     if (newValue === oldValue) return;
     // Normalize: profile page sends 'full_name', table sends 'name'
     const isNameField = fieldKey === 'name' || fieldKey === 'full_name';
     const isBridgeCaseRow = !!(row._case && !row._clientRecord);
-    const canProviderEditField = fieldKey === 'status' || fieldKey === 'priority';
+    // Row metadata keys that should never be persisted as field edits
+    const ROW_META_KEYS = ['id', 'alias', 'disclosureLevel', 'lastContact', 'activeCases',
+      'bridgeRoom', 'fields', 'transferable', '_case', '_clientRecord', 'sync_status',
+      'fields_count', 'linked_records'];
+    const canProviderEditField = isNameField || fieldKey === 'status' || fieldKey === 'priority'
+      || !ROW_META_KEYS.includes(fieldKey);
     // Debounce: clear existing timer for this row+field, set a new one
     const timerKey = row.id + ':' + fieldKey;
     if (cellEditTimerRef.current[timerKey]) clearTimeout(cellEditTimerRef.current[timerKey]);
     cellEditTimerRef.current[timerKey] = setTimeout(async () => {
       try {
         const roomId = row.bridgeRoom || row.id;
-        // Client-owned bridge profile fields are state-locked (PL 100) by design.
-        // Providers can only edit org-side metadata in database view.
+        // Guard: only block truly non-editable internal metadata fields on bridge rows.
+        // Name, status, priority, and dynamic/custom fields all have persistence
+        // handlers below and should pass through.
         if (isBridgeCaseRow && !canProviderEditField) {
-          showToast('This field is client-owned and cannot be edited from the provider database view.', 'warning');
+          showToast('This field cannot be edited from the database view.', 'warning');
           return;
         }
         let editApplied = false;
@@ -1279,52 +1285,42 @@ const ProviderApp = ({
               });
               setCaseAssignments(updatedAssignments);
             }
-          } else if (fieldKey === 'status') {
-            // Update status in ROSTER_ASSIGN and local state
-            if (orgRoom && caseAssignments[roomId]) {
-              const updatedAssignments = {
-                ...caseAssignments
-              };
-              updatedAssignments[roomId] = {
-                ...updatedAssignments[roomId],
-                status: newValue
-              };
-              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, {
-                assignments: updatedAssignments
-              });
+          } else if (fieldKey === 'status' || fieldKey === 'priority' || fieldKey === 'assignedTo') {
+            // Update status/priority/assignedTo in ROSTER_ASSIGN
+            if (orgRoom) {
+              const updatedAssignments = { ...caseAssignments };
+              const clientName = row._case.sharedData?.full_name || row.name || 'Unknown';
+              if (!updatedAssignments[roomId]) {
+                updatedAssignments[roomId] = {
+                  primary: svc.userId, staff: [svc.userId],
+                  client_name: clientName, added: Date.now()
+                };
+              }
+              if (fieldKey === 'assignedTo') {
+                updatedAssignments[roomId] = {
+                  ...updatedAssignments[roomId], primary: newValue,
+                  staff: [newValue, ...(updatedAssignments[roomId].staff || []).filter(s => s !== newValue)]
+                };
+              } else {
+                updatedAssignments[roomId] = { ...updatedAssignments[roomId], [fieldKey]: newValue };
+              }
+              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
               setCaseAssignments(updatedAssignments);
             }
-            setCases(prev => prev.map(c =>
-              c.bridgeRoomId === roomId
-                ? { ...c, meta: { ...c.meta, status: newValue } }
-                : c
-            ));
-            editApplied = true;
-            syncActiveIndividual(prev => ({
-              ...prev,
-              status: newValue,
-              _case: prev._case ? { ...prev._case, meta: { ...prev._case.meta, status: newValue } } : prev._case
-            }));
-          } else if (fieldKey === 'priority') {
-            // Update priority in ROSTER_ASSIGN
-            if (orgRoom && caseAssignments[roomId]) {
-              const updatedAssignments = {
-                ...caseAssignments
-              };
-              updatedAssignments[roomId] = {
-                ...updatedAssignments[roomId],
-                priority: newValue
-              };
-              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, {
-                assignments: updatedAssignments
-              });
-              setCaseAssignments(updatedAssignments);
+            if (fieldKey === 'status') {
+              setCases(prev => prev.map(c =>
+                c.bridgeRoomId === roomId
+                  ? { ...c, meta: { ...c.meta, status: newValue } }
+                  : c
+              ));
+              syncActiveIndividual(prev => ({
+                ...prev, status: newValue,
+                _case: prev._case ? { ...prev._case, meta: { ...prev._case.meta, status: newValue } } : prev._case
+              }));
+            } else {
+              syncActiveIndividual(prev => ({ ...prev, [fieldKey]: newValue }));
             }
             editApplied = true;
-            syncActiveIndividual(prev => ({
-              ...prev,
-              priority: newValue
-            }));
           } else {
             // Dynamic field — update shared data in bridge
             const updatedData = {
@@ -1368,6 +1364,27 @@ const ProviderApp = ({
               await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
               setCaseAssignments(updatedAssignments);
             }
+          } else if (fieldKey === 'assignedTo') {
+            // Update primary assignment in ROSTER_ASSIGN for client record
+            if (orgRoom) {
+              const updatedAssignments = { ...caseAssignments };
+              const clientName = row.name || row._clientRecord.client_name || 'Unknown';
+              if (!updatedAssignments[row.id]) {
+                updatedAssignments[row.id] = {
+                  primary: newValue, staff: [newValue],
+                  client_name: clientName, added: Date.now()
+                };
+              } else {
+                updatedAssignments[row.id] = {
+                  ...updatedAssignments[row.id], primary: newValue,
+                  staff: [newValue, ...(updatedAssignments[row.id].staff || []).filter(s => s !== newValue)]
+                };
+              }
+              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
+              setCaseAssignments(updatedAssignments);
+            }
+            editApplied = true;
+            syncActiveIndividual(prev => ({ ...prev, assignedTo: newValue }));
           } else {
             // CRM fields (status, priority, intake_date, etc.) — store in ROSTER_ASSIGN
             if (orgRoom) {
@@ -1918,7 +1935,12 @@ const ProviderApp = ({
       team_name: activeTeamObj?.name || null,
       sync_status: 'creating'
     };
+    // Optimistic: add record + close modal instantly
     setClientRecords(prev => [...prev, optimisticRecord]);
+    setCreateClientModal(false);
+    setNewClientName('');
+    setNewClientMatrixId('');
+    setNewClientNotes('');
     try {
       const identityBase = {
         account_type: 'client_record',
@@ -1990,7 +2012,6 @@ const ProviderApp = ({
           console.warn('Team record index update failed:', e.message);
         }
       }
-      setCreateClientModal(false);
       // Emit EO event to track individual creation
       try {
         await emitOp(roomId, 'INS', dot('org', 'individuals', clientName), {
@@ -2006,16 +2027,12 @@ const ProviderApp = ({
       } catch (e) {
         console.warn('Creation event tracking failed:', e.message);
       }
-      setNewClientName('');
-      setNewClientMatrixId('');
-      setNewClientNotes('');
-      showToast(`${T.client_term} "${clientName}" created${clientId && recordStatus === 'invited' ? ' — invite sent' : ''}`, 'success');
+      // Confirmation toast — server confirmed the record
+      showToast(`${T.client_term} "${clientName}" saved${clientId && recordStatus === 'invited' ? ' — invite sent' : ''}`, 'success');
     } catch (e) {
-      setClientRecords(prev => prev.map(record => record.roomId === tempId ? {
-        ...record,
-        sync_status: 'error'
-      } : record));
-      showToast('Failed: ' + e.message, 'error');
+      // Rollback: remove failed optimistic record
+      setClientRecords(prev => prev.filter(record => record.roomId !== tempId));
+      showToast(`Failed to create "${clientName}": ${e.message}`, 'error');
     }
   };
   // Quick-add individual: creates a client record with just a name (no modal)
@@ -2034,6 +2051,7 @@ const ProviderApp = ({
       team_name: activeTeamObj?.name || null,
       sync_status: 'creating'
     };
+    // Optimistic: row appears instantly in the table
     setClientRecords(prev => [...prev, optimisticRecord]);
     try {
       const identityBase = {
@@ -2085,13 +2103,12 @@ const ProviderApp = ({
           edit_source: 'quick_add'
         }, { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
       } catch (e) { console.warn('Quick-add event tracking failed:', e.message); }
-      showToast(`${T.client_term} "${clientName}" added`, 'success');
+      // Confirmation toast — server confirmed the record
+      showToast(`${T.client_term} "${clientName}" saved`, 'success');
     } catch (e) {
-      setClientRecords(prev => prev.map(record => record.roomId === tempId ? {
-        ...record,
-        sync_status: 'error'
-      } : record));
-      showToast('Failed: ' + e.message, 'error');
+      // Rollback: remove failed optimistic record
+      setClientRecords(prev => prev.filter(record => record.roomId !== tempId));
+      showToast(`Failed to add "${clientName}": ${e.message}`, 'error');
     }
   };
 
@@ -2147,18 +2164,28 @@ const ProviderApp = ({
   const handleCreateTeam = async () => {
     if (!newTeamName.trim()) return;
     if (teamCreationProgress) return; // guard against double-click
+    const teamNameCapture = newTeamName;
+    const teamDescCapture = newTeamDesc;
+    const teamParentCapture = newTeamParentId;
+    const teamGovCapture = newTeamGovernance;
+    // Close modal instantly for responsive UX
+    setCreateTeamModal(false);
+    setNewTeamName('');
+    setNewTeamDesc('');
+    setNewTeamParentId('');
+    setNewTeamGovernance('lead_decides');
     try {
       setTeamCreationProgress({ step: 1, total: 4, label: 'Creating encrypted room...' });
       const teamHue = distinctTeamHue(teams.length);
-      const govMode = newTeamGovernance || 'lead_decides';
-      const parentTeam = newTeamParentId ? teams.find(t => t.roomId === newTeamParentId) : null;
+      const govMode = teamGovCapture || 'lead_decides';
+      const parentTeam = teamParentCapture ? teams.find(t => t.roomId === teamParentCapture) : null;
       // Default team schema: identity + contact fields from vault
       const defaultSchemaFields = DOMAIN_CONFIG.vaultFields.filter(f => f.category === 'identity' || f.category === 'contact').map(f => ({
         uri: f.uri,
         required: f.category === 'identity',
         added_version: 1
       }));
-      const roomId = await svc.createRoom(`[Khora Team] ${newTeamName}`, newTeamDesc || `Team: ${newTeamName}`, [{
+      const roomId = await svc.createRoom(`[Khora Team] ${teamNameCapture}`, teamDescCapture || `Team: ${teamNameCapture}`, [{
         type: EVT.IDENTITY,
         state_key: '',
         content: {
@@ -2170,8 +2197,8 @@ const ProviderApp = ({
         type: EVT.TEAM_META,
         state_key: '',
         content: {
-          name: newTeamName,
-          description: newTeamDesc || '',
+          name: teamNameCapture,
+          description: teamDescCapture || '',
           color_hue: teamHue,
           created: Date.now(),
           created_by: svc.userId,
@@ -2233,7 +2260,7 @@ const ProviderApp = ({
       if (parentTeam) {
         try {
           const parentHierarchy = await svc.getState(parentTeam.roomId, EVT.TEAM_HIERARCHY) || {};
-          const updatedChildren = [...(parentHierarchy.child_teams || []), { roomId, name: newTeamName }];
+          const updatedChildren = [...(parentHierarchy.child_teams || []), { roomId, name: teamNameCapture }];
           await svc.setState(parentTeam.roomId, EVT.TEAM_HIERARCHY, {
             ...parentHierarchy,
             child_teams: updatedChildren,
@@ -2249,7 +2276,7 @@ const ProviderApp = ({
         }
       }
       setTeamCreationProgress({ step: 3, total: 4, label: 'Setting up schema & tables...' });
-      await emitOp(roomId, 'DES', dot('org', 'teams', newTeamName), {
+      await emitOp(roomId, 'DES', dot('org', 'teams', teamNameCapture), {
         created_by: svc.userId,
         org: orgMeta.name || null,
         parent_team: parentTeam?.name || null,
@@ -2257,8 +2284,8 @@ const ProviderApp = ({
       }, orgFrame());
       const newTeam = {
         roomId,
-        name: newTeamName,
-        description: newTeamDesc || '',
+        name: teamNameCapture,
+        description: teamDescCapture || '',
         color_hue: teamHue,
         created: Date.now(),
         created_by: svc.userId,
@@ -2309,15 +2336,11 @@ const ProviderApp = ({
       setLocalTeamColor(svc.userId, roomId, teamHue);
       setTeams(prev => [...prev, newTeam]);
       setTeamCreationProgress(null);
-      setCreateTeamModal(false);
-      setNewTeamName('');
-      setNewTeamDesc('');
-      setNewTeamParentId('');
-      setNewTeamGovernance('lead_decides');
-      showToast(`Team "${newTeamName}" created${parentTeam ? ` under ${parentTeam.name}` : ''}`, 'success');
+      // Confirmation toast — server confirmed the team
+      showToast(`Team "${teamNameCapture}" saved${parentTeam ? ` under ${parentTeam.name}` : ''}`, 'success');
     } catch (e) {
       setTeamCreationProgress(null);
-      showToast('Failed to create team: ' + e.message, 'error');
+      showToast(`Failed to create team "${teamNameCapture}": ${e.message}`, 'error');
     }
   };
   const handleTeamInvite = async () => {
