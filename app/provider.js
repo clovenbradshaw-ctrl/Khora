@@ -40,6 +40,7 @@ const ProviderApp = ({
   const [orgRole, setOrgRole] = useState(null); // null = no org, 'admin', 'case_manager', etc.
   const [allOrgs, setAllOrgs] = useState([]); // multi-org: all orgs user belongs to [{roomId, role, meta, roster, ...}]
   const [createOrgModal, setCreateOrgModal] = useState(false);
+  const [orgCreationProgress, setOrgCreationProgress] = useState(null); // null | { step, total, label }
   const [joinOrgModal, setJoinOrgModal] = useState(false);
   const [joinOrgId, setJoinOrgId] = useState('');
   const [setupData, setSetupData] = useState({
@@ -61,11 +62,6 @@ const ProviderApp = ({
   const [clientRecords, setClientRecords] = useState([]);
   const [createClientModal, setCreateClientModal] = useState(false);
   const openCreateClientModal = () => {
-    if (!activeTeamContext) {
-      if (showToast) showToast('Switch to a team context to create individual records. Select a team in the sidebar, or create one in the Teams view.', 'info');
-      setView('teams');
-      return;
-    }
     setCreateClientModal(true);
     setNewClientName('');
     setNewClientMatrixId('');
@@ -81,6 +77,7 @@ const ProviderApp = ({
   // Teams — flexible groups of people (not tied to a single org)
   const [teams, setTeams] = useState([]);
   const [createTeamModal, setCreateTeamModal] = useState(false);
+  const [teamCreationProgress, setTeamCreationProgress] = useState(null); // null | { step, total, label }
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamDesc, setNewTeamDesc] = useState('');
   const [newTeamParentId, setNewTeamParentId] = useState('');     // parent team selection
@@ -2025,6 +2022,7 @@ const ProviderApp = ({
   const handleCreateTeam = async () => {
     if (!newTeamName.trim()) return;
     try {
+      setTeamCreationProgress({ step: 1, total: 4, label: 'Creating encrypted room...' });
       const teamHue = distinctTeamHue(teams.length);
       const govMode = newTeamGovernance || 'lead_decides';
       const parentTeam = newTeamParentId ? teams.find(t => t.roomId === newTeamParentId) : null;
@@ -2104,6 +2102,7 @@ const ProviderApp = ({
           created_at: Date.now()
         }
       }]);
+      setTeamCreationProgress({ step: 2, total: 4, label: 'Configuring team identity...' });
       // If nested under a parent team, register this child on the parent's hierarchy
       if (parentTeam) {
         try {
@@ -2123,6 +2122,7 @@ const ProviderApp = ({
           console.warn('[Team] Failed to register child on parent hierarchy:', e.message);
         }
       }
+      setTeamCreationProgress({ step: 3, total: 4, label: 'Setting up schema & tables...' });
       await emitOp(roomId, 'DES', dot('org', 'teams', newTeamName), {
         created_by: svc.userId,
         org: orgMeta.name || null,
@@ -2179,8 +2179,10 @@ const ProviderApp = ({
       } catch (e) {
         console.warn('[Team] Failed to seed default Individuals table:', e.message);
       }
+      setTeamCreationProgress({ step: 4, total: 4, label: 'Finalizing...' });
       setLocalTeamColor(svc.userId, roomId, teamHue);
       setTeams(prev => [...prev, newTeam]);
+      setTeamCreationProgress(null);
       setCreateTeamModal(false);
       setNewTeamName('');
       setNewTeamDesc('');
@@ -2188,6 +2190,7 @@ const ProviderApp = ({
       setNewTeamGovernance('lead_decides');
       showToast(`Team "${newTeamName}" created${parentTeam ? ` under ${parentTeam.name}` : ''}`, 'success');
     } catch (e) {
+      setTeamCreationProgress(null);
       showToast('Failed to create team: ' + e.message, 'error');
     }
   };
@@ -2881,6 +2884,7 @@ const ProviderApp = ({
   const handleCreateOrg = async () => {
     if (!setupData.name.trim()) return;
     try {
+      setOrgCreationProgress({ step: 1, total: 5, label: 'Creating encrypted room...' });
       const org = await svc.createRoom(`[Khora Org] ${setupData.name}`, `Organization: ${setupData.name}`, [{
         type: EVT.IDENTITY,
         state_key: '',
@@ -2936,6 +2940,7 @@ const ProviderApp = ({
           updated: Date.now()
         }
       }]);
+      setOrgCreationProgress({ step: 2, total: 5, label: 'Registering team identity...' });
       await emitOp(org, 'DES', dot('org', 'organization'), {
         designation: setupData.name,
         type: setupData.type,
@@ -2957,14 +2962,7 @@ const ProviderApp = ({
         role: 'admin',
         joined: Date.now()
       }]);
-      setCreateOrgModal(false);
-      setSetupData({
-        name: '',
-        type: 'direct_service',
-        service_area: '',
-        languages: 'en'
-      });
-      showToast(`Organization "${setupData.name}" created`, 'success');
+      setOrgCreationProgress({ step: 3, total: 5, label: 'Setting up metrics...' });
       // Create supporting rooms for org
       const orgMetricsR = await svc.createRoom('[Khora Metrics]', 'Org anonymized metrics', [{
         type: EVT.IDENTITY,
@@ -2984,6 +2982,7 @@ const ProviderApp = ({
           created: Date.now()
         }
       }]);
+      setOrgCreationProgress({ step: 4, total: 5, label: 'Loading forms & schemas...' });
       // Forms — GIVEN data collection (propagated to clients through providers)
       for (const f of DEFAULT_FORMS) await svc.setState(orgSchema, EVT.SCHEMA_FORM, f, f.id);
       for (const p of DEFAULT_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_PROMPT, p, p.key);
@@ -2995,6 +2994,7 @@ const ProviderApp = ({
         id: 'transform_default',
         transforms: DEFAULT_TRANSFORMS
       }, 'default');
+      setOrgCreationProgress({ step: 5, total: 5, label: 'Finalizing setup...' });
       // Link supporting room IDs back to the org so other members can discover them
       try {
         await svc.setState(org, EVT.ORG_METADATA, {
@@ -3009,8 +3009,18 @@ const ProviderApp = ({
       } catch (e) {
         console.warn('Org metadata linkage:', e.message);
       }
+      setOrgCreationProgress(null);
+      setCreateOrgModal(false);
+      setSetupData({
+        name: '',
+        type: 'direct_service',
+        service_area: '',
+        languages: 'en'
+      });
+      showToast(`Team "${setupData.name}" created`, 'success');
     } catch (e) {
-      showToast('Error creating org: ' + e.message, 'error');
+      setOrgCreationProgress(null);
+      showToast('Error creating team: ' + e.message, 'error');
     }
   };
   const handleJoinOrg = async () => {
@@ -4370,7 +4380,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "plus",
     s: 12
-  }), "Create Organization"), /*#__PURE__*/React.createElement("button", {
+  }), "Create Team"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setJoinOrgModal(true),
     className: "b-gho b-xs",
     style: {
@@ -4383,7 +4393,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "users",
     s: 10
-  }), "Join Organization")), /*#__PURE__*/React.createElement("div", {
+  }), "Join Team")), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: '14px 10px 4px'
     }
@@ -9976,36 +9986,50 @@ const ProviderApp = ({
     s: 14
   }), "Save Permissions"))), /*#__PURE__*/React.createElement(Modal, {
     open: createOrgModal,
-    onClose: () => setCreateOrgModal(false),
-    title: "Create Organization",
+    onClose: () => { if (!orgCreationProgress) setCreateOrgModal(false); },
+    title: "Create Team",
     w: 520
-  }, /*#__PURE__*/React.createElement("p", {
+  }, orgCreationProgress ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 0 16px', animation: 'fadeIn .3s ease both' } },
+    React.createElement('div', { style: { position: 'relative', width: 64, height: 64, marginBottom: 24 } },
+      React.createElement('div', { style: { position: 'absolute', inset: 0, border: '3px solid var(--border-1)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 1s linear infinite' } }),
+      React.createElement('div', { style: { position: 'absolute', inset: 8, border: '2px solid var(--border-0)', borderBottomColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 1.5s linear infinite reverse' } }),
+      React.createElement('div', { style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+        React.createElement(I, { n: 'users', s: 20, c: 'var(--gold)' })
+      )
+    ),
+    React.createElement('div', { style: { fontSize: 15, fontWeight: 600, color: 'var(--tx-0)', marginBottom: 8 } }, 'Setting up your team...'),
+    React.createElement('div', { style: { fontSize: 12, color: 'var(--tx-2)', marginBottom: 20, animation: 'fadeUp .3s ease both' }, key: orgCreationProgress.step }, orgCreationProgress.label),
+    React.createElement('div', { style: { width: '100%', maxWidth: 280, height: 4, background: 'var(--bg-1)', borderRadius: 2, overflow: 'hidden' } },
+      React.createElement('div', { style: { width: (orgCreationProgress.step / orgCreationProgress.total * 100) + '%', height: '100%', background: 'linear-gradient(90deg, var(--gold), var(--teal))', borderRadius: 2, transition: 'width .4s ease' } })
+    ),
+    React.createElement('div', { style: { fontSize: 10.5, color: 'var(--tx-3)', marginTop: 8 } }, 'Step ' + orgCreationProgress.step + ' of ' + orgCreationProgress.total)
+  ) : React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 12,
       color: 'var(--tx-1)',
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Create an organization to manage ", T.staff_term_plural.toLowerCase(), ", cases across your team, and participate in networks. You'll be the admin."), /*#__PURE__*/React.createElement("div", {
+  }, "Create a team to manage ", T.staff_term_plural.toLowerCase(), ", cases, and participate in networks. You'll be the admin."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "ORGANIZATION NAME"), /*#__PURE__*/React.createElement("input", {
+  }, "TEAM NAME"), /*#__PURE__*/React.createElement("input", {
     value: setupData.name,
     onChange: e => setSetupData({
       ...setupData,
       name: e.target.value
     }),
-    placeholder: "e.g. Metro Services Organization"
+    placeholder: "e.g. Metro Services Team"
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "ORGANIZATION TYPE"), /*#__PURE__*/React.createElement("select", {
+  }, "TEAM TYPE"), /*#__PURE__*/React.createElement("select", {
     value: setupData.type,
     onChange: e => setSetupData({
       ...setupData,
@@ -10051,7 +10075,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.6
     }
-  }, "This creates an encrypted Matrix room for your organization. You'll be the admin. ", T.staff_term_plural, " can be invited with specific roles. Your provider account gains org context \u2014 you can manage ", T.staff_term_plural.toLowerCase(), ", cases, and networks from your dashboard."), /*#__PURE__*/React.createElement("button", {
+  }, "This creates an encrypted Matrix room for your team. You'll be the admin. ", T.staff_term_plural, " can be invited with specific roles. Your provider account gains team context \u2014 you can manage ", T.staff_term_plural.toLowerCase(), ", cases, and networks from your dashboard."), /*#__PURE__*/React.createElement("button", {
     onClick: handleCreateOrg,
     className: "b-pri",
     disabled: !setupData.name.trim(),
@@ -10063,7 +10087,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "users",
     s: 16
-  }), " Create Organization")), /*#__PURE__*/React.createElement(Modal, {
+  }), " Create Team"))), /*#__PURE__*/React.createElement(Modal, {
     open: joinOrgModal,
     onClose: () => setJoinOrgModal(false),
     title: "Join Organization"
@@ -10892,10 +10916,24 @@ const ProviderApp = ({
     s: 16
   }), " Save Verification Settings")), /*#__PURE__*/React.createElement(Modal, {
     open: createTeamModal,
-    onClose: () => setCreateTeamModal(false),
-    title: "New Team",
+    onClose: () => { if (!teamCreationProgress) setCreateTeamModal(false); },
+    title: "Create Team",
     w: 520
-  }, /*#__PURE__*/React.createElement("p", {
+  }, teamCreationProgress ? React.createElement('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 0 16px', animation: 'fadeIn .3s ease both' } },
+    React.createElement('div', { style: { position: 'relative', width: 64, height: 64, marginBottom: 24 } },
+      React.createElement('div', { style: { position: 'absolute', inset: 0, border: '3px solid var(--border-1)', borderTopColor: 'var(--gold)', borderRadius: '50%', animation: 'spin 1s linear infinite' } }),
+      React.createElement('div', { style: { position: 'absolute', inset: 8, border: '2px solid var(--border-0)', borderBottomColor: 'var(--teal)', borderRadius: '50%', animation: 'spin 1.5s linear infinite reverse' } }),
+      React.createElement('div', { style: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+        React.createElement(I, { n: 'users', s: 20, c: 'var(--gold)' })
+      )
+    ),
+    React.createElement('div', { style: { fontSize: 15, fontWeight: 600, color: 'var(--tx-0)', marginBottom: 8 } }, 'Setting up your team...'),
+    React.createElement('div', { style: { fontSize: 12, color: 'var(--tx-2)', marginBottom: 20, animation: 'fadeUp .3s ease both' }, key: teamCreationProgress.step }, teamCreationProgress.label),
+    React.createElement('div', { style: { width: '100%', maxWidth: 280, height: 4, background: 'var(--bg-1)', borderRadius: 2, overflow: 'hidden' } },
+      React.createElement('div', { style: { width: (teamCreationProgress.step / teamCreationProgress.total * 100) + '%', height: '100%', background: 'linear-gradient(90deg, var(--gold), var(--teal))', borderRadius: 2, transition: 'width .4s ease' } })
+    ),
+    React.createElement('div', { style: { fontSize: 10.5, color: 'var(--tx-3)', marginTop: 8 } }, 'Step ' + teamCreationProgress.step + ' of ' + teamCreationProgress.total)
+  ) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 12,
       color: 'var(--tx-1)',
@@ -10990,7 +11028,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "users",
     s: 16
-  }), " Create Team")), /*#__PURE__*/React.createElement(Modal, {
+  }), " Create Team"))), /*#__PURE__*/React.createElement(Modal, {
     open: !!teamInviteModal,
     onClose: () => {
       setTeamInviteModal(null);
