@@ -1210,12 +1210,20 @@ const ProviderApp = ({
     if (newValue === oldValue) return;
     // Normalize: profile page sends 'full_name', table sends 'name'
     const isNameField = fieldKey === 'name' || fieldKey === 'full_name';
+    const isBridgeCaseRow = !!(row._case && !row._clientRecord);
+    const canProviderEditField = fieldKey === 'status' || fieldKey === 'priority';
     // Debounce: clear existing timer for this row+field, set a new one
     const timerKey = row.id + ':' + fieldKey;
     if (cellEditTimerRef.current[timerKey]) clearTimeout(cellEditTimerRef.current[timerKey]);
     cellEditTimerRef.current[timerKey] = setTimeout(async () => {
       try {
         const roomId = row.bridgeRoom || row.id;
+        // Client-owned bridge profile fields are state-locked (PL 100) by design.
+        // Providers can only edit org-side metadata in database view.
+        if (isBridgeCaseRow && !canProviderEditField) {
+          showToast('This field is client-owned and cannot be edited from the provider database view.', 'warning');
+          return;
+        }
         let editApplied = false;
         // Emit EO operation to track the edit
         await emitOp(roomId, oldValue ? 'ALT' : 'INS', dot('org', 'individuals', fieldKey), {

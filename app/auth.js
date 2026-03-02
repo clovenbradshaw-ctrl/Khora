@@ -205,6 +205,7 @@ const KhoraAuth = {
   _token: null,
   _userId: null,
   _timelineListenerAttached: false,
+  _cryptoListenersAttached: false,
 
   // ── Public interface (stable contract) ──
   get userId() { return this._userId; },
@@ -271,6 +272,60 @@ const KhoraAuth = {
       };
       window.dispatchEvent(new CustomEvent('khora:state', { detail }));
     });
+  },
+
+
+
+  _setupCryptoListeners() {
+    if (!this._client || this._cryptoListenersAttached || typeof this._client.on !== 'function') return;
+    this._cryptoListenersAttached = true;
+    // Accept incoming verification requests so SDK doesn't ignore them silently.
+    this._client.on('crypto.verification.request', async (request) => {
+      if (!request) return;
+      try {
+        if (typeof request.accept === 'function') {
+          await request.accept();
+        }
+      } catch (e) {
+        console.warn('Verification request handling failed:', e.message);
+      }
+      try {
+        window.dispatchEvent(new CustomEvent('khora:verification_request', {
+          detail: {
+            from: request.otherUserId || request.otherUserId?.toString?.() || null,
+            methods: request.methods || null,
+            phase: request.phase || null
+          }
+        }));
+      } catch {}
+    });
+  },
+
+  async _restoreKeyBackupIfConfigured() {
+    if (!this._client) return false;
+    // Optional user-provided recovery key (kept out of persistent localStorage by default).
+    let recoveryKey = null;
+    try {
+      recoveryKey = sessionStorage.getItem('khora_matrix_recovery_key') || localStorage.getItem('khora_matrix_recovery_key');
+    } catch {}
+    if (!recoveryKey) return false;
+
+    const restoreFns = [
+      'restoreKeyBackupWithRecoveryKey',
+      'restoreKeyBackupWithPassphrase',
+      'restoreKeyBackupWithSecretStorage'
+    ];
+    for (const fnName of restoreFns) {
+      const fn = this._client?.[fnName];
+      if (typeof fn !== 'function') continue;
+      try {
+        await fn.call(this._client, recoveryKey);
+        return true;
+      } catch (e) {
+        console.warn(`${fnName} failed:`, e.message);
+      }
+    }
+    return false;
   },
 
   // NUL(matrix.legacy_idb, {targets: store_names}) — security_cleanup
@@ -348,7 +403,9 @@ const KhoraAuth = {
       });
       await KhoraE2EE.initMandatoryCrypto(this._client);
     }
+    this._setupCryptoListeners();
     await this._client.startClient({ initialSyncLimit: 30 });
+    await this._restoreKeyBackupIfConfigured();
     await new Promise((resolve, reject) => {
       if (this._client.isInitialSyncComplete()) return resolve();
       const timeout = setTimeout(() => reject(new Error('Sync timed out — the server may be overloaded. Please try again.')), 60000);
@@ -450,7 +507,9 @@ const KhoraAuth = {
         this._client = matrixcs.createClient({ baseUrl: homeserver, accessToken, userId, deviceId, cryptoStore });
         await KhoraE2EE.initMandatoryCrypto(this._client);
       }
+      this._setupCryptoListeners();
       await this._client.startClient({ initialSyncLimit: 30 });
+      await this._restoreKeyBackupIfConfigured();
       await new Promise((resolve, reject) => {
         if (this._client.isInitialSyncComplete()) return resolve();
         const timeout = setTimeout(() => reject(new Error('Sync timed out')), 90000);
@@ -484,6 +543,7 @@ const KhoraAuth = {
     this._token = null;
     this._userId = null;
     this._timelineListenerAttached = false;
+    this._cryptoListenersAttached = false;
     LocalVaultCrypto.clear();
     try { sessionStorage.removeItem('khora_session'); } catch {}
     try { await KhoraEncryptedCache.clear(); KhoraEncryptedCache.close(); } catch {}
