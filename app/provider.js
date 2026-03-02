@@ -1216,6 +1216,7 @@ const ProviderApp = ({
     cellEditTimerRef.current[timerKey] = setTimeout(async () => {
       try {
         const roomId = row.bridgeRoom || row.id;
+        let editApplied = false;
         // Emit EO operation to track the edit
         await emitOp(roomId, oldValue ? 'ALT' : 'INS', dot('org', 'individuals', fieldKey), {
           from: oldValue || undefined,
@@ -1250,6 +1251,7 @@ const ProviderApp = ({
                 ? { ...c, sharedData: { ...c.sharedData, full_name: newValue } }
                 : c
             ));
+            editApplied = true;
             syncActiveIndividual(prev => ({
               ...prev,
               name: newValue,
@@ -1289,6 +1291,7 @@ const ProviderApp = ({
                 ? { ...c, meta: { ...c.meta, status: newValue } }
                 : c
             ));
+            editApplied = true;
             syncActiveIndividual(prev => ({
               ...prev,
               status: newValue,
@@ -1309,6 +1312,7 @@ const ProviderApp = ({
               });
               setCaseAssignments(updatedAssignments);
             }
+            editApplied = true;
             syncActiveIndividual(prev => ({
               ...prev,
               priority: newValue
@@ -1328,6 +1332,7 @@ const ProviderApp = ({
                 ? { ...c, sharedData: { ...c.sharedData, [fieldKey]: newValue } }
                 : c
             ));
+            editApplied = true;
             syncActiveIndividual(prev => ({
               ...prev,
               fields: { ...prev.fields, [fieldKey]: { ...(prev.fields?.[fieldKey] || {}), value: newValue, eo_op: oldValue ? 'ALT' : 'INS' } },
@@ -1342,6 +1347,7 @@ const ProviderApp = ({
             setClientRecords(prev => prev.map(r =>
               r.roomId === row.id ? { ...r, client_name: newValue } : r
             ));
+            editApplied = true;
             syncActiveIndividual(prev => ({
               ...prev,
               name: newValue,
@@ -1370,6 +1376,7 @@ const ProviderApp = ({
               await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
               setCaseAssignments(updatedAssignments);
             }
+            editApplied = true;
             // Also update identity state for status field specifically
             if (fieldKey === 'status') {
               const updates = { ...row._clientRecord, status: newValue };
@@ -1377,6 +1384,7 @@ const ProviderApp = ({
               setClientRecords(prev => prev.map(r =>
                 r.roomId === row.id ? { ...r, status: newValue } : r
               ));
+              editApplied = true;
             }
             // Update local UI state
             syncActiveIndividual(prev => ({
@@ -1387,6 +1395,7 @@ const ProviderApp = ({
             }));
           }
         }
+        if (editApplied && showToast) showToast('Edit saved', 'success');
       } catch (e) {
         console.warn('Cell edit event failed:', e.message);
         if (showToast) showToast('Edit failed: ' + e.message, 'error');

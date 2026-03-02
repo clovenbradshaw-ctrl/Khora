@@ -1808,6 +1808,37 @@ const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => 
   React.useEffect(() => { setLocalTable(tableProp); }, [tableProp]);
   const table = localTable || tableProp;
 
+  const loadTableRecords = React.useCallback(() => {
+    if (!table || !team || !svc) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const room = svc.client?.getRoom(team.roomId);
+      const allState = room?.currentState?.events;
+      const found = [];
+      if (allState) {
+        const recMap = allState.get(EVT.TEAM_TABLE_RECORD);
+        if (recMap) {
+          for (const [stateKey, evObj] of recMap.entries()) {
+            if (stateKey.startsWith(table.id + ':')) {
+              const content = evObj.getContent?.() || evObj.content || {};
+              if (content.id && content.status !== 'archived') found.push(content);
+            }
+          }
+        }
+      }
+      found.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+      setRecords(found);
+      // Keep detail panel fresh if selected record changed from another view/table interaction
+      if (detailRecord?.id) {
+        const refreshed = found.find(r => r.id === detailRecord.id) || null;
+        setDetailRecord(refreshed);
+      }
+    } catch (e) {
+      console.warn('[CustomTableView] load error:', e.message);
+    }
+    setLoading(false);
+  }, [detailRecord?.id, svc, table, team]);
+
   // ── Inline cell edit handler (ALT operation) ──
   const cellEditTimerRef = React.useRef({});
   const handleCellEdit = (record, colKey, newValue) => {
@@ -1841,6 +1872,8 @@ const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => 
           from: oldValue ?? null,
           to: newValue
         }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
+        if (showToast) showToast('Record updated', 'success');
+        loadTableRecords();
       } catch (e) {
         showToast('Failed to save: ' + e.message, 'error');
       }
@@ -1921,30 +1954,20 @@ const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => 
 
   // Load existing records from Matrix state
   React.useEffect(() => {
-    if (!table || !team || !svc) { setLoading(false); return; }
-    setLoading(true);
-    try {
-      const room = svc.client?.getRoom(team.roomId);
-      const allState = room?.currentState?.events;
-      const found = [];
-      if (allState) {
-        const recMap = allState.get(EVT.TEAM_TABLE_RECORD);
-        if (recMap) {
-          for (const [stateKey, evObj] of recMap.entries()) {
-            if (stateKey.startsWith(table.id + ':')) {
-              const content = evObj.getContent?.() || evObj.content || {};
-              if (content.id && content.status !== 'archived') found.push(content);
-            }
-          }
-        }
-      }
-      found.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
-      setRecords(found);
-    } catch (e) {
-      console.warn('[CustomTableView] load error:', e.message);
-    }
-    setLoading(false);
-  }, [table?.id, team?.roomId]);
+    loadTableRecords();
+  }, [loadTableRecords]);
+
+  React.useEffect(() => {
+    if (!svc?.client || !team?.roomId || !table?.id) return;
+    const handleState = (_ev, stateEvent) => {
+      if (stateEvent?.getType?.() !== EVT.TEAM_TABLE_RECORD) return;
+      const stateKey = stateEvent?.getStateKey?.() || '';
+      if (!stateKey.startsWith(table.id + ':')) return;
+      loadTableRecords();
+    };
+    svc.client.on('RoomState.events', handleState);
+    return () => svc.client.off('RoomState.events', handleState);
+  }, [loadTableRecords, svc, table?.id, team?.roomId]);
 
   const handleAddRow = async () => {
     // Validate required columns
