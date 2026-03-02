@@ -246,12 +246,14 @@ const EditableCell = ({
   renderDisplay,
   singleClick
 }) => {
+  // Guard: coerce object values to strings to prevent React error #31
+  const safeValue = (value !== null && typeof value === 'object') ? (value.value != null ? String(value.value) : JSON.stringify(value)) : (value || '');
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value || '');
+  const [draft, setDraft] = useState(safeValue);
   const inputRef = useRef(null);
   useEffect(() => {
-    setDraft(value || '');
-  }, [value]);
+    setDraft(safeValue);
+  }, [safeValue]);
   useEffect(() => {
     if (editing && inputRef.current) inputRef.current.focus();
   }, [editing]);
@@ -2553,7 +2555,7 @@ const BulkAddFieldsModal = ({ open, onClose, selectedIds, individuals, fieldDefs
 
   // Build sections: CRM standard + custom fieldDefs
   const allSections = [...CRM_PROFILE_SECTIONS];
-  const customDefs = Object.values(fieldDefs || {}).filter(d => !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
+  const customDefs = Object.values(fieldDefs || {}).filter(d => d && typeof d.key === 'string' && !CRM_STANDARD_KEYS.has(d.key) && d.key !== 'full_name');
   if (customDefs.length > 0) {
     allSections.push({
       id: 'custom', label: 'Custom Fields', icon: 'grid', color: 'purple',
@@ -2819,21 +2821,35 @@ const DatabaseView = ({
 
   // Also include client records that aren't yet in cases (provider-created)
   const caseRoomIds = new Set(cases.map(c => c.bridgeRoomId));
-  const extraClients = (clientRecords || []).filter(r => !caseRoomIds.has(r.roomId)).map(r => ({
-    id: r.roomId,
-    name: r.client_name || 'Unknown',
-    alias: null,
-    status: r.status || 'created',
-    disclosureLevel: 0,
-    lastContact: r.created,
-    assignedTo: (r.owner || '').split(':')[0]?.replace('@', '') || '—',
-    activeCases: 0,
-    priority: 'none',
-    bridgeRoom: r.roomId,
-    fields: {},
-    transferable: false,
-    _clientRecord: r
-  }));
+  const extraClients = (clientRecords || []).filter(r => !caseRoomIds.has(r.roomId)).map(r => {
+    // Load CRM fields from ROSTER_ASSIGN if available
+    const assignment = caseAssignments[r.roomId];
+    const crmFields = {};
+    if (assignment) {
+      // Pull CRM field values stored in the assignment record
+      const assignmentKeys = ['primary', 'staff', 'client_name', 'transferable', 'added'];
+      Object.entries(assignment).forEach(([k, v]) => {
+        if (!assignmentKeys.includes(k) && v !== undefined && v !== null && v !== '') {
+          crmFields[k] = { value: v, disclosed: true, eo_op: 'INS', frame: 'MEANT', room: 'org', editable: true, history: [] };
+        }
+      });
+    }
+    return {
+      id: r.roomId,
+      name: r.client_name || 'Unknown',
+      alias: null,
+      status: assignment?.status || r.status || 'created',
+      disclosureLevel: 0,
+      lastContact: r.created,
+      assignedTo: (assignment?.primary || r.owner || '').split(':')[0]?.replace('@', '') || '—',
+      activeCases: 0,
+      priority: assignment?.priority || 'none',
+      bridgeRoom: r.roomId,
+      fields: crmFields,
+      transferable: false,
+      _clientRecord: r
+    };
+  });
   const allIndividuals = [...individuals, ...extraClients].filter(row => !(trashedIndividuals || {})[row.id]);
   const IND_COLS = [{
     key: 'name',
@@ -2888,14 +2904,14 @@ const DatabaseView = ({
   // Also add provider-enabled field columns from fieldDefs
   enabledFieldCols.forEach(key => {
     if (!fieldKeys.has(key)) {
-      const def = Object.values(fieldDefs || {}).find(d => d.key === key);
+      const def = Object.values(fieldDefs || {}).find(d => d && typeof d.key === 'string' && d.key === key);
       IND_COLS.push({
         key,
-        label: def?.label || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        label: (typeof def?.label === 'string' ? def.label : null) || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         isField: true,
         editable: true,
         data_type: def?.data_type || 'text',
-        options: def?.options
+        options: Array.isArray(def?.options) ? def.options : undefined
       });
     }
   });
@@ -2918,8 +2934,15 @@ const DatabaseView = ({
     if (key === 'fields_count') return Object.keys(row.fields || {}).length;
     if (key === 'transferable') return row.transferable ? 'Yes' : 'Locked';
     if (key === 'linked_records') return (linkedRecords?.[row.id] || []).length;
-    if (row.fields && row.fields[key]) return row.fields[key].value || '';
-    return row[key] || '';
+    if (row.fields && row.fields[key]) {
+      const v = row.fields[key].value;
+      // Guard: never return objects — coerce to string to prevent React error #31
+      if (v !== null && typeof v === 'object') return typeof v.value === 'string' ? v.value : JSON.stringify(v);
+      return v || '';
+    }
+    const rv = row[key];
+    if (rv !== null && typeof rv === 'object') return '';
+    return rv || '';
   };
   const renderIndCell = (row, col) => {
     const k = col.key;
@@ -3029,11 +3052,13 @@ const DatabaseView = ({
       if (f.disclosed === false) return /*#__PURE__*/React.createElement("span", {
         className: "dt-locked"
       }, /*#__PURE__*/React.createElement(DtLock, null), " not disclosed");
+      // Guard: coerce object values to strings to prevent React error #31
+      const displayVal = (f.value !== null && typeof f.value === 'object') ? JSON.stringify(f.value) : (f.value || '—');
       return /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 13
         }
-      }, f.value || '—');
+      }, displayVal);
     }
     return /*#__PURE__*/React.createElement("span", {
       style: {
@@ -3253,7 +3278,7 @@ const DatabaseView = ({
     style: { minWidth: 280, maxHeight: 360, overflow: 'auto' }
   }, /*#__PURE__*/React.createElement("div", {
     className: "dt-dd-label"
-  }, "Toggle column visibility"), Object.values(fieldDefs || {}).filter(d => d.key !== 'full_name').map(d => {
+  }, "Toggle column visibility"), Object.values(fieldDefs || {}).filter(d => d && typeof d.key === 'string' && d.key !== 'full_name').map(d => {
     const isEnabled = fieldKeys.has(d.key) || enabledFieldCols.includes(d.key);
     return /*#__PURE__*/React.createElement("div", {
       key: d.uri || d.key,
@@ -3301,14 +3326,15 @@ const DatabaseView = ({
   enabledFieldCols.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: { display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }
   }, enabledFieldCols.map(k => {
-    const def = Object.values(fieldDefs || {}).find(d => d.key === k);
+    const def = Object.values(fieldDefs || {}).find(d => d && typeof d.key === 'string' && d.key === k);
+    const chipLabel = (typeof def?.label === 'string' ? def.label : null) || k;
     return /*#__PURE__*/React.createElement("span", {
       key: k,
       className: "tag tag-teal",
       style: { fontSize: 10, display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer' },
-      title: def?.definition ? def.definition.slice(0, 100) : 'Click to remove column',
+      title: def?.definition ? String(def.definition).slice(0, 100) : 'Click to remove column',
       onClick: () => setEnabledFieldCols(prev => prev.filter(x => x !== k))
-    }, def?.label || k, " \u00d7");
+    }, chipLabel, " \u00d7");
   }))),
   // Add Column Modal
   /*#__PURE__*/React.createElement(AddColumnModal, {
