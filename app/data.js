@@ -3234,9 +3234,15 @@ const DatabaseView = ({
   }, s.v)))), /*#__PURE__*/React.createElement("div", {
     style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }
   },
-  // Add Column button (primary action)
-  /*#__PURE__*/React.createElement("button", {
+  // New Individual button (primary action)
+  onCreateClient && /*#__PURE__*/React.createElement("button", {
     className: "b-pri b-sm",
+    style: { display: 'flex', alignItems: 'center', gap: 4 },
+    onClick: onCreateClient
+  }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "New ", T?.client_term || 'Individual'),
+  // Add Column button
+  /*#__PURE__*/React.createElement("button", {
+    className: "b-gho b-sm",
     style: { display: 'flex', alignItems: 'center', gap: 4 },
     onClick: () => { setAddFieldDd(false); setAddColumnModal(true); }
   }, /*#__PURE__*/React.createElement(I, { n: "plus", s: 11 }), "Add Column"),
