@@ -894,7 +894,7 @@ const DOMAIN_CONFIG = {
     scope: 'Last known address or place of stay. For unhoused individuals, may be a shelter address, encampment location, or "no fixed address."'
   }, {
     key: 'affiliation',
-    label: 'Organization / Affiliation',
+    label: 'Team / Affiliation',
     category: 'details',
     sensitive: false,
     uri: 'khora:vault/affiliation',
@@ -1016,13 +1016,13 @@ const DOMAIN_CONFIG = {
     },
     org_membership: {
       id: 'org_membership',
-      label: 'Team Member ↔ Organization',
-      description: 'Membership relationship connecting a person to an organization.'
+      label: 'Team Member ↔ Team',
+      description: 'Membership relationship connecting a person to a team.'
     },
     network_membership: {
       id: 'network_membership',
-      label: 'Organization ↔ Network',
-      description: 'Membership relationship connecting an organization to a network.'
+      label: 'Team ↔ Network',
+      description: 'Membership relationship connecting a team to a network.'
     }
   },
   /* ── Org Types ── */
@@ -1044,12 +1044,12 @@ const DOMAIN_CONFIG = {
     // sender name & org visible
     translucent: 'Translucent',
     // org name visible, individual sender hidden
-    opaque: 'Opaque' // only "an organization" — no name, no members
+    opaque: 'Opaque' // only "a team" — no name, no members
   },
   opacityDescriptions: {
     transparent: 'External orgs see which staff member sent each message and your org name.',
     translucent: 'External orgs see your org name but individual sender identities are hidden.',
-    opaque: 'External orgs see only that a response came from an organization. Org name and all member identities are hidden.'
+    opaque: 'External orgs see only that a response came from a team. Org name and all member identities are hidden.'
   },
   /* ── Org Message Access Roles ── */
   // Which org roles can access inter-org messages by default

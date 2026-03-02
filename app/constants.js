@@ -208,19 +208,19 @@ const PROPAGATION_LEVELS = {
     id: 'required',
     label: 'Required',
     color: 'red',
-    desc: 'All organizations in the network must use this form \u2014 it can\u2019t be changed locally'
+    desc: 'All teams in the network must use this form \u2014 it can\u2019t be changed locally'
   },
   standard: {
     id: 'standard',
     label: 'Standard',
     color: 'gold',
-    desc: 'Used by default across the network \u2014 organizations are notified if they diverge'
+    desc: 'Used by default across the network \u2014 teams are notified if they diverge'
   },
   recommended: {
     id: 'recommended',
     label: 'Recommended',
     color: 'blue',
-    desc: 'Suggested by the network \u2014 each organization decides whether to adopt it'
+    desc: 'Suggested by the network \u2014 each team decides whether to adopt it'
   },
   optional: {
     id: 'optional',
@@ -763,7 +763,7 @@ const ROLES = {
     label: 'Org Admin',
     icon: 'users',
     color: 'blue',
-    desc: 'Organization administrator'
+    desc: 'Team administrator'
   },
   network: {
     id: 'network',

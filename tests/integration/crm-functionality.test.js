@@ -255,7 +255,7 @@ const TEST_CRM_PROFILE_SECTIONS = [
     { key: 'outcome', label: 'Outcome Notes', data_type: 'text_long', source: 'crm' },
   ]},
   { id: 'details', label: 'Details', fields: [
-    { key: 'affiliation', label: 'Organization / Affiliation', data_type: 'text', source: 'vault' },
+    { key: 'affiliation', label: 'Team / Affiliation', data_type: 'text', source: 'vault' },
     { key: 'case_notes', label: 'Case Notes', data_type: 'text_long', source: 'vault' },
     { key: 'documents', label: 'Documents', data_type: 'text', source: 'vault', sensitive: true },
     { key: 'history', label: 'Case History', data_type: 'text_long', source: 'vault' },
@@ -417,9 +417,9 @@ describe('CRM Profile Field Management', () => {
 });
 
 /* ════════════════════════════════════════════════════════════════════════════
- * 3. ORGANIZATION ROSTER & TEAM MANAGEMENT
+ * 3. TEAM ROSTER & TEAM MANAGEMENT
  * ════════════════════════════════════════════════════════════════════════════ */
-describe('Organization Roster & Team Management', () => {
+describe('Team Roster & Team Management', () => {
   let mockClient;
 
   beforeEach(() => {

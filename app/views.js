@@ -2932,8 +2932,8 @@ const ResourceProfilePage = ({
     encLabel: "Megolm E2EE",
     label: "Resource Record",
     extra: [
-      { label: 'Record type', value: 'Resource type stored in the organization room' },
-      { label: 'Holder', value: resource.holder || 'Organization' }
+      { label: 'Record type', value: 'Resource type stored in the team room' },
+      { label: 'Holder', value: resource.holder || 'Team' }
     ]
   }), /*#__PURE__*/React.createElement("div", {
     style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '14px 0' }
@@ -3589,7 +3589,7 @@ const ResourcesTableView = ({
       name: rt.name,
       type: rt.category,
       category: rt.category,
-      holder: rt._sourceRoom ? 'Organization' : 'Personal',
+      holder: rt._sourceRoom ? 'Team' : 'Personal',
       holderType: rt._source || 'org',
       relation: relation ? relation.relation_type || 'operates' : '—',
       network: rt._source === 'network' ? 'Network' : '—',
