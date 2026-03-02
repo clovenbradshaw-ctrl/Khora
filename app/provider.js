@@ -1977,7 +1977,13 @@ const ProviderApp = ({
         team_name: activeTeamObj?.name || null,
         sync_status: 'synced'
       };
-      setClientRecords(prev => prev.map(r => (r.roomId === optimisticId ? newRecord : r)));
+      setClientRecords(prev => {
+        const optimisticIdx = prev.findIndex(r => r.roomId === optimisticId);
+        if (optimisticIdx === -1) return [...prev, newRecord];
+        const next = [...prev];
+        next[optimisticIdx] = newRecord;
+        return next;
+      });
       setCreateClientModal(false);
       // Emit EO event to track individual creation
       try {
@@ -2073,7 +2079,13 @@ const ProviderApp = ({
         team_name: activeTeamObj?.name || null,
         sync_status: 'synced'
       };
-      setClientRecords(prev => prev.map(r => (r.roomId === optimisticId ? newRecord : r)));
+      setClientRecords(prev => {
+        const optimisticIdx = prev.findIndex(r => r.roomId === optimisticId);
+        if (optimisticIdx === -1) return [...prev, newRecord];
+        const next = [...prev];
+        next[optimisticIdx] = newRecord;
+        return next;
+      });
       try {
         await emitOp(roomId, 'INS', dot('org', 'individuals', draftName), {
           designation: draftName,
