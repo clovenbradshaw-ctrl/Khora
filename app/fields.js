@@ -103,7 +103,18 @@ const DefinitionPopup = ({ fieldDef, fieldDefs, fieldCrosswalks, onClose, onSave
         status: 'submitted',
         positions: {}
       };
-      if (svc) await svc.setState(targetRoom, EVT.GOV_PROPOSAL, proposal, proposal.id);
+      if (svc) {
+        await svc.setState(targetRoom, EVT.GOV_PROPOSAL, proposal, proposal.id);
+        // EO provenance: DES(schema.governance.<id>, {proposal}) — governance_proposal_created
+        await emitOp(targetRoom, 'DES', dot('schema', 'governance', proposal.id), {
+          proposal_id: proposal.id,
+          type: proposal.type,
+          field_uri: d.uri,
+          summary: proposal.summary,
+          affected_teams: teamsUsing.length,
+          proposed_by: svc.userId
+        }, { type: 'schema', room: targetRoom, epistemic: 'GIVEN', role: 'provider' });
+      }
       if (showToast) showToast(`Governance proposal created — ${teamsUsing.length} team(s) use this field`);
       setEditingAuthority(false);
     } else {
@@ -676,7 +687,18 @@ const FieldDictionaryView = ({
       open: createFieldOpen,
       onClose: () => setCreateFieldOpen(false),
       onSave: onSaveFieldDef,
-      onPropose: onPropose || (async (proposal, room) => { if (svc) await svc.setState(room, EVT.GOV_PROPOSAL, proposal, proposal.id); }),
+      onPropose: onPropose || (async (proposal, room) => {
+        if (svc) {
+          await svc.setState(room, EVT.GOV_PROPOSAL, proposal, proposal.id);
+          // EO provenance: DES(schema.governance.<id>, {proposal}) — governance_proposal_created
+          await emitOp(room, 'DES', dot('schema', 'governance', proposal.id), {
+            proposal_id: proposal.id,
+            type: proposal.type,
+            summary: proposal.summary,
+            proposed_by: svc.userId
+          }, { type: 'schema', room, epistemic: 'GIVEN', role: 'provider' });
+        }
+      }),
       fieldDefs: fieldDefs,
       categories: FIELD_CATEGORIES,
       catLabels: CAT_LABELS,
@@ -1062,12 +1084,28 @@ const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, te
             currentSchema.modified_by = svc.userId;
             currentSchema.change_log = [...(currentSchema.change_log || []), { version: currentSchema.version, summary: change.summary, by: svc.userId, ts: Date.now() }];
             await svc.setState(activeTeam.roomId, EVT.TEAM_SCHEMA, currentSchema);
+            // EO provenance: ALT(schema.team.<room>, {field_added}) — schema_field_added_direct
+            await emitOp(activeTeam.roomId, 'ALT', dot('schema', 'team', activeTeam.roomId), {
+              action: 'add_field',
+              uri: def.uri,
+              label: label.trim(),
+              version: currentSchema.version,
+              modified_by: svc.userId
+            }, { type: 'schema', room: activeTeam.roomId, epistemic: 'GIVEN', role: 'provider' });
             if (showToast) showToast(`Column "${label.trim()}" added to team schema (v${currentSchema.version})`, 'success');
           } else {
             // Save definition first, then add as pending change
             if (onSave) await onSave(def);
             currentSchema.pending_changes = [...(currentSchema.pending_changes || []), change];
             await svc.setState(activeTeam.roomId, EVT.TEAM_SCHEMA, currentSchema);
+            // EO provenance: INS(schema.pending.<id>, {field_proposal}) — schema_field_proposed
+            await emitOp(activeTeam.roomId, 'INS', dot('schema', 'pending', change.id), {
+              change_id: change.id,
+              action: 'add_field',
+              uri: def.uri,
+              label: label.trim(),
+              proposed_by: svc.userId
+            }, { type: 'schema', room: activeTeam.roomId, epistemic: 'GIVEN', role: 'provider' });
             const modeLabel = consentMode.label.toLowerCase();
             if (showToast) showToast(`Column proposal submitted — awaiting ${modeLabel} approval from team`, 'info');
           }
@@ -1131,10 +1169,26 @@ const AddColumnModal = ({ open, onClose, onSave, onPropose, fieldDefs, teams, te
           currentSchema.modified_by = svc.userId;
           currentSchema.change_log = [...(currentSchema.change_log || []), { version: currentSchema.version, summary: change.summary, by: svc.userId, ts: Date.now() }];
           await svc.setState(activeTeam.roomId, EVT.TEAM_SCHEMA, currentSchema);
+          // EO provenance: ALT(schema.team.<room>, {existing_field_added}) — schema_existing_field_added
+          await emitOp(activeTeam.roomId, 'ALT', dot('schema', 'team', activeTeam.roomId), {
+            action: 'add_field',
+            uri: selectedExistingUri,
+            label: existingDef.label,
+            version: currentSchema.version,
+            modified_by: svc.userId
+          }, { type: 'schema', room: activeTeam.roomId, epistemic: 'GIVEN', role: 'provider' });
           if (showToast) showToast(`Column "${existingDef.label}" added to team schema`, 'success');
         } else {
           currentSchema.pending_changes = [...(currentSchema.pending_changes || []), change];
           await svc.setState(activeTeam.roomId, EVT.TEAM_SCHEMA, currentSchema);
+          // EO provenance: INS(schema.pending.<id>, {existing_field_proposal}) — schema_existing_field_proposed
+          await emitOp(activeTeam.roomId, 'INS', dot('schema', 'pending', change.id), {
+            change_id: change.id,
+            action: 'add_field',
+            uri: selectedExistingUri,
+            label: existingDef.label,
+            proposed_by: svc.userId
+          }, { type: 'schema', room: activeTeam.roomId, epistemic: 'GIVEN', role: 'provider' });
           const modeLabel = consentMode.label.toLowerCase();
           if (showToast) showToast(`Column proposal submitted — awaiting ${modeLabel} approval`, 'info');
         }
@@ -1449,10 +1503,25 @@ const CreateTableModal = ({ open, onClose, team, svc, teams, showToast }) => {
         };
         currentSchema.pending_changes = [...(currentSchema.pending_changes || []), change];
         await svc.setState(team.roomId, EVT.TEAM_SCHEMA, currentSchema);
+        // EO provenance: INS(schema.pending.<id>, {table_proposal}) — table_proposal_submitted
+        await emitOp(team.roomId, 'INS', dot('schema', 'pending', change.id), {
+          change_id: change.id,
+          action: 'create_table',
+          table_id: tableId,
+          table_name: tableName.trim(),
+          proposed_by: svc.userId
+        }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
         showToast(`Table proposal submitted — awaiting ${consentMode.label.toLowerCase()} approval`, 'info');
       } else {
         // Apply immediately — store as TEAM_TABLE_DEF state event (state_key = table id)
         await svc.setState(team.roomId, EVT.TEAM_TABLE_DEF, tableDef, tableId);
+        // EO provenance: DES(schema.tables.<id>, {table}) — table_created
+        await emitOp(team.roomId, 'DES', dot('schema', 'tables', tableId), {
+          table_id: tableId,
+          table_name: tableName.trim(),
+          column_count: (tableDef.columns || []).length,
+          created_by: svc.userId
+        }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
         showToast(`Table "${tableName.trim()}" created`, 'success');
       }
       // Reset and close
@@ -1765,14 +1834,13 @@ const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => 
           modified_at: Date.now()
         };
         await svc.setState(team.roomId, EVT.TEAM_TABLE_RECORD, updated, table.id + ':' + record.id);
-        // Emit ALT event for provenance tracking
-        if (typeof emitOp === 'function') {
-          await emitOp(team.roomId, 'ALT', 'org.table.' + table.id + '.' + colKey, {
-            record_id: record.id,
-            from: oldValue ?? null,
-            to: newValue
-          });
-        }
+        // EO provenance: ALT(schema.records.<id>.<col>, {from, to}) — record_field_changed
+        await emitOp(team.roomId, 'ALT', dot('schema', 'records', record.id, colKey), {
+          record_id: record.id,
+          table_id: table.id,
+          from: oldValue ?? null,
+          to: newValue
+        }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
       } catch (e) {
         showToast('Failed to save: ' + e.message, 'error');
       }
@@ -1789,6 +1857,12 @@ const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => 
         try {
           const archived = { ...rec, status: 'archived', modified_by: svc.userId, modified_at: Date.now() };
           await svc.setState(team.roomId, EVT.TEAM_TABLE_RECORD, archived, table.id + ':' + rec.id);
+          // EO provenance: NUL(schema.records.<id>, {reason}) — record_archived
+          await emitOp(team.roomId, 'NUL', dot('schema', 'records', rec.id), {
+            record_id: rec.id,
+            table_id: table.id,
+            reason: 'bulk_archive'
+          }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
         } catch (e) {
           showToast('Failed to delete record: ' + e.message, 'error');
         }
@@ -1826,6 +1900,15 @@ const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => 
         }]
       };
       await svc.setState(team.roomId, EVT.TEAM_TABLE_DEF, updatedTable, table.id);
+      // EO provenance: ALT(schema.tables.<id>.columns, {added}) — column_added
+      await emitOp(team.roomId, 'ALT', dot('schema', 'tables', table.id, 'columns'), {
+        table_id: table.id,
+        column_key: colKey,
+        column_label: newCol.label,
+        data_type: newCol.data_type,
+        version: updatedTable.version,
+        added_by: svc.userId
+      }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
       setLocalTable(updatedTable);
       setNewColData({ label: '', key: '', data_type: 'text', description: '', required: false, sensitive: false, options: '' });
       setAddingColumn(false);
@@ -1884,6 +1967,13 @@ const CustomTableView = ({ table: tableProp, team, svc, showToast, onBack }) => 
         status: 'active'
       };
       await svc.setState(team.roomId, EVT.TEAM_TABLE_RECORD, record, table.id + ':' + recId);
+      // EO provenance: INS(schema.records.<id>, {record}) — record_created
+      await emitOp(team.roomId, 'INS', dot('schema', 'records', recId), {
+        record_id: recId,
+        table_id: table.id,
+        field_count: Object.keys(newRowData).length,
+        created_by: svc.userId
+      }, { type: 'schema', room: team.roomId, epistemic: 'GIVEN', role: 'provider' });
       setRecords(prev => [record, ...prev]);
       setNewRowData({});
       setAddingRow(false);

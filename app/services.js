@@ -1005,6 +1005,12 @@ const ResourceService = {
       type: 'resource' // distinguishes from observation metrics
     };
     await svc.sendEvent(metricsRoomId, EVT.METRIC, metric);
+    // EO provenance: INS(metrics.resource.<hash>, {anonymous_metric}) — resource_metric_emitted
+    await emitOp(metricsRoomId, 'INS', dot('metrics', 'resource', hash.slice(0, 12)), {
+      type: 'resource',
+      category: resourceType.category,
+      period
+    }, { type: 'metrics', room: metricsRoomId, epistemic: 'MEANT' });
     return metric;
   },
   /**
@@ -1046,6 +1052,13 @@ const ResourceService = {
         ts: Date.now()
       };
       await svc.sendEvent(networkMetricsRoomId, EVT.METRIC_AGG, aggregate);
+      // EO provenance: INS(metrics.aggregate.<category>, {anonymous_aggregate}) — aggregate_metric_emitted
+      await emitOp(networkMetricsRoomId, 'INS', dot('metrics', 'aggregate', agg.resource_category), {
+        type: 'resource_aggregate',
+        category: agg.resource_category,
+        period: agg.period,
+        cohort_count: agg.cohorts.size
+      }, { type: 'metrics', room: networkMetricsRoomId, epistemic: 'MEANT' });
       emitted.push(aggregate);
     }
     return emitted;
@@ -1356,6 +1369,12 @@ async function importClientRecords(records, mapping, metricsRoom, onProgress, te
           program: 'import',
           ts: Date.now()
         });
+        // EO provenance: INS(metrics.import.<hash>, {anonymous_metric}) — import_metric_emitted
+        await emitOp(metricsRoom, 'INS', dot('metrics', 'import', hash.slice(0, 12)), {
+          type: 'import',
+          program: 'import',
+          batch_id: batchId
+        }, { type: 'metrics', room: metricsRoom, epistemic: 'MEANT' });
       }
 
       // Accumulate demographic summary (anonymized only)
@@ -1399,6 +1418,13 @@ async function importClientRecords(records, mapping, metricsRoom, onProgress, te
         demographics_summary: results.demographics,
         ts: Date.now()
       });
+      // EO provenance: DES(import.manifest.<batchId>, {summary}) — import_manifest_recorded
+      await emitOp(metricsRoom, 'DES', dot('import', 'manifest', batchId), {
+        batch_id: batchId,
+        total_records: total,
+        successful: results.created.length,
+        failed: results.errors.length
+      }, { type: 'metrics', room: metricsRoom, epistemic: 'MEANT' });
     } catch {}
   }
   return results;

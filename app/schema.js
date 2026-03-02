@@ -764,6 +764,15 @@ const FormBuilder = ({
         savedAt: new Date().toISOString()
       };
       await svc.setState(schemaRoomId, EVT.SCHEMA_FORM, schemaForm, schemaForm.id);
+      // EO provenance: DES(schema.forms.<id>, {form}) — schema_form_persisted
+      await emitOp(schemaRoomId, 'DES', dot('schema', 'forms', schemaForm.id), {
+        form_id: schemaForm.id,
+        form_key: schemaForm.key,
+        name: schemaForm.name,
+        version: schemaForm.version,
+        field_count: (schemaForm.fields || []).length,
+        propagation: schemaForm.source?.propagation || 'optional'
+      }, { type: 'schema', room: schemaRoomId, epistemic: 'GIVEN', role: isOrg ? 'org' : 'local' });
       updateForm(f => ({
         ...f,
         status: 'persisted',

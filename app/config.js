@@ -2409,6 +2409,12 @@ async function emitMetric(metricsRoom, clientId, observation, demographics, prog
     ts: Date.now()
   };
   await svc.sendEvent(metricsRoom, EVT.METRIC, metric);
+  // EO provenance: INS(metrics.observation.<hash>, {anonymous_metric}) — metric_emitted
+  await emitOp(metricsRoom, 'INS', dot('metrics', 'observation', hash.slice(0, 12)), {
+    type: 'observation',
+    program: program || 'general',
+    field_count: Object.keys(anonDemo).length
+  }, { type: 'metrics', room: metricsRoom, epistemic: 'MEANT' });
   return metric;
 }
 
