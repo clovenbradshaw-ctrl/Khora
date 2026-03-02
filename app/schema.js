@@ -5720,7 +5720,7 @@ const SchemaWorkbench = ({
   catColors,
   onSaveFieldDef
 }) => {
-  const [activeTab, setActiveTab] = useState('forms');
+  const [activeTab, setActiveTab] = useState('columns');
   const [form, setForm] = useState(null);
   const [savedForms, setSavedForms] = useState([]);
   const [frameworks, setFrameworks] = useState([]);
@@ -5789,10 +5789,10 @@ const SchemaWorkbench = ({
   };
 
   const tabs = [
-    { id: 'dictionary', label: 'Dictionary', icon: 'book', count: Object.keys(fieldDefs || {}).length + VAULT_FIELDS.length },
-    { id: 'uri_libraries', label: 'URI Libraries', icon: 'globe', count: URI_LIBRARIES.length },
-    { id: 'forms', label: 'Forms', icon: 'layers', count: allForms.length },
     { id: 'columns', label: 'Columns', icon: 'grid', count: null },
+    { id: 'dictionary', label: 'Dictionary', icon: 'book', count: Object.keys(fieldDefs || {}).length + VAULT_FIELDS.length },
+    { id: 'forms', label: 'Forms', icon: 'layers', count: allForms.length },
+    { id: 'uri_libraries', label: 'URI Libraries', icon: 'globe', count: URI_LIBRARIES.length },
     { id: 'governance', label: 'Governance', icon: 'shieldCheck', count: null }
   ];
 

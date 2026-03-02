@@ -1230,6 +1230,12 @@ const ProviderApp = ({
             await svc.setState(roomId, EVT.BRIDGE_REFS, {
               fields: updatedData
             });
+            // Update local cases state so UI reflects the change
+            setCases(prev => prev.map(c =>
+              c.bridgeRoomId === roomId
+                ? { ...c, sharedData: { ...c.sharedData, full_name: newValue } }
+                : c
+            ));
             // Update client_name in ROSTER_ASSIGN for org room
             if (orgRoom && caseAssignments[roomId]) {
               const updatedAssignments = {
@@ -1244,6 +1250,26 @@ const ProviderApp = ({
               });
               setCaseAssignments(updatedAssignments);
             }
+          } else if (fieldKey === 'status') {
+            // Update status in ROSTER_ASSIGN and local state
+            if (orgRoom && caseAssignments[roomId]) {
+              const updatedAssignments = {
+                ...caseAssignments
+              };
+              updatedAssignments[roomId] = {
+                ...updatedAssignments[roomId],
+                status: newValue
+              };
+              await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, {
+                assignments: updatedAssignments
+              });
+              setCaseAssignments(updatedAssignments);
+            }
+            setCases(prev => prev.map(c =>
+              c.bridgeRoomId === roomId
+                ? { ...c, meta: { ...c.meta, status: newValue } }
+                : c
+            ));
           } else if (fieldKey === 'priority') {
             // Update priority in ROSTER_ASSIGN
             if (orgRoom && caseAssignments[roomId]) {
@@ -1268,6 +1294,12 @@ const ProviderApp = ({
             await svc.setState(roomId, EVT.BRIDGE_REFS, {
               fields: updatedData
             });
+            // Update local cases state so UI reflects the change
+            setCases(prev => prev.map(c =>
+              c.bridgeRoomId === roomId
+                ? { ...c, sharedData: { ...c.sharedData, [fieldKey]: newValue } }
+                : c
+            ));
           }
         } else if (row._clientRecord) {
           // Client record rows — update identity state
@@ -1279,6 +1311,7 @@ const ProviderApp = ({
         }
       } catch (e) {
         console.warn('Cell edit event failed:', e.message);
+        if (showToast) showToast('Edit failed: ' + e.message, 'error');
       }
       delete cellEditTimerRef.current[timerKey];
     }, 300); // 300ms debounce
