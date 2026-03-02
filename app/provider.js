@@ -2029,6 +2029,7 @@ const ProviderApp = ({
   // ─── Team CRUD ───
   const handleCreateTeam = async () => {
     if (!newTeamName.trim()) return;
+    if (teamCreationProgress) return; // guard against double-click
     try {
       setTeamCreationProgress({ step: 1, total: 4, label: 'Creating encrypted room...' });
       const teamHue = distinctTeamHue(teams.length);
@@ -11027,7 +11028,7 @@ const ProviderApp = ({
   }, "Org affiliation:"), " This team will be tagged with your org \"", orgMeta.name || 'Organization', "\" but is not restricted to org members."), /*#__PURE__*/React.createElement("button", {
     onClick: handleCreateTeam,
     className: "b-pri",
-    disabled: !newTeamName.trim(),
+    disabled: !newTeamName.trim() || !!teamCreationProgress,
     style: {
       width: '100%',
       padding: 12,
@@ -11036,7 +11037,7 @@ const ProviderApp = ({
   }, /*#__PURE__*/React.createElement(I, {
     n: "users",
     s: 16
-  }), " Create Team"))), /*#__PURE__*/React.createElement(Modal, {
+  }), teamCreationProgress ? " Creating..." : " Create Team"))), /*#__PURE__*/React.createElement(Modal, {
     open: !!teamInviteModal,
     onClose: () => {
       setTeamInviteModal(null);
