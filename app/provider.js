@@ -1108,7 +1108,7 @@ const ProviderApp = ({
           unit: content.unit || 'unit',
           status: content.status || 'active',
           allocatedBy: (content.allocated_by || '').split(':')[0]?.replace('@', '') || T.staff_term,
-          org: 'Organization',
+          org: 'Team',
           at: content.allocated_at || e.getTs(),
           expiresAt: content.expires_at || null,
           bridgeRoom: c.bridgeRoomId,
@@ -1805,7 +1805,7 @@ const ProviderApp = ({
     // Verify target is org staff
     const targetStaff = staff.find(s => s.userId === transferTarget);
     if (!targetStaff) {
-      showToast('Target must be a member of your organization', 'error');
+      showToast('Target must be a member of your team', 'error');
       return;
     }
     try {
@@ -2212,7 +2212,7 @@ const ProviderApp = ({
       const uid = teamInviteUserId.trim();
       // Warn if invitee is not an org member (cross-org teams are allowed but noteworthy)
       if (orgRoom && staff.length > 0 && !staff.find(s => s.userId === uid)) {
-        showToast(`Note: ${uid} is not a member of your organization`, 'info');
+        showToast(`Note: ${uid} is not a member of your team`, 'info');
       }
       // Invite user to the team room
       if (svc.client) await svc.client.invite(teamInviteModal.roomId, uid);else await svc._api('POST', `/rooms/${encodeURIComponent(teamInviteModal.roomId)}/invite`, {
@@ -2414,7 +2414,7 @@ const ProviderApp = ({
   const handleCreateNetwork = async () => {
     if (!networkName.trim()) return;
     if (!orgRoom) {
-      showToast('Create or join an organization before creating a network', 'warn');
+      showToast('Create or join a team before creating a network', 'warn');
       return;
     }
     try {
@@ -2492,7 +2492,7 @@ const ProviderApp = ({
   const handleJoinNetwork = async () => {
     if (!joinNetworkId.trim()) return;
     if (!orgRoom) {
-      showToast('Create or join an organization before joining a network', 'warn');
+      showToast('Create or join a team before joining a network', 'warn');
       return;
     }
     try {
@@ -2634,7 +2634,7 @@ const ProviderApp = ({
       if (personalRelation) {
         await svc.setState(rosterRoom, EVT.RESOURCE_RELATION, {}, personalRelation.id);
       }
-      showToast(`"${rt.name}" promoted to organization`, 'success');
+      showToast(`"${rt.name}" promoted to team`, 'success');
       setTimeout(() => loadResources(orgRoom, networkRoom, rosterRoom), 800);
     } catch (e) {
       showToast('Error promoting resource: ' + e.message, 'error');
@@ -2893,7 +2893,7 @@ const ProviderApp = ({
     if (!setupData.name.trim()) return;
     try {
       setOrgCreationProgress({ step: 1, total: 5, label: 'Creating encrypted room...' });
-      const org = await svc.createRoom(`[Khora Org] ${setupData.name}`, `Organization: ${setupData.name}`, [{
+      const org = await svc.createRoom(`[Khora Org] ${setupData.name}`, `Team: ${setupData.name}`, [{
         type: EVT.IDENTITY,
         state_key: '',
         content: {
@@ -3065,7 +3065,7 @@ const ProviderApp = ({
       if (updatedRoster?.staff) setStaff(updatedRoster.staff);
       setJoinOrgModal(false);
       setJoinOrgId('');
-      showToast(`Joined organization${meta?.name ? ' "' + meta.name + '"' : ''}`, 'success');
+      showToast(`Joined team${meta?.name ? ' "' + meta.name + '"' : ''}`, 'success');
     } catch (e) {
       if (e.message?.includes('forbidden') || e.message?.includes('not invited')) {
         showToast('Cannot join — you must be invited by an org admin first. Share your Matrix ID with them.', 'error');
@@ -3113,7 +3113,7 @@ const ProviderApp = ({
       return;
     }
     try {
-      await svc.kick(orgRoom, userId, 'Removed from organization');
+      await svc.kick(orgRoom, userId, 'Removed from team');
       const newStaff = staff.filter(s => s.userId !== userId);
       await svc.setState(orgRoom, EVT.ORG_ROSTER, {
         staff: newStaff
@@ -3174,7 +3174,7 @@ const ProviderApp = ({
       // Store challenge in org room state (hashed code only)
       await svc.setState(orgRoom, EVT.ORG_VERIFY_CHALLENGE, challenge, svc.userId);
       // Attempt to deliver via webhook; fall back to Matrix DM display
-      const sent = await EmailVerification.sendCodeViaWebhook(verifyEmail, plainCode, orgMeta.name || 'Organization');
+      const sent = await EmailVerification.sendCodeViaWebhook(verifyEmail, plainCode, orgMeta.name || 'Team');
       if (!sent) {
         // Fallback: show code in-app for development/demo (in production, email infra handles this)
         showToast(`Verification code: ${plainCode} (demo mode — production sends via email)`, 'info', 12000);
@@ -3628,13 +3628,13 @@ const ProviderApp = ({
         };
       case 'translucent':
         return {
-          label: env.org_name || 'Organization',
+          label: env.org_name || 'Team',
           org: env.org_name,
           isOwn
         };
       case 'opaque':
         return {
-          label: 'An organization',
+          label: 'A team',
           org: null,
           isOwn
         };
@@ -3778,7 +3778,7 @@ const ProviderApp = ({
     const ch = orgChannels.find(ch => ch.roomId === roomId);
     if (ch) {
       const peerOrgId = ch.orgs?.find(o => o !== orgRoom);
-      return ch.org_names?.[peerOrgId] || peerOrgId?.slice(0, 20) || 'Organization';
+      return ch.org_names?.[peerOrgId] || peerOrgId?.slice(0, 20) || 'Team';
     }
     const dm = teamDMs.find(d => d.roomId === roomId);
     if (dm) return dm.peerName || dm.peerId;
@@ -3895,7 +3895,7 @@ const ProviderApp = ({
       { id: 'hierarchy', icon: 'globe', label: 'My Network' },
       { id: 'activity', icon: 'layers', label: 'Activity Stream' },
       { id: 'transparency', icon: 'eye', label: 'Transparency' },
-      ...(orgRoom ? [{ id: 'org-settings', icon: 'briefcase', label: 'Organization' }] : [])
+      ...(orgRoom ? [{ id: 'org-settings', icon: 'briefcase', label: 'Team Settings' }] : [])
     ],
     onMoreNavigate: id => { setView(id); setActiveCase(null); setActiveIndividual(null); setActiveResourceProfile(null); }
   },
@@ -4073,7 +4073,7 @@ const ProviderApp = ({
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap'
     }
-  }, orgMeta.name || 'Organization'), /*#__PURE__*/React.createElement("span", {
+  }, orgMeta.name || 'Team'), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 9,
       color: 'var(--tx-2)',
@@ -4119,7 +4119,7 @@ const ProviderApp = ({
       color: 'var(--tx-3)',
       fontStyle: 'italic'
     }
-  }, "No organization \u2014 unaffiliated")), /*#__PURE__*/React.createElement("div", {
+  }, "No team \u2014 unaffiliated")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       alignItems: 'center',
@@ -4311,7 +4311,7 @@ const ProviderApp = ({
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap'
     }
-  }, orgMeta.name || 'Organization')), orgMeta.type && /*#__PURE__*/React.createElement("span", {
+  }, orgMeta.name || 'Team')), orgMeta.type && /*#__PURE__*/React.createElement("span", {
     className: "tag tag-teal",
     style: {
       fontSize: 8,
@@ -4570,7 +4570,7 @@ const ProviderApp = ({
       color: 'var(--blue)',
       fontFamily: 'var(--serif)'
     }
-  }, orgMeta.name || 'Organization'), orgMeta.type && /*#__PURE__*/React.createElement("span", {
+  }, orgMeta.name || 'Team'), orgMeta.type && /*#__PURE__*/React.createElement("span", {
     className: "tag tag-teal",
     style: {
       fontSize: 8
@@ -4938,7 +4938,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Encrypted conversations with ", T.client_term_plural.toLowerCase(), orgRoom ? ' and organizations' : '', " in one place."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, "Encrypted conversations with ", T.client_term_plural.toLowerCase(), orgRoom ? ' and teams' : '', " in one place."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     roomId: inboxConvo,
     encrypted: true,
@@ -5010,7 +5010,7 @@ const ProviderApp = ({
     if (totalCount === 0) return /*#__PURE__*/React.createElement("div", { style: { padding: '40px 16px', textAlign: 'center' } }, /*#__PURE__*/React.createElement(I, { n: "msg", s: 28, c: "var(--tx-3)" }), /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 11.5, marginTop: 10 } }, "No conversations yet"), /*#__PURE__*/React.createElement("p", { style: { color: 'var(--tx-3)', fontSize: 10.5, marginTop: 4 } }, T.client_term_plural, " must share a bridge, or create an org channel."));
     const convoTypeColor = t => t === 'case' ? 'teal' : t === 'channel' ? 'blue' : 'purple';
     const convoTypeLabel = t => t === 'case' ? 'Direct' : t === 'channel' ? 'Channel' : 'DM';
-    const convoName = (type, data) => type === 'case' ? (data.sharedData.full_name || data.clientUserId) : type === 'channel' ? (() => { const pid = data.orgs?.find(o => o !== orgRoom); return data.org_names?.[pid] || pid?.slice(0, 20) || 'Organization'; })() : (data.peerName || data.peerId);
+    const convoName = (type, data) => type === 'case' ? (data.sharedData.full_name || data.clientUserId) : type === 'channel' ? (() => { const pid = data.orgs?.find(o => o !== orgRoom); return data.org_names?.[pid] || pid?.slice(0, 20) || 'Team'; })() : (data.peerName || data.peerId);
     const renderItem = convo => {
       const { type, id, data } = convo;
       const isActive = inboxConvo === id;
@@ -5307,7 +5307,7 @@ const ProviderApp = ({
         fontSize: 11.5,
         color: 'var(--gold)'
       }
-    }, "Your role (", orgRole, ") does not have permission to respond. Ask an organization admin to update your role to enable messaging."))));
+    }, "Your role (", orgRole, ") does not have permission to respond. Ask a team admin to update your role to enable messaging."))));
   })() : /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
@@ -5689,7 +5689,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginTop: 4
     }
-  }, "Flexible groups of people for collaboration. Teams can span across organizations \u2014 anyone with a Matrix ID can be invited."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, "Flexible groups of people for collaboration. Teams can span across teams \u2014 anyone with a Matrix ID can be invited."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     encrypted: true,
     encLabel: "Megolm E2EE",
@@ -5782,7 +5782,7 @@ const ProviderApp = ({
       fontSize: 11.5,
       marginTop: 4
     }
-  }, "Create a team to collaborate with people across your organization or beyond.")) : /*#__PURE__*/React.createElement("div", {
+  }, "Create a team to collaborate with people across your team or beyond.")) : /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))',
@@ -7005,7 +7005,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginBottom: 20
     }
-  }, "Teams and organizations you\u2019re part of, shown as a hierarchy."), (() => {
+  }, "Teams you\u2019re part of, shown as a hierarchy."), (() => {
     /* ─── Build hierarchy tree ─── */
     const rootTeams = teams.filter(t => !t.hierarchy?.parent_team_id);
     const renderTeamNode = (team, depth) => {
@@ -7062,14 +7062,14 @@ const ProviderApp = ({
             isOwnOrg && /*#__PURE__*/React.createElement("span", { className: "tag tag-blue", style: { fontSize: 8 } }, "YOU"),
             nm.role && nm.role !== 'member' && /*#__PURE__*/React.createElement("span", { className: "tag tag-gold", style: { fontSize: 8 } }, nm.role.toUpperCase())
           );
-        }) : /*#__PURE__*/React.createElement("p", { style: { fontSize: 11, color: 'var(--tx-3)', marginLeft: 20, fontStyle: 'italic' } }, "No member organizations yet")
+        }) : /*#__PURE__*/React.createElement("p", { style: { fontSize: 11, color: 'var(--tx-3)', marginLeft: 20, fontStyle: 'italic' } }, "No member teams yet")
       ),
       /* ─── Organization level ─── */
       orgRoom && /*#__PURE__*/React.createElement("div", { className: "card", style: { marginBottom: 12 } },
         /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 } },
           /*#__PURE__*/React.createElement(I, { n: "briefcase", s: 16, c: "var(--gold)" }),
-          /*#__PURE__*/React.createElement("span", { className: "section-label", style: { marginBottom: 0 } }, "ORGANIZATION"),
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: 600, marginLeft: 4 } }, orgMeta?.name || 'My Organization')
+          /*#__PURE__*/React.createElement("span", { className: "section-label", style: { marginBottom: 0 } }, "TEAM"),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 12.5, fontWeight: 600, marginLeft: 4 } }, orgMeta?.name || 'My Team')
         ),
         /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 10, marginBottom: 10, marginLeft: 24 } },
           /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: 'var(--tx-2)' } }, (orgStaff || []).length, " staff member", (orgStaff || []).length !== 1 ? "s" : ""),
@@ -7129,20 +7129,20 @@ const ProviderApp = ({
       fontWeight: 700,
       marginBottom: 4
     }
-  }, "Organization Settings"), /*#__PURE__*/React.createElement("p", {
+  }, "Team Settings"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 12.5,
       marginBottom: 24
     }
-  }, "Manage your organization metadata, privacy, and inter-org messaging configuration."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, "Manage your team metadata, privacy, and inter-org messaging configuration."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     roomId: orgRoom,
     encrypted: true,
     encLabel: "Megolm E2EE",
     label: "Org Settings",
     members: staff.map(s => ({ userId: s.userId, role: s.role })),
-    extra: [{ label: 'Org room', value: 'Organization metadata, roster, opacity settings, terminology, and email verification config are stored as state events in this shared org room.' }, { label: 'Access', value: 'All org ' + T.staff_term_plural.toLowerCase() + ' can read. Only admins can modify settings.' }]
+    extra: [{ label: 'Org room', value: 'Team metadata, roster, opacity settings, terminology, and email verification config are stored as state events in this shared org room.' }, { label: 'Access', value: 'All org ' + T.staff_term_plural.toLowerCase() + ' can read. Only admins can modify settings.' }]
   }), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
@@ -7150,7 +7150,7 @@ const ProviderApp = ({
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "ORGANIZATION DETAILS"), /*#__PURE__*/React.createElement("div", {
+  }, "TEAM DETAILS"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -7240,7 +7240,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Customize what your organization calls its service recipients and service providers. These terms appear throughout the interface for all ", T.staff_term_plural.toLowerCase(), " in your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Customize what your team calls its service recipients and service providers. These terms appear throughout the interface for all ", T.staff_term_plural.toLowerCase(), " in your team."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -7345,7 +7345,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Controls how much of your organization's identity is revealed when communicating with other organizations. This affects all outgoing inter-org messages."), /*#__PURE__*/React.createElement("div", {
+  }, "Controls how much of your team's identity is revealed when communicating with other teams. This affects all outgoing inter-org messages."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -7434,7 +7434,7 @@ const ProviderApp = ({
       fontSize: 11,
       color: 'var(--tx-1)'
     }
-  }, level === 'transparent' ? `"${providerProfile.display_name || 'Jamie R.'} from ${orgMeta.name || 'Your Org'}"` : level === 'translucent' ? `"${orgMeta.name || 'Your Org'}"` : '"An organization"')))))), /*#__PURE__*/React.createElement("div", {
+  }, level === 'transparent' ? `"${providerProfile.display_name || 'Jamie R.'} from ${orgMeta.name || 'Your Org'}"` : level === 'translucent' ? `"${orgMeta.name || 'Your Org'}"` : '"A team"')))))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
@@ -7484,7 +7484,7 @@ const ProviderApp = ({
       marginBottom: 12,
       lineHeight: 1.6
     }
-  }, "Control which ", T.staff_term_plural.toLowerCase(), " roles can read and respond to messages sent to your organization from other organizations."), /*#__PURE__*/React.createElement("div", {
+  }, "Control which ", T.staff_term_plural.toLowerCase(), " roles can read and respond to messages sent to your team from other teams."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'grid',
       gridTemplateColumns: '1fr 1fr',
@@ -7613,7 +7613,7 @@ const ProviderApp = ({
       fontSize: 11,
       marginTop: 6
     }
-  }, "No messaging channels yet. Create one to start communicating with another organization.")) : /*#__PURE__*/React.createElement("div", {
+  }, "No messaging channels yet. Create one to start communicating with another team.")) : /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -7707,7 +7707,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       marginTop: 8
     }
-  }, "Share this room ID with providers who want to join your organization, or with other orgs to open a messaging channel.")), /*#__PURE__*/React.createElement("div", {
+  }, "Share this room ID with providers who want to join your team, or with other orgs to open a messaging channel.")), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginBottom: 16
@@ -7814,7 +7814,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       lineHeight: 1.6
     }
-  }, "Email verification is disabled. Enable it to require ", T.staff_term_plural.toLowerCase(), " to confirm their identity with an organization email address before accessing cases."))), view === 'staff' && orgRoom && /*#__PURE__*/React.createElement("div", {
+  }, "Email verification is disabled. Enable it to require ", T.staff_term_plural.toLowerCase(), " to confirm their identity with a team email address before accessing cases."))), view === 'staff' && orgRoom && /*#__PURE__*/React.createElement("div", {
     className: "anim-up",
     style: {
       maxWidth: 820,
@@ -7846,7 +7846,7 @@ const ProviderApp = ({
     encLabel: "Megolm E2EE",
     label: T.staff_term_plural + ' Roster',
     members: staff.map(s => ({ userId: s.userId, role: s.role })),
-    extra: [{ label: 'Storage', value: T.staff_term_plural + ' roster is stored as a state event in the shared organization room. All org members can read the roster; only admins can modify it.' }]
+    extra: [{ label: 'Storage', value: T.staff_term_plural + ' roster is stored as a state event in the shared team room. All org members can read the roster; only admins can modify it.' }]
   })), orgRole === 'admin' && /*#__PURE__*/React.createElement("button", {
     onClick: () => setInviteModal(true),
     className: "b-pri b-sm",
@@ -8100,7 +8100,7 @@ const ProviderApp = ({
       lineHeight: 1.6,
       marginBottom: 10
     }
-  }, "Your organization requires email verification for your role (", activeOrgRoleLabels[orgRole], "). Verify your identity with an approved email address", emailVerifyConfig.required_domains?.length > 0 ? ` (${emailVerifyConfig.required_domains.map(d => '@' + d).join(', ')})` : '', "."), /*#__PURE__*/React.createElement("button", {
+  }, "Your team requires email verification for your role (", activeOrgRoleLabels[orgRole], "). Verify your identity with an approved email address", emailVerifyConfig.required_domains?.length > 0 ? ` (${emailVerifyConfig.required_domains.map(d => '@' + d).join(', ')})` : '', "."), /*#__PURE__*/React.createElement("button", {
     onClick: openEmailVerifyModal,
     className: "b-pri",
     style: {
@@ -8130,7 +8130,7 @@ const ProviderApp = ({
       fontSize: 12.5,
       marginBottom: 20
     }
-  }, "Networks are org-to-org relationships. Organizations join voluntarily; the network defines shared vocabulary that propagates."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
+  }, "Networks are org-to-org relationships. Teams join voluntarily; the network defines shared vocabulary that propagates."), /*#__PURE__*/React.createElement(StorageTransparencyBadge, {
     storageType: "matrix",
     roomId: networkRoom,
     encrypted: true,
@@ -8154,12 +8154,12 @@ const ProviderApp = ({
       marginTop: 8,
       marginBottom: 8
     }
-  }, "Create or join an organization to participate in networks"), /*#__PURE__*/React.createElement("p", {
+  }, "Create or join a team to participate in networks"), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 11,
       color: 'var(--tx-3)'
     }
-  }, "Networks are org-to-org relationships. An independent provider who wants to join a network first needs to create an organization."))) : !networkRoom ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "Networks are org-to-org relationships. An independent provider who wants to join a network first needs to create a team."))) : !networkRoom ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       textAlign: 'center',
@@ -8279,7 +8279,7 @@ const ProviderApp = ({
       display: 'block',
       marginBottom: 2
     }
-  }, "Invite Organization"), /*#__PURE__*/React.createElement("span", {
+  }, "Invite Team"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 10,
       color: 'var(--tx-2)'
@@ -8405,7 +8405,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       marginBottom: 10
     }
-  }, "Network schema organized into forms (GIVEN data collection) and interpretations (MEANT frameworks). Forms propagate to member organizations and down to clients through providers."), /*#__PURE__*/React.createElement("div", {
+  }, "Network schema organized into forms (GIVEN data collection) and interpretations (MEANT frameworks). Forms propagate to member teams and down to clients through providers."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -8779,7 +8779,7 @@ const ProviderApp = ({
       fontSize: 22,
       fontWeight: 700
     }
-  }, "Organization Inbox"), /*#__PURE__*/React.createElement("p", {
+  }, "Team Inbox"), /*#__PURE__*/React.createElement("p", {
     style: {
       color: 'var(--tx-1)',
       fontSize: 12.5,
@@ -8876,7 +8876,7 @@ const ProviderApp = ({
       fontSize: 11.5,
       marginTop: 4
     }
-  }, "Create a channel to start communicating with another organization."), /*#__PURE__*/React.createElement("button", {
+  }, "Create a channel to start communicating with another team."), /*#__PURE__*/React.createElement("button", {
     onClick: () => setComposeOrgModal(true),
     className: "b-pri",
     style: {
@@ -9177,7 +9177,7 @@ const ProviderApp = ({
         fontSize: 11.5,
         color: 'var(--gold)'
       }
-    }, "Your role (", activeOrgRoleLabels[orgRole] || orgRole, ") does not have permission to respond to org messages. Ask an organization admin to update your role to enable messaging."))));
+    }, "Your role (", activeOrgRoleLabels[orgRole] || orgRole, ") does not have permission to respond to org messages. Ask a team admin to update your role to enable messaging."))));
   })())), view === 'resources' && !activeCase && /*#__PURE__*/React.createElement(ResourcesTableView, {
     resourceTypes: resourceTypes,
     resourceRelations: resourceRelations,
@@ -9261,7 +9261,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Define a new resource type for your catalog. Resource types describe the goods or services your organization can track and allocate to ", T.client_term_plural.toLowerCase(), "."), /*#__PURE__*/React.createElement("div", {
+  }, "Define a new resource type for your catalog. Resource types describe the goods or services your team can track and allocate to ", T.client_term_plural.toLowerCase(), "."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -10098,7 +10098,7 @@ const ProviderApp = ({
   }), " Create Team"))), /*#__PURE__*/React.createElement(Modal, {
     open: joinOrgModal,
     onClose: () => setJoinOrgModal(false),
-    title: "Join Organization"
+    title: "Join Team"
   }, /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 12,
@@ -10106,13 +10106,13 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Enter the Matrix room ID of an existing Khora organization to join it. The org admin must have invited you."), /*#__PURE__*/React.createElement("div", {
+  }, "Enter the Matrix room ID of an existing Khora team to join it. The org admin must have invited you."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "ORGANIZATION ROOM ID"), /*#__PURE__*/React.createElement("input", {
+  }, "TEAM ROOM ID"), /*#__PURE__*/React.createElement("input", {
     value: joinOrgId,
     onChange: e => setJoinOrgId(e.target.value),
     placeholder: "!roomid:matrix.org"
@@ -10122,7 +10122,7 @@ const ProviderApp = ({
     style: {
       width: '100%'
     }
-  }, "Join Organization")), /*#__PURE__*/React.createElement(Modal, {
+  }, "Join Team")), /*#__PURE__*/React.createElement(Modal, {
     open: inviteModal,
     onClose: () => setInviteModal(false),
     title: 'Invite ' + T.staff_term
@@ -10133,7 +10133,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Invite a ", T.staff_term.toLowerCase(), " to your organization. They'll receive access to cases based on their assigned role."), /*#__PURE__*/React.createElement("div", {
+  }, "Invite a ", T.staff_term.toLowerCase(), " to your team. They'll receive access to cases based on their assigned role."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -10182,7 +10182,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Create a new governance network for your organization. Other organizations can join. Networks define shared vocabulary and schema propagation."), /*#__PURE__*/React.createElement("div", {
+  }, "Create a new governance network for your team. Other teams can join. Networks define shared vocabulary and schema propagation."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -10202,7 +10202,7 @@ const ProviderApp = ({
       fontSize: 11.5,
       color: 'var(--tx-1)'
     }
-  }, "The network room will contain shared schema definitions that propagate to all member organizations. Your org \"", orgMeta.name, "\" will be the network admin."), /*#__PURE__*/React.createElement("button", {
+  }, "The network room will contain shared schema definitions that propagate to all member teams. Your org \"", orgMeta.name, "\" will be the network admin."), /*#__PURE__*/React.createElement("button", {
     onClick: handleCreateNetwork,
     className: "b-pri",
     style: {
@@ -10219,7 +10219,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Enter the Matrix room ID of an existing Khora network to join as \"", orgMeta.name || 'your organization', "\"."), /*#__PURE__*/React.createElement("div", {
+  }, "Enter the Matrix room ID of an existing Khora network to join as \"", orgMeta.name || 'your team', "\"."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -10349,7 +10349,7 @@ const ProviderApp = ({
   /*#__PURE__*/React.createElement("button", {
     onClick: () => setShareAsOrg(true),
     style: { flex: 1, padding: '8px 12px', borderRadius: 'var(--r)', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all .2s', background: shareAsOrg ? 'var(--blue-dim)' : 'transparent', color: shareAsOrg ? 'var(--blue)' : 'var(--tx-2)', border: shareAsOrg ? '1px solid var(--blue)' : '1px solid transparent' }
-  }, /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 13, c: shareAsOrg ? 'var(--blue)' : 'var(--tx-3)' }), " ", orgMeta?.name || 'Organization')),
+  }, /*#__PURE__*/React.createElement(I, { n: "shieldCheck", s: 13, c: shareAsOrg ? 'var(--blue)' : 'var(--tx-3)' }), " ", orgMeta?.name || 'Team')),
 
   /*#__PURE__*/React.createElement("div", {
     style: { background: 'var(--bg-1)', border: '1px solid var(--border-1)', borderRadius: 'var(--r-lg)', padding: '14px 16px', marginBottom: 16 }
@@ -10406,7 +10406,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Your profile is stored in your roster room and synced to your bridge rooms. ", T.client_term_plural, " see your name, title, credentials, and organization membership."), /*#__PURE__*/React.createElement("div", {
+  }, "Your profile is stored in your roster room and synced to your bridge rooms. ", T.client_term_plural, " see your name, title, credentials, and team membership."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -10499,7 +10499,7 @@ const ProviderApp = ({
       fontWeight: 700,
       color: 'var(--blue)'
     }
-  }, "Organization Membership"), myVerification?.status === 'verified' ? /*#__PURE__*/React.createElement("span", {
+  }, "Team Membership"), myVerification?.status === 'verified' ? /*#__PURE__*/React.createElement("span", {
     className: "tag tag-green",
     style: {
       fontSize: 8
@@ -10530,7 +10530,7 @@ const ProviderApp = ({
       color: 'var(--gold)',
       marginBottom: 6
     }
-  }, "Your organization requires email verification. Verify your email to display a verified badge to clients."), /*#__PURE__*/React.createElement("button", {
+  }, "Your team requires email verification. Verify your email to display a verified badge to clients."), /*#__PURE__*/React.createElement("button", {
     onClick: openEmailVerifyModal,
     className: "b-pri b-sm",
     style: {
@@ -10545,7 +10545,7 @@ const ProviderApp = ({
       color: 'var(--tx-2)',
       marginTop: 6
     }
-  }, myVerification?.status === 'verified' ? 'Your identity is email-verified and visible to clients on all bridges.' : 'Your organization membership is verified through the Matrix room roster and will be visible to clients on all bridges.')) : /*#__PURE__*/React.createElement("div", {
+  }, myVerification?.status === 'verified' ? 'Your identity is email-verified and visible to clients on all bridges.' : 'Your team membership is verified through the Matrix room roster and will be visible to clients on all bridges.')) : /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--gold-dim)',
       border: '1px solid var(--gold-mid)',
@@ -10569,13 +10569,13 @@ const ProviderApp = ({
       color: 'var(--gold)',
       fontWeight: 600
     }
-  }, "No organization affiliation")), /*#__PURE__*/React.createElement("p", {
+  }, "No team affiliation")), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: 10.5,
       color: 'var(--tx-2)',
       marginTop: 4
     }
-  }, "Clients will see you as an independent provider. Create or join an organization to display a verified affiliation badge on your profile.")), /*#__PURE__*/React.createElement("button", {
+  }, "Clients will see you as an independent provider. Create or join a team to display a verified affiliation badge on your profile.")), /*#__PURE__*/React.createElement("button", {
     onClick: handleSaveProfile,
     className: "b-pri",
     style: {
@@ -10598,7 +10598,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Enter your organization email address to verify your identity. A 6-digit code will be sent to your email.", emailVerifyConfig.required_domains?.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, " Your email must be from: ", /*#__PURE__*/React.createElement("strong", null, emailVerifyConfig.required_domains.map(d => '@' + d).join(', ')), ".")), /*#__PURE__*/React.createElement("div", {
+  }, "Enter your team email address to verify your identity. A 6-digit code will be sent to your email.", emailVerifyConfig.required_domains?.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, " Your email must be from: ", /*#__PURE__*/React.createElement("strong", null, emailVerifyConfig.required_domains.map(d => '@' + d).join(', ')), ".")), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -10610,7 +10610,7 @@ const ProviderApp = ({
       setVerifyEmail(e.target.value);
       setVerifyError('');
     },
-    placeholder: emailVerifyConfig.required_domains?.[0] ? `you@${emailVerifyConfig.required_domains[0]}` : 'you@organization.org',
+    placeholder: emailVerifyConfig.required_domains?.[0] ? `you@${emailVerifyConfig.required_domains[0]}` : 'you@team.org',
     type: "email"
   })), verifyError && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -10774,7 +10774,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Configure email verification requirements for your organization. When enabled, ", T.staff_term_plural.toLowerCase(), " must verify they control an email at an approved domain before accessing cases."), /*#__PURE__*/React.createElement("div", {
+  }, "Configure email verification requirements for your team. When enabled, ", T.staff_term_plural.toLowerCase(), " must verify they control an email at an approved domain before accessing cases."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -10948,7 +10948,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Create a team for collaboration. Teams are flexible \u2014 they can include people from your organization, other organizations, or individuals with no org affiliation. Anyone with a Matrix ID can be invited."), /*#__PURE__*/React.createElement("div", {
+  }, "Create a team for collaboration. Teams are flexible \u2014 they can include people from your team, other teams, or individuals with no org affiliation. Anyone with a Matrix ID can be invited."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -11024,7 +11024,7 @@ const ProviderApp = ({
     style: {
       color: 'var(--blue)'
     }
-  }, "Org affiliation:"), " This team will be tagged with your org \"", orgMeta.name || 'Organization', "\" but is not restricted to org members."), /*#__PURE__*/React.createElement("button", {
+  }, "Org affiliation:"), " This team will be tagged with your org \"", orgMeta.name || 'Team', "\" but is not restricted to org members."), /*#__PURE__*/React.createElement("button", {
     onClick: handleCreateTeam,
     className: "b-pri",
     disabled: !newTeamName.trim(),
@@ -11265,7 +11265,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Customize the terms your organization uses for service recipients and service providers. These labels will appear throughout the interface for all ", T.staff_term_plural.toLowerCase(), " at your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Customize the terms your team uses for service recipients and service providers. These labels will appear throughout the interface for all ", T.staff_term_plural.toLowerCase(), " at your team."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -11934,7 +11934,7 @@ const ProviderApp = ({
       marginBottom: 14,
       lineHeight: 1.6
     }
-  }, "Create an encrypted messaging channel with another organization. Messages you send will be governed by your opacity setting (", /*#__PURE__*/React.createElement("strong", {
+  }, "Create an encrypted messaging channel with another team. Messages you send will be governed by your opacity setting (", /*#__PURE__*/React.createElement("strong", {
     style: {
       color: orgOpacity === 'opaque' ? 'var(--red)' : orgOpacity === 'translucent' ? 'var(--gold)' : 'var(--green)'
     }
@@ -11944,7 +11944,7 @@ const ProviderApp = ({
     }
   }, /*#__PURE__*/React.createElement("span", {
     className: "section-label"
-  }, "PEER ORGANIZATION ROOM ID"), /*#__PURE__*/React.createElement("input", {
+  }, "PEER TEAM ROOM ID"), /*#__PURE__*/React.createElement("input", {
     value: composePeerOrgId,
     onChange: e => setComposePeerOrgId(e.target.value),
     placeholder: "!orgroom:matrix.org"
@@ -11955,7 +11955,7 @@ const ProviderApp = ({
       display: 'block',
       marginTop: 4
     }
-  }, "The Matrix room ID of the organization you want to message.")), /*#__PURE__*/React.createElement("div", {
+  }, "The Matrix room ID of the team you want to message.")), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 14
     }
@@ -12003,7 +12003,7 @@ const ProviderApp = ({
       fontSize: 12,
       color: 'var(--tx-1)'
     }
-  }, orgOpacity === 'transparent' ? `${providerProfile.display_name || T.staff_term + ' Name'} from ${orgMeta.name || 'Your Org'}` : orgOpacity === 'translucent' ? orgMeta.name || 'Your Org' : 'An organization'))), /*#__PURE__*/React.createElement("div", {
+  }, orgOpacity === 'transparent' ? `${providerProfile.display_name || T.staff_term + ' Name'} from ${orgMeta.name || 'Your Org'}` : orgOpacity === 'translucent' ? orgMeta.name || 'Your Org' : 'A team'))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: 'var(--teal-dim)',
       border: '1px solid rgba(62,201,176,.15)',
@@ -12014,7 +12014,7 @@ const ProviderApp = ({
       color: 'var(--tx-1)',
       lineHeight: 1.6
     }
-  }, "Both organizations maintain independent opacity settings. You control what they see about you; they control what you see about them."), /*#__PURE__*/React.createElement("button", {
+  }, "Both teams maintain independent opacity settings. You control what they see about you; they control what you see about them."), /*#__PURE__*/React.createElement("button", {
     onClick: handleCreateOrgChannel,
     className: "b-pri",
     disabled: !composePeerOrgId.trim(),
@@ -12095,7 +12095,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Control which roles in your organization can read and respond to inter-org messages. Only roles listed under \"Respond\" can send messages on behalf of your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Control which roles in your team can read and respond to inter-org messages. Only roles listed under \"Respond\" can send messages on behalf of your team."), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -12107,7 +12107,7 @@ const ProviderApp = ({
       color: 'var(--tx-3)',
       marginBottom: 8
     }
-  }, "Select roles that can view messages sent to your organization."), /*#__PURE__*/React.createElement("div", {
+  }, "Select roles that can view messages sent to your team."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -12174,7 +12174,7 @@ const ProviderApp = ({
       color: 'var(--tx-3)',
       marginBottom: 8
     }
-  }, "Select roles that can send messages on behalf of your organization. These roles can also read."), /*#__PURE__*/React.createElement("div", {
+  }, "Select roles that can send messages on behalf of your team. These roles can also read."), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       flexDirection: 'column',
@@ -12270,7 +12270,7 @@ const ProviderApp = ({
       marginBottom: 16,
       lineHeight: 1.6
     }
-  }, "Reassign this case to a different ", T.provider_term.toLowerCase(), " within your organization. The new ", T.provider_term.toLowerCase(), " will be invited to the encrypted bridge room."), /*#__PURE__*/React.createElement("div", {
+  }, "Reassign this case to a different ", T.provider_term.toLowerCase(), " within your team. The new ", T.provider_term.toLowerCase(), " will be invited to the encrypted bridge room."), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 14,
@@ -12581,7 +12581,7 @@ const TransparencyPage = ({ onBack }) => {
     { entity: 'Case Messages', you: true, provider: true, org: false, network: false, server: false,
       detail: 'Messages in a bridge room are visible to both parties. End-to-end encrypted via Matrix. The homeserver sees encrypted blobs only.' },
     { entity: 'Org Channel Messages', you: false, provider: true, org: true, network: false, server: false,
-      detail: 'Organization-internal channels are visible to org members only. Not shared with individuals/clients.' },
+      detail: 'Team-internal channels are visible to org members only. Not shared with individuals/clients.' },
     { entity: 'Anonymized Metrics', you: false, provider: true, org: true, network: true, server: false,
       detail: 'Aggregate, k-anonymized (k=5) demographic data. No PII — no names, DOB, SSN, addresses. Only statistical ranges and hashed identifiers.' },
     { entity: 'Schema Definitions', you: false, provider: true, org: true, network: true, server: false,
@@ -12597,7 +12597,7 @@ const TransparencyPage = ({ onBack }) => {
     { from: 'You', to: 'Bridge Room', description: 'When you share fields with a provider, selected data is copied into a shared bridge room. You choose exactly which fields.', icon: 'shield' },
     { from: 'Provider', to: 'Bridge Room', description: 'Providers write observations, notes, and case data into the bridge. Both parties can read.', icon: 'clipboard' },
     { from: 'Bridge Room', to: 'Org Metrics', description: 'If you consent, anonymized aggregate statistics (k=5 anonymity) flow upward. No PII ever leaves the bridge.', icon: 'bar' },
-    { from: 'Org', to: 'Network', description: 'Organizations can share anonymized metrics and schema definitions with the broader network. Never individual data.', icon: 'layers' },
+    { from: 'Org', to: 'Network', description: 'Teams can share anonymized metrics and schema definitions with the broader network. Never individual data.', icon: 'layers' },
   ];
 
   const eoExplainer = [
@@ -12978,13 +12978,13 @@ const TransparencyPage = ({ onBack }) => {
       ]
     },
     {
-      id: 'org', label: 'Organization', desc: 'Org-level coordination — teams, internal channels, schema management, and aggregated metrics.',
+      id: 'org', label: 'Team', desc: 'Org-level coordination — teams, internal channels, schema management, and aggregated metrics.',
       color: '#e5a550', dimColor: 'rgba(229,165,80,.15)', icon: 'briefcase',
       children: [
-        { id: 'org-teams', label: 'Teams', desc: 'Provider teams within the organization, with role-based access control.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' },
+        { id: 'org-teams', label: 'Teams', desc: 'Provider teams within the team, with role-based access control.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' },
         { id: 'org-channels', label: 'Channels', desc: 'Internal encrypted communication channels for org-wide coordination.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' },
-        { id: 'org-schema', label: 'Schema Registry', desc: 'Shared field schemas and observation templates used across the organization.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' },
-        { id: 'org-settings', label: 'Org Settings', desc: 'Organization configuration — branding, consent policies, governance rules.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' }
+        { id: 'org-schema', label: 'Schema Registry', desc: 'Shared field schemas and observation templates used across the team.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' },
+        { id: 'org-settings', label: 'Org Settings', desc: 'Team configuration — branding, consent policies, governance rules.', color: '#e5a550', dimColor: 'rgba(229,165,80,.15)' }
       ],
       childEdges: [
         { from: 0, to: 1, label: 'communicate via' },
@@ -12993,10 +12993,10 @@ const TransparencyPage = ({ onBack }) => {
       ]
     },
     {
-      id: 'network', label: 'Network', desc: 'Cross-organization discovery and schema sharing. Enables interoperability between orgs.',
+      id: 'network', label: 'Network', desc: 'Cross-team discovery and schema sharing. Enables interoperability between orgs.',
       color: '#b090d4', dimColor: 'rgba(176,144,212,.15)', icon: 'users',
       children: [
-        { id: 'net-discovery', label: 'Discovery', desc: 'Find other organizations and their published service catalogs.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)' },
+        { id: 'net-discovery', label: 'Discovery', desc: 'Find other teams and their published service catalogs.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)' },
         { id: 'net-schemas', label: 'Schema Sharing', desc: 'Cross-org schema federation — publish and subscribe to field definitions.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)' },
         { id: 'net-resources', label: 'Resource Catalog', desc: 'Network-wide directory of available services and resources.', color: '#b090d4', dimColor: 'rgba(176,144,212,.15)' }
       ],

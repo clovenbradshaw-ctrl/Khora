@@ -411,7 +411,7 @@ const LoginScreen = ({
   }, "Agree on what you call things"),
   /*#__PURE__*/React.createElement("p", {
     style: { fontSize: 14, color: 'var(--tx-1)', lineHeight: 1.65, textAlign: 'center', marginBottom: 16 }
-  }, "When organizations work together, they need a common language. Khora makes a critical distinction visible:"),
+  }, "When teams work together, they need a common language. Khora makes a critical distinction visible:"),
 
   /* Compact GIVEN / MEANT side-by-side */
   /*#__PURE__*/React.createElement("div", {
@@ -836,9 +836,9 @@ mode === 'login' && /*#__PURE__*/React.createElement("form", {
     style: sectionLabelStyle
   }, "WHO IS IT FOR?"), /*#__PURE__*/React.createElement("h2", {
     style: sectionTitleStyle
-  }, "Teams, organizations, and networks of any kind"), /*#__PURE__*/React.createElement("p", {
+  }, "Teams and networks of any kind"), /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, maxWidth: 560, margin: '0 auto' }
-  }, "Khora works for anyone where a team provides something for other people. It's ideal when there are teams within teams, organizations within networks, networks within networks. Nonprofits, clinics, outreach teams, businesses \u2014 if you have staff serving clients, Khora fits.")),
+  }, "Khora works for anyone where a team provides something for other people. It's ideal when there are teams within teams, teams within networks, networks within networks. Nonprofits, clinics, outreach teams, businesses \u2014 if you have staff serving clients, Khora fits.")),
 
   /* Role cards - 2x2 grid */
   /*#__PURE__*/React.createElement("div", {
@@ -867,16 +867,16 @@ mode === 'login' && /*#__PURE__*/React.createElement("form", {
     style: { ...bodyTextStyle, fontSize: 13.5 }
   }, "A case worker or service professional. Connects to clients, records assessments, and manages cases \u2014 seeing only what each client has authorized."))),
 
-  /* Organization */
+  /* Team */
   /*#__PURE__*/React.createElement("div", {
     style: { ...infoCardStyle, display: 'flex', gap: 14, alignItems: 'flex-start' }
   }, /*#__PURE__*/React.createElement("div", {
     style: featureIconBox('var(--blue-dim)', 'var(--blue)')
   }, /*#__PURE__*/React.createElement(I, { n: "users", s: 20 })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
-  }, "Organization"), /*#__PURE__*/React.createElement("p", {
+  }, "Team"), /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, fontSize: 13.5 }
-  }, "A team or agency. Manages staff roles, policies, and settings. Organizations can join networks to share standards with peer organizations."))),
+  }, "A team or agency. Manages staff roles, policies, and settings. Teams can join networks to share standards with peer teams."))),
 
   /* Network */
   /*#__PURE__*/React.createElement("div", {
@@ -887,7 +887,7 @@ mode === 'login' && /*#__PURE__*/React.createElement("form", {
     style: { fontWeight: 700, fontSize: 14, color: 'var(--tx-0)', marginBottom: 4 }
   }, "Network"), /*#__PURE__*/React.createElement("p", {
     style: { ...bodyTextStyle, fontSize: 13.5 }
-  }, "The federation layer. Coordinates shared standards across member organizations \u2014 what you call things, how you measure them, and how decisions get made.")))
+  }, "The federation layer. Coordinates shared standards across member teams \u2014 what you call things, how you measure them, and how decisions get made.")))
 
   ), /* end role grid */
 
