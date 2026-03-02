@@ -1978,6 +1978,64 @@ const ProviderApp = ({
       showToast('Failed: ' + e.message, 'error');
     }
   };
+  // Quick-add individual: creates a client record with just a name (no modal)
+  const handleQuickAddIndividual = async (name) => {
+    if (!name || !name.trim()) return;
+    try {
+      const identityBase = {
+        account_type: 'client_record',
+        owner: svc.userId,
+        created: Date.now(),
+        client_name: name,
+        client_matrix_id: null,
+        status: 'created',
+        team_id: activeTeamContext || null,
+        team_name: activeTeamObj?.name || null
+      };
+      const roomId = await svc.createClientRoom(`[Client] ${name}`, `${T.client_term} record for ${name}`, [{
+        type: EVT.IDENTITY,
+        state_key: '',
+        content: identityBase
+      }], null);
+      await emitOp(roomId, 'DES', dot('org', 'client_record', name), {
+        created_by: svc.userId,
+        status: 'created',
+        team_id: activeTeamContext || undefined
+      }, orgFrame());
+      if (activeTeamContext) {
+        try {
+          const currentIdx = await svc.getState(activeTeamContext, EVT.TEAM_RECORD_INDEX) || { records: [] };
+          if (!currentIdx.records.some(r => r.room_id === roomId)) {
+            await svc.setState(activeTeamContext, EVT.TEAM_RECORD_INDEX, {
+              records: [...currentIdx.records, { room_id: roomId, bridge_room_id: null, created: Date.now(), vault_access: 'none' }]
+            });
+          }
+        } catch (e) { console.warn('Team record index update failed:', e.message); }
+      }
+      const newRecord = {
+        roomId,
+        client_name: name,
+        client_matrix_id: null,
+        owner: svc.userId,
+        created: Date.now(),
+        status: 'created',
+        team_id: activeTeamContext || null,
+        team_name: activeTeamObj?.name || null
+      };
+      setClientRecords(prev => [...prev, newRecord]);
+      try {
+        await emitOp(roomId, 'INS', dot('org', 'individuals', name), {
+          designation: name,
+          client_name: name,
+          edit_source: 'quick_add'
+        }, { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
+      } catch (e) { console.warn('Quick-add event tracking failed:', e.message); }
+      showToast(`${T.client_term} "${name}" added`, 'success');
+    } catch (e) {
+      showToast('Failed: ' + e.message, 'error');
+    }
+  };
+
   // INS(claim.verification.code, {generated_by, expires}) — challenge_creation
   const handleGenerateClaimCode = async (record) => {
     try {
@@ -4699,6 +4757,7 @@ const ProviderApp = ({
     onBulkAction: handleBulkAction,
     onReorder: handleReorder,
     onAddRow: openCreateClientModal,
+    onQuickAddIndividual: handleQuickAddIndividual,
     fieldDefs: fieldDefs,
     fieldCrosswalks: fieldCrosswalks,
     teams: teams,
