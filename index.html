@@ -26882,10 +26882,29 @@ const DataTable = ({
   if (groupBy !== 'none') {
     grouped = {};
     sorted.forEach(row => {
-      const gk = getVal(row, groupBy) || 'Other';
-      if (!grouped[gk]) grouped[gk] = [];
-      grouped[gk].push(row);
+      const gk = getVal(row, groupBy);
+      // Support array group keys — row appears under each group
+      if (Array.isArray(gk)) {
+        const keys = gk.length > 0 ? gk : ['Untagged'];
+        keys.forEach(k => {
+          const key = k || 'Other';
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(row);
+        });
+      } else {
+        const key = gk || 'Other';
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(row);
+      }
     });
+    // Sort group keys alphabetically (except 'Untagged' goes last)
+    const sortedGrouped = {};
+    Object.keys(grouped).sort((a, b) => {
+      if (a === 'Untagged') return 1;
+      if (b === 'Untagged') return -1;
+      return a.localeCompare(b);
+    }).forEach(k => { sortedGrouped[k] = grouped[k]; });
+    grouped = sortedGrouped;
   } else {
     grouped = {
       '__all': sorted
@@ -28312,6 +28331,7 @@ const NotesTable = ({
   T
 }) => {
   const isMobile = useIsMobile();
+  const [mobileGroupBy, setMobileGroupBy] = useState('none');
   const NOTE_COLS = [{
     key: 'title',
     label: 'Title',
@@ -28336,6 +28356,9 @@ const NotesTable = ({
     k: 'none',
     l: 'No grouping'
   }, {
+    k: 'tags_list',
+    l: 'Tag'
+  }, {
     k: 'attached_to_name',
     l: 'Attached To'
   }, {
@@ -28353,6 +28376,7 @@ const NotesTable = ({
   });
   const getNoteVal = (row, key) => {
     if (key === 'created') return row.created || 0;
+    if (key === 'tags_list') return (row.tags || []).map(t => t.displayName);
     return row[key] || '';
   };
   const renderNoteCell = (row, col) => {
@@ -28483,28 +28507,69 @@ const NotesTable = ({
     }
   }, "Create First Note")) : isMobile ?
     /* ── Mobile card list ── */
-    /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-      noteRows.map(row => /*#__PURE__*/React.createElement("div", {
-        key: row.id,
-        className: 'note-card' + (row.tombstoned ? ' tombstoned' : row.attached_to ? ' attached' : ' standalone'),
-        onClick: () => onNoteClick(row)
-      },
-        row.tombstoned ? /*#__PURE__*/React.createElement("div", {
-          style: { color: 'var(--red)', fontSize: 12, fontStyle: 'italic' }
-        }, "Deleted by individual") : /*#__PURE__*/React.createElement(React.Fragment, null,
-          /*#__PURE__*/React.createElement("div", { className: "note-header" },
-            /*#__PURE__*/React.createElement("div", { className: "note-title" }, row.title || '(untitled)'),
-            /*#__PURE__*/React.createElement("div", { className: "note-meta" }, dtFmtDate(row.created))
-          ),
-          /*#__PURE__*/React.createElement("div", { className: "note-body" }, row.content?.slice(0, 120) || ''),
-          /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' } },
-            row.attached_to && /*#__PURE__*/React.createElement("span", { className: "note-attached-to" }, row.attached_to_name),
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-2)' } }, row.author_name),
-            row.tags && row.tags.length > 0 && /*#__PURE__*/React.createElement("div", { className: "note-tags", style: { marginTop: 0 } },
-              row.tags.map(t => /*#__PURE__*/React.createElement("span", { key: t.userId, className: "note-tag-chip" }, t.displayName)))
+    /*#__PURE__*/React.createElement(React.Fragment, null,
+      /* Group-by dropdown for mobile */
+      /*#__PURE__*/React.createElement("div", { style: { display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' } },
+        NOTE_GROUPS.map(g => /*#__PURE__*/React.createElement("button", {
+          key: g.k,
+          className: mobileGroupBy === g.k ? 'b-pri b-xs' : 'b-gho b-xs',
+          onClick: () => setMobileGroupBy(g.k)
+        }, g.l))
+      ),
+      (() => {
+        const renderCard = row => /*#__PURE__*/React.createElement("div", {
+          key: row.id,
+          className: 'note-card' + (row.tombstoned ? ' tombstoned' : row.attached_to ? ' attached' : ' standalone'),
+          onClick: () => onNoteClick(row)
+        },
+          row.tombstoned ? /*#__PURE__*/React.createElement("div", {
+            style: { color: 'var(--red)', fontSize: 12, fontStyle: 'italic' }
+          }, "Deleted by individual") : /*#__PURE__*/React.createElement(React.Fragment, null,
+            /*#__PURE__*/React.createElement("div", { className: "note-header" },
+              /*#__PURE__*/React.createElement("div", { className: "note-title" }, row.title || '(untitled)'),
+              /*#__PURE__*/React.createElement("div", { className: "note-meta" }, dtFmtDate(row.created))
+            ),
+            /*#__PURE__*/React.createElement("div", { className: "note-body" }, row.content?.slice(0, 120) || ''),
+            /*#__PURE__*/React.createElement("div", { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' } },
+              row.attached_to && /*#__PURE__*/React.createElement("span", { className: "note-attached-to" }, row.attached_to_name),
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: 'var(--tx-2)' } }, row.author_name),
+              row.tags && row.tags.length > 0 && /*#__PURE__*/React.createElement("div", { className: "note-tags", style: { marginTop: 0 } },
+                row.tags.map(t => /*#__PURE__*/React.createElement("span", { key: t.userId, className: "note-tag-chip" }, t.displayName)))
+            )
           )
-        )
-      ))
+        );
+        if (mobileGroupBy === 'none') {
+          return /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+            noteRows.map(renderCard));
+        }
+        // Build grouped sections
+        const mGroups = {};
+        noteRows.forEach(row => {
+          const val = getNoteVal(row, mobileGroupBy);
+          if (Array.isArray(val)) {
+            const keys = val.length > 0 ? val : ['Untagged'];
+            keys.forEach(k => { if (!mGroups[k]) mGroups[k] = []; mGroups[k].push(row); });
+          } else {
+            const k = val || 'Other';
+            if (!mGroups[k]) mGroups[k] = [];
+            mGroups[k].push(row);
+          }
+        });
+        const sortedKeys = Object.keys(mGroups).sort((a, b) => {
+          if (a === 'Untagged') return 1;
+          if (b === 'Untagged') return -1;
+          return a.localeCompare(b);
+        });
+        return /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+          sortedKeys.map(gk => /*#__PURE__*/React.createElement("div", { key: gk },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, fontWeight: 700, color: 'var(--tx-1)', padding: '6px 0 4px', borderBottom: '1px solid var(--border-0)', marginBottom: 6 }
+            }, gk, ' (', mGroups[gk].length, ')'),
+            /*#__PURE__*/React.createElement("div", { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+              mGroups[gk].map(renderCard))
+          ))
+        );
+      })()
     ) :
     /* ── Desktop DataTable ── */
     /*#__PURE__*/React.createElement(DataTable, {
