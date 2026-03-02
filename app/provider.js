@@ -1885,25 +1885,43 @@ const ProviderApp = ({
   // ─── Client record management ───
   const handleCreateClientRecord = async () => {
     if (!newClientName.trim()) return;
+    const createdAt = Date.now();
+    const tempId = `temp:${createdAt}:${Math.random().toString(36).slice(2)}`;
+    const clientName = newClientName;
+    const clientId = newClientMatrixId.trim() || null;
+    const clientNotes = newClientNotes || undefined;
+    const optimisticRecord = {
+      roomId: tempId,
+      client_name: clientName,
+      client_matrix_id: clientId,
+      notes: clientNotes,
+      owner: svc.userId,
+      created: createdAt,
+      team_id: activeTeamContext || null,
+      team_name: activeTeamObj?.name || null,
+      sync_status: 'creating'
+    };
+    setClientRecords(prev => [...prev, optimisticRecord]);
     try {
-      const clientId = newClientMatrixId.trim() || null;
       const identityBase = {
         account_type: 'client_record',
         owner: svc.userId,
-        created: Date.now(),
-        client_name: newClientName,
+        created: createdAt,
+        client_name: clientName,
         client_matrix_id: clientId,
-        notes: newClientNotes || undefined,
+        notes: clientNotes,
         status: 'created',
         // Explicit team association — enables direct filtering without room-membership indirection
         team_id: activeTeamContext || null,
         team_name: activeTeamObj?.name || null
       };
-      const roomId = await svc.createClientRoom(`[Client] ${newClientName}`, `${T.client_term} record for ${newClientName}`, [{
+      const roomId = await svc.createClientRoom(`[Client] ${clientName}`, `${T.client_term} record for ${clientName}`, [{
         type: EVT.IDENTITY,
         state_key: '',
         content: identityBase
       }], clientId);
+
+      let recordStatus = clientId ? 'invited' : 'created';
       // If client Matrix ID provided, invite them and set them as admin
       if (clientId) {
         try {
@@ -1913,15 +1931,28 @@ const ProviderApp = ({
             status: 'invited'
           });
         } catch (e) {
+          recordStatus = 'created';
           console.warn('Invite failed:', e.message);
         }
       }
-      await emitOp(roomId, 'DES', dot('org', 'client_record', newClientName), {
-        created_by: svc.userId,
-        client_id: clientId || undefined,
-        status: clientId ? 'invited' : 'created',
-        team_id: activeTeamContext || undefined
-      }, orgFrame());
+
+      setClientRecords(prev => prev.map(record => record.roomId === tempId ? {
+        ...record,
+        roomId,
+        status: recordStatus,
+        sync_status: 'confirmed'
+      } : record));
+
+      try {
+        await emitOp(roomId, 'DES', dot('org', 'client_record', clientName), {
+          created_by: svc.userId,
+          client_id: clientId || undefined,
+          status: recordStatus,
+          team_id: activeTeamContext || undefined
+        }, orgFrame());
+      } catch (e) {
+        console.warn('Client record DES emit failed:', e.message);
+      }
       // Register this record in the team's record index so the team room has
       // a fast lookup without scanning every client_record room.
       // vault_access starts as 'none' until a bridge is established.
@@ -1942,24 +1973,12 @@ const ProviderApp = ({
           console.warn('Team record index update failed:', e.message);
         }
       }
-      const newRecord = {
-        roomId,
-        client_name: newClientName,
-        client_matrix_id: clientId,
-        notes: newClientNotes || undefined,
-        owner: svc.userId,
-        created: Date.now(),
-        status: clientId ? 'invited' : 'created',
-        team_id: activeTeamContext || null,
-        team_name: activeTeamObj?.name || null
-      };
-      setClientRecords(prev => [...prev, newRecord]);
       setCreateClientModal(false);
       // Emit EO event to track individual creation
       try {
-        await emitOp(roomId, 'INS', dot('org', 'individuals', newClientName), {
-          designation: newClientName,
-          client_name: newClientName,
+        await emitOp(roomId, 'INS', dot('org', 'individuals', clientName), {
+          designation: clientName,
+          client_name: clientName,
           client_matrix_id: clientId || undefined,
           edit_source: 'client_creation'
         }, {
@@ -1973,35 +1992,65 @@ const ProviderApp = ({
       setNewClientName('');
       setNewClientMatrixId('');
       setNewClientNotes('');
-      showToast(`${T.client_term} "${newClientName}" created${clientId ? ' — invite sent' : ''}`, 'success');
+      showToast(`${T.client_term} "${clientName}" created${clientId && recordStatus === 'invited' ? ' — invite sent' : ''}`, 'success');
     } catch (e) {
+      setClientRecords(prev => prev.map(record => record.roomId === tempId ? {
+        ...record,
+        sync_status: 'error'
+      } : record));
       showToast('Failed: ' + e.message, 'error');
     }
   };
   // Quick-add individual: creates a client record with just a name (no modal)
   const handleQuickAddIndividual = async (name) => {
     if (!name || !name.trim()) return;
+    const createdAt = Date.now();
+    const tempId = `temp:${createdAt}:${Math.random().toString(36).slice(2)}`;
+    const clientName = name.trim();
+    const optimisticRecord = {
+      roomId: tempId,
+      client_name: clientName,
+      client_matrix_id: null,
+      owner: svc.userId,
+      created: createdAt,
+      team_id: activeTeamContext || null,
+      team_name: activeTeamObj?.name || null,
+      sync_status: 'creating'
+    };
+    setClientRecords(prev => [...prev, optimisticRecord]);
     try {
       const identityBase = {
         account_type: 'client_record',
         owner: svc.userId,
-        created: Date.now(),
-        client_name: name,
+        created: createdAt,
+        client_name: clientName,
         client_matrix_id: null,
         status: 'created',
         team_id: activeTeamContext || null,
         team_name: activeTeamObj?.name || null
       };
-      const roomId = await svc.createClientRoom(`[Client] ${name}`, `${T.client_term} record for ${name}`, [{
+      const roomId = await svc.createClientRoom(`[Client] ${clientName}`, `${T.client_term} record for ${clientName}`, [{
         type: EVT.IDENTITY,
         state_key: '',
         content: identityBase
       }], null);
-      await emitOp(roomId, 'DES', dot('org', 'client_record', name), {
-        created_by: svc.userId,
+
+      setClientRecords(prev => prev.map(record => record.roomId === tempId ? {
+        ...record,
+        roomId,
         status: 'created',
-        team_id: activeTeamContext || undefined
-      }, orgFrame());
+        sync_status: 'confirmed'
+      } : record));
+
+      try {
+        await emitOp(roomId, 'DES', dot('org', 'client_record', clientName), {
+          created_by: svc.userId,
+          status: 'created',
+          team_id: activeTeamContext || undefined
+        }, orgFrame());
+      } catch (e) {
+        console.warn('Quick-add DES emit failed:', e.message);
+      }
       if (activeTeamContext) {
         try {
           const currentIdx = await svc.getState(activeTeamContext, EVT.TEAM_RECORD_INDEX) || { records: [] };
@@ -2012,26 +2061,19 @@ const ProviderApp = ({
           }
         } catch (e) { console.warn('Team record index update failed:', e.message); }
       }
-      const newRecord = {
-        roomId,
-        client_name: name,
-        client_matrix_id: null,
-        owner: svc.userId,
-        created: Date.now(),
-        status: 'created',
-        team_id: activeTeamContext || null,
-        team_name: activeTeamObj?.name || null
-      };
-      setClientRecords(prev => [...prev, newRecord]);
       try {
-        await emitOp(roomId, 'INS', dot('org', 'individuals', name), {
-          designation: name,
-          client_name: name,
+        await emitOp(roomId, 'INS', dot('org', 'individuals', clientName), {
+          designation: clientName,
+          client_name: clientName,
           edit_source: 'quick_add'
         }, { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
       } catch (e) { console.warn('Quick-add event tracking failed:', e.message); }
-      showToast(`${T.client_term} "${name}" added`, 'success');
+      showToast(`${T.client_term} "${clientName}" added`, 'success');
     } catch (e) {
+      setClientRecords(prev => prev.map(record => record.roomId === tempId ? {
+        ...record,
+        sync_status: 'error'
+      } : record));
       showToast('Failed: ' + e.message, 'error');
     }
   };
