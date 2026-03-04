@@ -4544,6 +4544,15 @@ class KhoraService {
     } else {
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`, content);
     }
+    // Keep encrypted cache in sync so page refreshes show latest data
+    try {
+      const cached = await KhoraEncryptedCache.get('rooms', 'scan_result');
+      if (cached?.data) {
+        if (!cached.data[roomId]) cached.data[roomId] = {};
+        cached.data[roomId][type] = content;
+        await KhoraEncryptedCache.put('rooms', 'scan_result', { data: cached.data, ts: Date.now() });
+      }
+    } catch {}
   }
 
   // Force-refresh device keys for all members of a room.
@@ -26877,7 +26886,12 @@ const EditableCell = ({
         ref: inputRef,
         className: "dt-ecell-input",
         value: draft,
-        onChange: e => { setDraft(e.target.value); },
+        onChange: e => {
+          const v = e.target.value;
+          setDraft(v);
+          setEditing(false);
+          if (v !== (value || '')) onSave && onSave(v);
+        },
         onBlur: commit,
         onKeyDown: e => {
           if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); }
@@ -36117,6 +36131,8 @@ const ProviderApp = ({
   const [inviteRole, setInviteRole] = useState('case_manager');
   // Case assignments — tracks which staff are assigned to which bridges within the org
   const [caseAssignments, setCaseAssignments] = useState({}); // { [bridgeRoomId]: { primary, staff:[], client_name, transferable } }
+  const caseAssignmentsRef = useRef(caseAssignments);
+  useEffect(() => { caseAssignmentsRef.current = caseAssignments; }, [caseAssignments]);
   // Trash bin — soft-deleted individuals: { [roomId]: { deletedBy, deletedAt, name } }
   const [trashedIndividuals, setTrashedIndividuals] = useState({});
   const [transferModal, setTransferModal] = useState(null); // case object to transfer
@@ -36478,6 +36494,40 @@ const ProviderApp = ({
   };
   useEffect(() => {
     initProvider();
+  }, []);
+
+  // ─── Post-sync data refresh ───
+  // MemoryStore is empty on page load; initProvider may run before sync completes.
+  // After sync finishes, re-scan rooms to pick up data saved in previous sessions.
+  useEffect(() => {
+    let cancelled = false;
+    if (typeof KhoraAuth !== 'undefined' && KhoraAuth.waitForSync) {
+      KhoraAuth.waitForSync().then(async () => {
+        if (cancelled) return;
+        try {
+          const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.ROSTER_ASSIGN]);
+          const freshRecords = [];
+          for (const [rid, state] of Object.entries(scanned)) {
+            const id = state[EVT.IDENTITY];
+            if (id?.account_type === 'client_record' && (id.owner === svc.userId || id.previous_owner === svc.userId)) {
+              freshRecords.push({ roomId: rid, ...id });
+            }
+          }
+          if (!cancelled && freshRecords.length > 0) setClientRecords(freshRecords);
+          if (!cancelled) {
+            const detectedOrg = Object.entries(scanned).find(([, s]) => s[EVT.IDENTITY]?.account_type === 'organization');
+            const orgRoomId = detectedOrg?.[0] || orgRoom;
+            if (orgRoomId) {
+              try {
+                const a = await svc.getState(orgRoomId, EVT.ROSTER_ASSIGN);
+                if (a?.assignments && !cancelled) setCaseAssignments(a.assignments);
+              } catch {}
+            }
+          }
+        } catch {}
+      }).catch(() => {});
+    }
+    return () => { cancelled = true; };
   }, []);
 
   // ─── Real-time notification generation from Khora events ───
@@ -37252,8 +37302,9 @@ const ProviderApp = ({
         if (row._case) {
           if (isNameField) {
             // Update full_name in bridge shared data
+            const freshRefs = (await svc.getState(roomId, EVT.BRIDGE_REFS))?.fields || row._case.sharedData || {};
             const updatedData = {
-              ...row._case.sharedData,
+              ...freshRefs,
               full_name: newValue
             };
             await svc.setState(roomId, EVT.BRIDGE_REFS, {
@@ -37271,9 +37322,9 @@ const ProviderApp = ({
               _case: { ...prev._case, sharedData: { ...prev._case.sharedData, full_name: newValue } }
             }));
             // Update client_name in ROSTER_ASSIGN for org room
-            if (orgRoom && caseAssignments[roomId]) {
+            if (orgRoom && caseAssignmentsRef.current[roomId]) {
               const updatedAssignments = {
-                ...caseAssignments
+                ...caseAssignmentsRef.current
               };
               updatedAssignments[roomId] = {
                 ...updatedAssignments[roomId],
@@ -37286,9 +37337,9 @@ const ProviderApp = ({
             }
           } else if (fieldKey === 'status') {
             // Update status in ROSTER_ASSIGN and local state
-            if (orgRoom && caseAssignments[roomId]) {
+            if (orgRoom && caseAssignmentsRef.current[roomId]) {
               const updatedAssignments = {
-                ...caseAssignments
+                ...caseAssignmentsRef.current
               };
               updatedAssignments[roomId] = {
                 ...updatedAssignments[roomId],
@@ -37311,9 +37362,9 @@ const ProviderApp = ({
             }));
           } else if (fieldKey === 'priority') {
             // Update priority in ROSTER_ASSIGN
-            if (orgRoom && caseAssignments[roomId]) {
+            if (orgRoom && caseAssignmentsRef.current[roomId]) {
               const updatedAssignments = {
-                ...caseAssignments
+                ...caseAssignmentsRef.current
               };
               updatedAssignments[roomId] = {
                 ...updatedAssignments[roomId],
@@ -37330,8 +37381,9 @@ const ProviderApp = ({
             }));
           } else {
             // Dynamic field — update shared data in bridge
+            const freshRefs = (await svc.getState(roomId, EVT.BRIDGE_REFS))?.fields || row._case.sharedData || {};
             const updatedData = {
-              ...row._case.sharedData,
+              ...freshRefs,
               [fieldKey]: newValue
             };
             await svc.setState(roomId, EVT.BRIDGE_REFS, {
@@ -37351,8 +37403,9 @@ const ProviderApp = ({
           }
         } else if (row._clientRecord) {
           // Client record rows — update identity state
+          const fresh = await svc.getState(row.id, EVT.IDENTITY) || row._clientRecord || {};
           const updates = {
-            ...row._clientRecord
+            ...fresh
           };
           if (isNameField) updates.client_name = newValue;
           await svc.setState(row.id, EVT.IDENTITY, updates);
@@ -37459,9 +37512,9 @@ const ProviderApp = ({
       if (!staffName) return;
       for (const rowId of selectedRows) {
         try {
-          if (orgRoom && caseAssignments[rowId]) {
+          if (orgRoom && caseAssignmentsRef.current[rowId]) {
             const updatedAssignments = {
-              ...caseAssignments
+              ...caseAssignmentsRef.current
             };
             updatedAssignments[rowId] = {
               ...updatedAssignments[rowId],
@@ -37813,7 +37866,7 @@ const ProviderApp = ({
       }
       // Step 3: Update ROSTER_ASSIGN in org room
       const updatedAssignments = {
-        ...caseAssignments
+        ...caseAssignmentsRef.current
       };
       updatedAssignments[c.bridgeRoomId] = {
         primary: transferTarget,
@@ -37823,7 +37876,7 @@ const ProviderApp = ({
         transferred_from: c.meta.provider,
         transferred_at: Date.now(),
         transferred_by: svc.userId,
-        added: caseAssignments[c.bridgeRoomId]?.added || Date.now()
+        added: caseAssignmentsRef.current[c.bridgeRoomId]?.added || Date.now()
       };
       await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, {
         assignments: updatedAssignments
@@ -40740,10 +40793,12 @@ const ProviderApp = ({
         }, { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
         // Persist via same path as handleDbCellEdit
         if (row._case) {
-          const updatedData = { ...row._case.sharedData, [fieldKey]: pastValue };
+          const freshRefs = (await svc.getState(roomId, EVT.BRIDGE_REFS))?.fields || row._case.sharedData || {};
+          const updatedData = { ...freshRefs, [fieldKey]: pastValue };
           await svc.setState(roomId, EVT.BRIDGE_REFS, { fields: updatedData });
         } else if (row._clientRecord) {
-          const updates = { ...row._clientRecord };
+          const fresh = await svc.getState(row.id, EVT.IDENTITY) || row._clientRecord || {};
+          const updates = { ...fresh };
           if (fieldKey === 'name') updates.client_name = pastValue;
           await svc.setState(row.id, EVT.IDENTITY, updates);
         }

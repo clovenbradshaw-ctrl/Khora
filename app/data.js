@@ -275,7 +275,13 @@ const EditableCell = ({
         ref: inputRef,
         className: "dt-ecell-input",
         value: draft,
-        onChange: e => { updateDraft(e.target.value); },
+        onChange: e => {
+          const v = e.target.value;
+          draftRef.current = v;
+          setDraft(v);
+          setEditing(false);
+          if (v !== (value || '')) onSave && onSave(v);
+        },
         onBlur: commit,
         onKeyDown: e => {
           if (e.key === 'Escape') { updateDraft(value || ''); setEditing(false); }

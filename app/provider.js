@@ -54,6 +54,8 @@ const ProviderApp = ({
   const [inviteRole, setInviteRole] = useState('case_manager');
   // Case assignments — tracks which staff are assigned to which bridges within the org
   const [caseAssignments, setCaseAssignments] = useState({}); // { [bridgeRoomId]: { primary, staff:[], client_name, transferable } }
+  const caseAssignmentsRef = useRef(caseAssignments);
+  useEffect(() => { caseAssignmentsRef.current = caseAssignments; }, [caseAssignments]);
   // Trash bin — soft-deleted individuals: { [roomId]: { deletedBy, deletedAt, name } }
   const [trashedIndividuals, setTrashedIndividuals] = useState({});
   const [transferModal, setTransferModal] = useState(null); // case object to transfer
@@ -419,6 +421,42 @@ const ProviderApp = ({
   };
   useEffect(() => {
     initProvider();
+  }, []);
+
+  // ─── Post-sync data refresh ───
+  // MemoryStore is empty on page load; initProvider may run before sync completes.
+  // After sync finishes, re-scan rooms to pick up data saved in previous sessions.
+  useEffect(() => {
+    let cancelled = false;
+    if (typeof KhoraAuth !== 'undefined' && KhoraAuth.waitForSync) {
+      KhoraAuth.waitForSync().then(async () => {
+        if (cancelled) return;
+        try {
+          const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.ROSTER_ASSIGN]);
+          // Refresh client records
+          const freshRecords = [];
+          for (const [rid, state] of Object.entries(scanned)) {
+            const id = state[EVT.IDENTITY];
+            if (id?.account_type === 'client_record' && (id.owner === svc.userId || id.previous_owner === svc.userId)) {
+              freshRecords.push({ roomId: rid, ...id });
+            }
+          }
+          if (!cancelled && freshRecords.length > 0) setClientRecords(freshRecords);
+          // Refresh case assignments from org room
+          if (!cancelled) {
+            const detectedOrg = Object.entries(scanned).find(([, s]) => s[EVT.IDENTITY]?.account_type === 'organization');
+            const orgRoomId = detectedOrg?.[0] || orgRoom;
+            if (orgRoomId) {
+              try {
+                const a = await svc.getState(orgRoomId, EVT.ROSTER_ASSIGN);
+                if (a?.assignments && !cancelled) setCaseAssignments(a.assignments);
+              } catch {}
+            }
+          }
+        } catch {}
+      }).catch(() => {});
+    }
+    return () => { cancelled = true; };
   }, []);
 
   // ─── Real-time notification generation from Khora events ───
@@ -1252,8 +1290,9 @@ const ProviderApp = ({
         if (row._case) {
           if (isNameField) {
             // Update full_name in bridge shared data
+            const freshRefs = (await svc.getState(roomId, EVT.BRIDGE_REFS))?.fields || row._case.sharedData || {};
             const updatedData = {
-              ...row._case.sharedData,
+              ...freshRefs,
               full_name: newValue
             };
             await svc.setState(roomId, EVT.BRIDGE_REFS, {
@@ -1272,9 +1311,9 @@ const ProviderApp = ({
               _case: { ...prev._case, sharedData: { ...prev._case.sharedData, full_name: newValue } }
             }));
             // Update client_name in ROSTER_ASSIGN for org room
-            if (orgRoom && caseAssignments[roomId]) {
+            if (orgRoom && caseAssignmentsRef.current[roomId]) {
               const updatedAssignments = {
-                ...caseAssignments
+                ...caseAssignmentsRef.current
               };
               updatedAssignments[roomId] = {
                 ...updatedAssignments[roomId],
@@ -1288,7 +1327,7 @@ const ProviderApp = ({
           } else if (fieldKey === 'status' || fieldKey === 'priority' || fieldKey === 'assignedTo') {
             // Update status/priority/assignedTo in ROSTER_ASSIGN
             if (orgRoom) {
-              const updatedAssignments = { ...caseAssignments };
+              const updatedAssignments = { ...caseAssignmentsRef.current };
               const clientName = row._case.sharedData?.full_name || row.name || 'Unknown';
               if (!updatedAssignments[roomId]) {
                 updatedAssignments[roomId] = {
@@ -1323,8 +1362,9 @@ const ProviderApp = ({
             editApplied = true;
           } else {
             // Dynamic field — update shared data in bridge
+            const freshRefs = (await svc.getState(roomId, EVT.BRIDGE_REFS))?.fields || row._case.sharedData || {};
             const updatedData = {
-              ...row._case.sharedData,
+              ...freshRefs,
               [fieldKey]: newValue
             };
             await svc.setState(roomId, EVT.BRIDGE_REFS, {
@@ -1346,7 +1386,8 @@ const ProviderApp = ({
         } else if (row._clientRecord) {
           // Client record rows — persist CRM fields
           if (isNameField) {
-            const updates = { ...row._clientRecord, client_name: newValue };
+            const fresh = await svc.getState(row.id, EVT.IDENTITY) || row._clientRecord || {};
+            const updates = { ...fresh, client_name: newValue };
             await svc.setState(row.id, EVT.IDENTITY, updates);
             setClientRecords(prev => prev.map(r =>
               r.roomId === row.id ? { ...r, client_name: newValue } : r
@@ -1358,8 +1399,8 @@ const ProviderApp = ({
               _clientRecord: updates
             }));
             // Update client_name in ROSTER_ASSIGN
-            if (orgRoom && caseAssignments[row.id]) {
-              const updatedAssignments = { ...caseAssignments };
+            if (orgRoom && caseAssignmentsRef.current[row.id]) {
+              const updatedAssignments = { ...caseAssignmentsRef.current };
               updatedAssignments[row.id] = { ...updatedAssignments[row.id], client_name: newValue };
               await svc.setState(orgRoom, EVT.ROSTER_ASSIGN, { assignments: updatedAssignments });
               setCaseAssignments(updatedAssignments);
@@ -1367,7 +1408,7 @@ const ProviderApp = ({
           } else if (fieldKey === 'assignedTo') {
             // Update primary assignment in ROSTER_ASSIGN for client record
             if (orgRoom) {
-              const updatedAssignments = { ...caseAssignments };
+              const updatedAssignments = { ...caseAssignmentsRef.current };
               const clientName = row.name || row._clientRecord.client_name || 'Unknown';
               if (!updatedAssignments[row.id]) {
                 updatedAssignments[row.id] = {
@@ -1388,7 +1429,7 @@ const ProviderApp = ({
           } else {
             // CRM fields (status, priority, intake_date, etc.) — store in ROSTER_ASSIGN
             if (orgRoom) {
-              const updatedAssignments = { ...caseAssignments };
+              const updatedAssignments = { ...caseAssignmentsRef.current };
               if (!updatedAssignments[row.id]) {
                 updatedAssignments[row.id] = {
                   primary: svc.userId,
@@ -1403,7 +1444,8 @@ const ProviderApp = ({
             }
             editApplied = true;
             // Also persist CRM fields to the client record's own identity state
-            const identityUpdates = { ...row._clientRecord, [fieldKey]: newValue };
+            const fresh = await svc.getState(row.id, EVT.IDENTITY) || row._clientRecord || {};
+            const identityUpdates = { ...fresh, [fieldKey]: newValue };
             await svc.setState(row.id, EVT.IDENTITY, identityUpdates);
             setClientRecords(prev => prev.map(r =>
               r.roomId === row.id ? { ...r, [fieldKey]: newValue } : r
@@ -4935,10 +4977,12 @@ const ProviderApp = ({
         }, { type: 'org', epistemic: 'MEANT', role: orgRole || 'provider' });
         // Persist via same path as handleDbCellEdit
         if (row._case) {
-          const updatedData = { ...row._case.sharedData, [fieldKey]: pastValue };
+          const freshRefs = (await svc.getState(roomId, EVT.BRIDGE_REFS))?.fields || row._case.sharedData || {};
+          const updatedData = { ...freshRefs, [fieldKey]: pastValue };
           await svc.setState(roomId, EVT.BRIDGE_REFS, { fields: updatedData });
         } else if (row._clientRecord) {
-          const updates = { ...row._clientRecord };
+          const fresh = await svc.getState(row.id, EVT.IDENTITY) || row._clientRecord || {};
+          const updates = { ...fresh };
           if (fieldKey === 'name') updates.client_name = pastValue;
           await svc.setState(row.id, EVT.IDENTITY, updates);
         }
