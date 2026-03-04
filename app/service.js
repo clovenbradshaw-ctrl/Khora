@@ -16,6 +16,30 @@
  * KhoraService delegates identity and client access to KhoraAuth via getters.
  * ═══════════════════════════════════════════════════════════ */
 class KhoraService {
+  // ── Local state cache (in-memory, backed by encrypted IDB) ──
+  // Caches getState results to avoid redundant reads on refresh.
+  // Writes go through to Matrix; reads check cache first.
+  _stateCache = {};             // { "roomId|type|sk": { data, ts } }
+  _stateCacheTTL = 5 * 60000;   // 5 minutes for in-memory cache
+  _scanInflight = null;          // dedup concurrent scanRooms calls
+  _scanLastKey = '';             // last extraTypes key for dedup
+
+  // ── Global state-write queue ──
+  // Serializes setState calls through a queue with breathing room to prevent
+  // concurrent PUT requests from triggering 429 rate-limit floods.
+  _stateWriteQueue = Promise.resolve();
+  _stateWriteCount = 0;
+  _enqueueStateWrite(fn) {
+    this._stateWriteCount++;
+    const task = this._stateWriteQueue
+      .catch(() => {})
+      // Add breathing room every 2 writes to stay under rate limits
+      .then(() => this._stateWriteCount % 2 === 0 ? new Promise(r => setTimeout(r, 200)) : Promise.resolve())
+      .then(() => fn());
+    this._stateWriteQueue = task.catch(() => {});
+    return task;
+  }
+
   // ── Global room-creation queue ──
   // Matrix homeservers (especially matrix.org) aggressively rate-limit createRoom.
   // Serializing all room creations through a single queue prevents concurrent
@@ -199,27 +223,76 @@ class KhoraService {
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/m.room.power_levels/`, current);
     }
   }
+  _stateCacheKey(roomId, type, sk) { return `${roomId}|${type}|${sk}`; }
+
   async getState(roomId, type, sk = '') {
     if (this.client) {
       const room = this.client.getRoom(roomId);
       if (!room) return null;
       const ev = room.currentState.getStateEvents(type, sk);
-      return ev ? ev.getContent() : null;
+      const content = ev ? ev.getContent() : null;
+      // Update in-memory cache on every SDK read
+      if (content) this._stateCache[this._stateCacheKey(roomId, type, sk)] = { data: content, ts: Date.now() };
+      return content;
     }
+    // API fallback: check in-memory cache first
+    const ck = this._stateCacheKey(roomId, type, sk);
+    const cached = this._stateCache[ck];
+    if (cached && (Date.now() - cached.ts) < this._stateCacheTTL) return cached.data;
     try {
-      return await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`);
+      const result = await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`);
+      if (result) this._stateCache[ck] = { data: result, ts: Date.now() };
+      return result;
     } catch {
-      return null;
+      // Return stale cache rather than null if we have it
+      return cached?.data || null;
     }
   }
 
-  // ALT(matrix.room_state, {state_event}) — protocol_mutation — write state to Matrix room
-  async setState(roomId, type, content, sk = '') {
+  // Bulk-read multiple state events from a single room in one pass.
+  // When the SDK is available, reads are local (no HTTP). For API fallback,
+  // fetches full room state once and extracts needed types — avoids N individual requests.
+  async getStateBulk(roomId, types) {
+    const result = {};
     if (this.client) {
-      await this._withRetry(() => this.client.sendStateEvent(roomId, type, content, sk));
-    } else {
-      await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`, content);
+      const room = this.client.getRoom(roomId);
+      if (!room) return result;
+      for (const { type, sk } of types) {
+        const ev = room.currentState.getStateEvents(type, sk || '');
+        if (ev) {
+          result[`${type}|${sk || ''}`] = ev.getContent();
+          this._stateCache[this._stateCacheKey(roomId, type, sk || '')] = { data: ev.getContent(), ts: Date.now() };
+        }
+      }
+      return result;
     }
+    // API fallback: single room state fetch
+    try {
+      const allState = await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/state`);
+      const typeSet = new Set(types.map(t => `${t.type}|${t.sk || ''}`));
+      for (const ev of allState) {
+        const key = `${ev.type}|${ev.state_key || ''}`;
+        if (typeSet.has(key)) {
+          result[key] = ev.content;
+          this._stateCache[this._stateCacheKey(roomId, ev.type, ev.state_key || '')] = { data: ev.content, ts: Date.now() };
+        }
+      }
+    } catch {}
+    return result;
+  }
+
+  // ALT(matrix.room_state, {state_event}) — protocol_mutation — write state to Matrix room
+  // Serialized through a write queue to prevent 429 rate-limit floods from concurrent PUTs.
+  async setState(roomId, type, content, sk = '') {
+    // Update in-memory cache immediately (optimistic) so reads see new data
+    this._stateCache[this._stateCacheKey(roomId, type, sk)] = { data: content, ts: Date.now() };
+    return this._enqueueStateWrite(async () => {
+      if (this.client) {
+        await this._withRetry(() => this.client.sendStateEvent(roomId, type, content, sk));
+      } else {
+        await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`, content);
+      }
+    });
   }
 
   // Force-refresh device keys for all members of a room.
@@ -426,7 +499,21 @@ class KhoraService {
   // instead of 2*N individual getState calls that produce 404s for non-Khora rooms.
   // Returns: { [roomId]: { [eventType]: content } }
   // Results are cached in the encrypted local vault (KhoraEncryptedCache).
+  // Deduplicates concurrent calls with the same extraTypes to avoid redundant scans.
   async scanRooms(extraTypes = []) {
+    // Dedup: if an identical scan is already in-flight, reuse it
+    const typesKey = JSON.stringify(extraTypes.slice().sort());
+    if (this._scanInflight && this._scanLastKey === typesKey) {
+      return this._scanInflight;
+    }
+    this._scanLastKey = typesKey;
+    this._scanInflight = this._doScanRooms(extraTypes).finally(() => {
+      this._scanInflight = null;
+    });
+    return this._scanInflight;
+  }
+
+  async _doScanRooms(extraTypes = []) {
     const types = [EVT.IDENTITY, EVT.BRIDGE_META, EVT.BRIDGE_REFS, ...extraTypes];
     if (this.client) {
       const result = {};
@@ -559,6 +646,36 @@ class KhoraService {
     } else {
       await this._api('POST', `/join/${encodeURIComponent(roomId)}`, {});
     }
+  }
+
+  // ── View-level cache helpers ──
+  // Cache derived provider/client init data so returning users see instant UI.
+  // TTL: 10 minutes. Stale cache is used for render; live data replaces it in background.
+  static VIEW_CACHE_TTL = 10 * 60000;
+
+  async cacheViewData(viewKey, data) {
+    try {
+      await KhoraEncryptedCache.put('state', `view_${viewKey}`, { data, ts: Date.now() });
+    } catch {}
+  }
+
+  async getCachedViewData(viewKey) {
+    try {
+      const cached = await KhoraEncryptedCache.get('state', `view_${viewKey}`);
+      if (cached?.data && (Date.now() - cached.ts) < KhoraService.VIEW_CACHE_TTL) return cached.data;
+    } catch {}
+    return null;
+  }
+
+  // Check if a schema room already has forms seeded (avoids redundant PUT storms).
+  // When the SDK is available this is a local read — no HTTP call.
+  hasSchemaForms(schemaRoomId) {
+    if (!this.client) return false;
+    const room = this.client.getRoom(schemaRoomId);
+    if (!room) return false;
+    // Check for at least one SCHEMA_FORM state event
+    const formEvents = room.currentState.getStateEvents(EVT.SCHEMA_FORM);
+    return Array.isArray(formEvents) ? formEvents.length > 0 : !!formEvents;
   }
 }
 const svc = new KhoraService();

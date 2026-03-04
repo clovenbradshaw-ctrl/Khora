@@ -535,6 +535,26 @@ const ProviderApp = ({
     setLoading(true);
     setInitError(null);
     try {
+      // ── Cache-first: try to render from cached provider view data instantly ──
+      try {
+        const cached = await svc.getCachedViewData('provider');
+        if (cached) {
+          // Apply cached state immediately so UI appears while live scan runs
+          if (cached.rosterRoom) setRosterRoom(cached.rosterRoom);
+          if (cached.metricsRoom) setMetricsRoom(cached.metricsRoom);
+          if (cached.schemaRoom) setSchemaRoom(cached.schemaRoom);
+          if (cached.networkRoom) setNetworkRoom(cached.networkRoom);
+          if (cached.orgRoom) { setOrgRoom(cached.orgRoom); setOrgRole(cached.orgRole); }
+          if (cached.orgMeta) setOrgMeta(cached.orgMeta);
+          if (cached.staff) setStaff(cached.staff);
+          if (cached.allOrgs) setAllOrgs(cached.allOrgs);
+          if (cached.teams) setTeams(cached.teams);
+          if (cached.fieldDefs) setFieldDefs(cached.fieldDefs);
+          if (cached.providerProfile) setProviderProfile(cached.providerProfile);
+          if (cached.cases) { setCases(cached.cases); setLoading(false); }
+        }
+      } catch {}
+
       // Single-pass scan: fetch all Khora state across rooms in one request
       const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.ORG_ROLES, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.TEAM_HIERARCHY, EVT.TEAM_TABLE_DEF, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK, EVT.DM_META]);
       let roster = null,
@@ -733,7 +753,9 @@ const ProviderApp = ({
         }]).then(id => { schema = id; needsSchemaSeeding = true; }));
       }
       if (roomCreations.length > 0) await Promise.all(roomCreations);
-      if (needsSchemaSeeding) {
+      // Only seed schema if room was just created AND doesn't already have forms
+      // (prevents re-seeding on refresh which causes 429 floods)
+      if (needsSchemaSeeding && !svc.hasSchemaForms(schema)) {
         const allSeeds = [
         // Forms — GIVEN data collection instruments
         ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)), ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
@@ -781,9 +803,13 @@ const ProviderApp = ({
         const orgState = scanned[detectedOrg];
         if (orgState?.[EVT.ORG_METADATA]) setOrgMeta(orgState[EVT.ORG_METADATA]);
         if (orgState?.[EVT.ORG_ROSTER]?.staff) setStaff(orgState[EVT.ORG_ROSTER].staff);
-        // Load email verification config
+        // Bulk-load org-level state in a single pass (avoids N sequential getState calls)
         try {
-          const evConfig = await svc.getState(detectedOrg, EVT.ORG_EMAIL_CONFIG).catch(() => null);
+          const orgBulk = await svc.getStateBulk(detectedOrg, [
+            { type: EVT.ORG_EMAIL_CONFIG }, { type: EVT.ROSTER_ASSIGN },
+            { type: EVT.ORG_TRASH }
+          ]);
+          const evConfig = orgBulk[`${EVT.ORG_EMAIL_CONFIG}|`];
           if (evConfig) {
             setEmailVerifyConfig(evConfig);
             setEmailConfigDraft(evConfig);
@@ -791,8 +817,12 @@ const ProviderApp = ({
           // Load my verification status from roster
           const myStaff = orgState?.[EVT.ORG_ROSTER]?.staff?.find(s => s.userId === svc.userId);
           if (myStaff?.email_verification) setMyVerification(myStaff.email_verification);
+          const assignments = orgBulk[`${EVT.ROSTER_ASSIGN}|`];
+          if (assignments?.assignments) setCaseAssignments(assignments.assignments);
+          const trashState = orgBulk[`${EVT.ORG_TRASH}|`];
+          if (trashState) setTrashedIndividuals(trashState);
         } catch (e) {
-          console.warn('Email verify config load:', e.message);
+          console.warn('Org bulk load:', e.message);
         }
         // Load opacity & message access settings
         if (orgState?.[EVT.ORG_OPACITY]) setOrgOpacity(orgState[EVT.ORG_OPACITY].level || 'translucent');
@@ -812,18 +842,6 @@ const ProviderApp = ({
         }
         // Load detected org messaging channels
         if (detectedOrgChannels.length > 0) setOrgChannels(detectedOrgChannels);
-        // Load case assignments from org room
-        try {
-          const assignments = await svc.getState(detectedOrg, EVT.ROSTER_ASSIGN);
-          if (assignments?.assignments) setCaseAssignments(assignments.assignments);
-        } catch (e) {
-          console.warn('Assignment load:', e.message);
-        }
-        // Load trash bin state from org room
-        try {
-          const trashState = await svc.getState(detectedOrg, EVT.ORG_TRASH);
-          if (trashState) setTrashedIndividuals(trashState);
-        } catch (e) { /* trash may be empty */ }
       }
       // Load teams detected during scan — apply per-user local color overrides
       if (detectedTeams.length > 0) setTeams(detectedTeams.map((t, i) => ({
@@ -951,6 +969,16 @@ const ProviderApp = ({
         }));
         await syncAssignments(detectedOrg, casesForSync, currentAssignments);
       }
+      // ── Persist provider view data to local cache for instant next load ──
+      try {
+        await svc.cacheViewData('provider', {
+          rosterRoom: roster, metricsRoom: metricsR, schemaRoom: schema,
+          networkRoom: network, orgRoom: detectedOrg, orgRole: detectedOrgRole,
+          orgMeta: selectedOrg?.meta, staff: selectedOrg?.roster?.staff,
+          allOrgs: detectedOrgs, teams: detectedTeams,
+          fieldDefs: detectedFieldDefs, providerProfile: scanned[roster]?.[EVT.PROVIDER_PROFILE]
+        });
+      } catch {}
     } catch (e) {
       console.error('Provider init failed:', e);
       setInitError(e.message || 'Failed to initialize provider workspace.');
@@ -3129,17 +3157,20 @@ const ProviderApp = ({
         }
       }]);
       setOrgCreationProgress({ step: 4, total: 5, label: 'Loading forms & schemas...' });
-      // Forms — GIVEN data collection (propagated to clients through providers)
-      for (const f of DEFAULT_FORMS) await svc.setState(orgSchema, EVT.SCHEMA_FORM, f, f.id);
-      for (const p of DEFAULT_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_PROMPT, p, p.key);
-      // Interpretations — MEANT assessments, definitions, authorities
-      for (const pp of DEFAULT_PROVIDER_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_ASSESSMENT, pp, pp.key);
-      for (const d of DEFAULT_DEFINITIONS) await svc.setState(orgSchema, EVT.SCHEMA_DEF, d, d.key);
-      for (const a of DEFAULT_AUTHORITIES) await svc.setState(orgSchema, EVT.SCHEMA_AUTHORITY, a, a.id);
-      await svc.setState(orgSchema, EVT.SCHEMA_TRANSFORM, {
-        id: 'transform_default',
-        transforms: DEFAULT_TRANSFORMS
-      }, 'default');
+      // Forms & schema seeding — batched in pairs with delay to avoid 429 storms
+      const orgSeeds = [
+        ...DEFAULT_FORMS.map(f => () => svc.setState(orgSchema, EVT.SCHEMA_FORM, f, f.id)),
+        ...DEFAULT_PROMPTS.map(p => () => svc.setState(orgSchema, EVT.SCHEMA_PROMPT, p, p.key)),
+        ...DEFAULT_PROVIDER_PROMPTS.map(pp => () => svc.setState(orgSchema, EVT.SCHEMA_ASSESSMENT, pp, pp.key)),
+        ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(orgSchema, EVT.SCHEMA_DEF, d, d.key)),
+        ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(orgSchema, EVT.SCHEMA_AUTHORITY, a, a.id)),
+        () => svc.setState(orgSchema, EVT.SCHEMA_TRANSFORM, { id: 'transform_default', transforms: DEFAULT_TRANSFORMS }, 'default')
+      ];
+      for (let i = 0; i < orgSeeds.length; i += 2) {
+        const batch = orgSeeds.slice(i, i + 2);
+        await Promise.all(batch.map(fn => fn()));
+        if (i + 2 < orgSeeds.length) await new Promise(r => setTimeout(r, 500));
+      }
       setOrgCreationProgress({ step: 5, total: 5, label: 'Finalizing setup...' });
       // Link supporting room IDs back to the org so other members can discover them
       try {

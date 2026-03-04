@@ -4365,6 +4365,36 @@ const KhoraBackup = (() => {
  * KhoraService delegates identity and client access to KhoraAuth via getters.
  * ═══════════════════════════════════════════════════════════ */
 class KhoraService {
+  // ── Local state cache (in-memory, backed by encrypted IDB) ──
+  _stateCache = {};
+  _stateCacheTTL = 5 * 60000;
+  _scanInflight = null;
+  _scanLastKey = '';
+
+  // ── Global state-write queue ──
+  _stateWriteQueue = Promise.resolve();
+  _stateWriteCount = 0;
+  _enqueueStateWrite(fn) {
+    this._stateWriteCount++;
+    const task = this._stateWriteQueue
+      .catch(() => {})
+      .then(() => this._stateWriteCount % 2 === 0 ? new Promise(r => setTimeout(r, 200)) : Promise.resolve())
+      .then(() => fn());
+    this._stateWriteQueue = task.catch(() => {});
+    return task;
+  }
+
+  // ── Global room-creation queue ──
+  _roomQueue = Promise.resolve();
+  _enqueueRoomCreation(fn) {
+    const task = this._roomQueue
+      .catch(() => {})
+      .then(() => new Promise(r => setTimeout(r, 600)))
+      .then(() => fn());
+    this._roomQueue = task.catch(() => {});
+    return task;
+  }
+
   // ── Delegation to KhoraAuth (backward-compatible interface) ──
   get client() { return KhoraAuth.client; }
   get userId() { return KhoraAuth.userId; }
@@ -4422,78 +4452,75 @@ class KhoraService {
 
   // INS(matrix.room, {e2ee, state}) — room_creation — Megolm encryption enabled by default
   async createRoom(name, topic, extraState = []) {
-    const initial_state = [{
-      type: 'm.room.encryption',
-      state_key: '',
-      content: {
-        algorithm: 'm.megolm.v1.aes-sha2'
+    return this._enqueueRoomCreation(async () => {
+      const initial_state = [{
+        type: 'm.room.encryption',
+        state_key: '',
+        content: {
+          algorithm: 'm.megolm.v1.aes-sha2'
+        }
+      }, ...extraState];
+      if (this.client) {
+        const r = await this._withRetry(() => this.client.createRoom({
+          name,
+          topic,
+          visibility: 'private',
+          preset: 'private_chat',
+          initial_state
+        }));
+        return r.room_id;
+      } else {
+        KhoraE2EE.requireEncryptedSend('create room');
       }
-    }, ...extraState];
-    if (this.client) {
-      const r = await this._withRetry(() => this.client.createRoom({
+    });
+  }
+
+  // INS(matrix.bridge_room, {power_levels}) — client_sovereign_creation — client PL 100, provider PL 50
+  async createClientRoom(name, topic, extraState = [], clientMatrixId = null) {
+    return this._enqueueRoomCreation(async () => {
+      const initial_state = [{
+        type: 'm.room.encryption',
+        state_key: '',
+        content: {
+          algorithm: 'm.megolm.v1.aes-sha2'
+        }
+      }, ...extraState];
+      const opts = {
         name,
         topic,
         visibility: 'private',
         preset: 'private_chat',
         initial_state
-      }));
-      return r.room_id;
-    } else {
-      KhoraE2EE.requireEncryptedSend('create room');
-    }
-  }
-
-  // INS(matrix.bridge_room, {power_levels}) — client_sovereign_creation — client PL 100, provider PL 50
-  async createClientRoom(name, topic, extraState = [], clientMatrixId = null) {
-    const initial_state = [{
-      type: 'm.room.encryption',
-      state_key: '',
-      content: {
-        algorithm: 'm.megolm.v1.aes-sha2'
-      }
-    }, ...extraState];
-    const opts = {
-      name,
-      topic,
-      visibility: 'private',
-      preset: 'private_chat',
-      initial_state
-    };
-    // If we know the client's Matrix ID, pre-set them as room admin (PL 100)
-    // Provider gets PL 50 — client can kick provider but not vice versa.
-    // We must explicitly set `events` to override the preset defaults (which require
-    // PL 100 for m.room.encryption etc.) — otherwise initial_state events fail
-    // because the provider only has PL 50.
-    if (clientMatrixId) {
-      opts.power_level_content_override = {
-        users: {
-          [this.userId]: 50,
-          [clientMatrixId]: 100
-        },
-        events_default: 0,
-        state_default: 50,
-        events: {
-          'm.room.power_levels': 100,
-          'm.room.tombstone': 100,
-          'm.room.server_acl': 100,
-          // Lock Khora bridge state events to client-only (PL 100)
-          // Prevents provider from overwriting bridge metadata or field references
-          [EVT.BRIDGE_META]: 100,
-          [EVT.BRIDGE_REFS]: 100,
-          [EVT.IDENTITY]: 100
-        },
-        kick: 50,
-        ban: 50,
-        invite: 50,
-        redact: 50
       };
-    }
-    if (this.client) {
-      const r = await this._withRetry(() => this.client.createRoom(opts));
-      return r.room_id;
-    } else {
-      KhoraE2EE.requireEncryptedSend('create room');
-    }
+      if (clientMatrixId) {
+        opts.power_level_content_override = {
+          users: {
+            [this.userId]: 50,
+            [clientMatrixId]: 100
+          },
+          events_default: 0,
+          state_default: 50,
+          events: {
+            'm.room.power_levels': 100,
+            'm.room.tombstone': 100,
+            'm.room.server_acl': 100,
+            [EVT.BRIDGE_META]: 100,
+            [EVT.BRIDGE_REFS]: 100,
+            [EVT.IDENTITY]: 100
+          },
+          kick: 50,
+          ban: 50,
+          invite: 50,
+          redact: 50
+        };
+      }
+      if (this.client) {
+        const r = await this._withRetry(() => this.client.createRoom(opts));
+        return r.room_id;
+      } else {
+        KhoraE2EE.requireEncryptedSend('create room');
+      }
+    });
   }
   async setPowerLevel(roomId, userId, level) {
     if (this.client) {
@@ -4523,27 +4550,67 @@ class KhoraService {
       await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/m.room.power_levels/`, current);
     }
   }
+  _stateCacheKey(roomId, type, sk) { return `${roomId}|${type}|${sk}`; }
+
   async getState(roomId, type, sk = '') {
     if (this.client) {
       const room = this.client.getRoom(roomId);
       if (!room) return null;
       const ev = room.currentState.getStateEvents(type, sk);
-      return ev ? ev.getContent() : null;
+      const content = ev ? ev.getContent() : null;
+      if (content) this._stateCache[this._stateCacheKey(roomId, type, sk)] = { data: content, ts: Date.now() };
+      return content;
+    }
+    const ck = this._stateCacheKey(roomId, type, sk);
+    const cached = this._stateCache[ck];
+    if (cached && (Date.now() - cached.ts) < this._stateCacheTTL) return cached.data;
+    try {
+      const result = await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`);
+      if (result) this._stateCache[ck] = { data: result, ts: Date.now() };
+      return result;
+    } catch {
+      return cached?.data || null;
+    }
+  }
+
+  async getStateBulk(roomId, types) {
+    const result = {};
+    if (this.client) {
+      const room = this.client.getRoom(roomId);
+      if (!room) return result;
+      for (const { type, sk } of types) {
+        const ev = room.currentState.getStateEvents(type, sk || '');
+        if (ev) {
+          result[`${type}|${sk || ''}`] = ev.getContent();
+          this._stateCache[this._stateCacheKey(roomId, type, sk || '')] = { data: ev.getContent(), ts: Date.now() };
+        }
+      }
+      return result;
     }
     try {
-      return await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`);
-    } catch {
-      return null;
-    }
+      const allState = await this._api('GET', `/rooms/${encodeURIComponent(roomId)}/state`);
+      const typeSet = new Set(types.map(t => `${t.type}|${t.sk || ''}`));
+      for (const ev of allState) {
+        const key = `${ev.type}|${ev.state_key || ''}`;
+        if (typeSet.has(key)) {
+          result[key] = ev.content;
+          this._stateCache[this._stateCacheKey(roomId, ev.type, ev.state_key || '')] = { data: ev.content, ts: Date.now() };
+        }
+      }
+    } catch {}
+    return result;
   }
 
   // ALT(matrix.room_state, {state_event}) — protocol_mutation — write state to Matrix room
   async setState(roomId, type, content, sk = '') {
-    if (this.client) {
-      await this._withRetry(() => this.client.sendStateEvent(roomId, type, content, sk));
-    } else {
-      await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`, content);
-    }
+    this._stateCache[this._stateCacheKey(roomId, type, sk)] = { data: content, ts: Date.now() };
+    return this._enqueueStateWrite(async () => {
+      if (this.client) {
+        await this._withRetry(() => this.client.sendStateEvent(roomId, type, content, sk));
+      } else {
+        await this._api('PUT', `/rooms/${encodeURIComponent(roomId)}/state/${type}/${sk}`, content);
+      }
+    });
   }
 
   // Force-refresh device keys for all members of a room.
@@ -4751,6 +4818,18 @@ class KhoraService {
   // Returns: { [roomId]: { [eventType]: content } }
   // Results are cached in the encrypted local vault (KhoraEncryptedCache).
   async scanRooms(extraTypes = []) {
+    const typesKey = JSON.stringify(extraTypes.slice().sort());
+    if (this._scanInflight && this._scanLastKey === typesKey) {
+      return this._scanInflight;
+    }
+    this._scanLastKey = typesKey;
+    this._scanInflight = this._doScanRooms(extraTypes).finally(() => {
+      this._scanInflight = null;
+    });
+    return this._scanInflight;
+  }
+
+  async _doScanRooms(extraTypes = []) {
     const types = [EVT.IDENTITY, EVT.BRIDGE_META, EVT.BRIDGE_REFS, ...extraTypes];
     if (this.client) {
       const result = {};
@@ -4762,7 +4841,6 @@ class KhoraService {
         }
         if (Object.keys(state).length > 0) result[room.roomId] = state;
       }
-      // Persist room state to encrypted local cache
       try {
         await KhoraEncryptedCache.put('rooms', 'scan_result', {
           data: result,
@@ -4771,7 +4849,6 @@ class KhoraService {
       } catch {}
       return result;
     }
-    // Fallback: single /sync with filter — avoids per-room 404 spam
     const filter = JSON.stringify({
       room: {
         state: {
@@ -4806,7 +4883,6 @@ class KhoraService {
       return result;
     } catch (e) {
       console.warn('scanRooms sync fallback failed, falling back to per-room scan:', e.message);
-      // Last resort: per-room scan (original behavior)
       const rooms = await this.getJoinedRooms();
       const result = {};
       for (const rid of rooms) {
@@ -4883,6 +4959,30 @@ class KhoraService {
     } else {
       await this._api('POST', `/join/${encodeURIComponent(roomId)}`, {});
     }
+  }
+
+  static VIEW_CACHE_TTL = 10 * 60000;
+
+  async cacheViewData(viewKey, data) {
+    try {
+      await KhoraEncryptedCache.put('state', `view_${viewKey}`, { data, ts: Date.now() });
+    } catch {}
+  }
+
+  async getCachedViewData(viewKey) {
+    try {
+      const cached = await KhoraEncryptedCache.get('state', `view_${viewKey}`);
+      if (cached?.data && (Date.now() - cached.ts) < KhoraService.VIEW_CACHE_TTL) return cached.data;
+    } catch {}
+    return null;
+  }
+
+  hasSchemaForms(schemaRoomId) {
+    if (!this.client) return false;
+    const room = this.client.getRoom(schemaRoomId);
+    if (!room) return false;
+    const formEvents = room.currentState.getStateEvents(EVT.SCHEMA_FORM);
+    return Array.isArray(formEvents) ? formEvents.length > 0 : !!formEvents;
   }
 }
 const svc = new KhoraService();
@@ -22370,6 +22470,20 @@ const ClientApp = ({
     setLoading(true);
     setInitError(null);
     try {
+      // ── Cache-first: render from cached client view data while live data loads ──
+      try {
+        const cached = await svc.getCachedViewData('client');
+        if (cached) {
+          if (cached.vaultRoom) setVaultRoom(cached.vaultRoom);
+          if (cached.schemaRoom) setSchemaRoom(cached.schemaRoom);
+          if (cached.vaultData) setVaultData(cached.vaultData);
+          if (cached.observations) setObservations(cached.observations);
+          if (cached.providers) setProviders(cached.providers);
+          if (cached.myTeams) setMyTeams(cached.myTeams);
+          if (cached.vaultData || cached.providers) setLoading(false);
+        }
+      } catch {}
+
       // Phase 1: Auto-join any invited client_record rooms so they appear in scanRooms.
       // Safety: only join rooms that were explicitly created for this user (client_matrix_id match)
       // AND have a valid owner set. Rooms are shown as "pending" until the client manually claims them.
@@ -22493,19 +22607,18 @@ const ClientApp = ({
             created: Date.now()
           }
         }]);
-        const allSeeds = [
-        // Forms — GIVEN data collection instruments
-        ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)), ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
-        // Interpretations — MEANT frameworks
-        ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(schema, EVT.SCHEMA_DEF, d, d.key)), ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(schema, EVT.SCHEMA_AUTHORITY, a, a.id)), [() => svc.setState(schema, EVT.SCHEMA_TRANSFORM, {
-          id: 'transform_default',
-          transforms: DEFAULT_TRANSFORMS
-        }, 'default')]].flat();
-        // Seed in parallel batches of 2 to stay under rate limits
-        for (let i = 0; i < allSeeds.length; i += 2) {
-          const batch = allSeeds.slice(i, i + 2);
-          await Promise.all(batch.map(fn => fn()));
-          if (i + 2 < allSeeds.length) await new Promise(r => setTimeout(r, 500));
+        if (!svc.hasSchemaForms(schema)) {
+          const allSeeds = [
+          ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)), ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
+          ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(schema, EVT.SCHEMA_DEF, d, d.key)), ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(schema, EVT.SCHEMA_AUTHORITY, a, a.id)), [() => svc.setState(schema, EVT.SCHEMA_TRANSFORM, {
+            id: 'transform_default',
+            transforms: DEFAULT_TRANSFORMS
+          }, 'default')]].flat();
+          for (let i = 0; i < allSeeds.length; i += 2) {
+            const batch = allSeeds.slice(i, i + 2);
+            await Promise.all(batch.map(fn => fn()));
+            if (i + 2 < allSeeds.length) await new Promise(r => setTimeout(r, 500));
+          }
         }
       }
       setVaultRoom(vault);
@@ -22534,6 +22647,19 @@ const ClientApp = ({
         }
       }
       if (detectedClientDMs.length > 0) setClientTeamDMs(detectedClientDMs);
+
+      // ── Persist client view data to local cache for instant next load ──
+      try {
+        const snap = await svc.getState(vault, EVT.VAULT_SNAPSHOT);
+        const provIdx = await svc.getState(vault, EVT.VAULT_PROVIDERS);
+        await svc.cacheViewData('client', {
+          vaultRoom: vault, schemaRoom: schema,
+          vaultData: snap?.fields || {},
+          observations: snap?.observations || [],
+          providers: provIdx?.providers || [],
+          myTeams: detectedTeams
+        });
+      } catch {}
     } catch (e) {
       console.error('Vault init failed:', e);
       setInitError(e.message || 'Failed to initialize vault.');
@@ -36594,6 +36720,25 @@ const ProviderApp = ({
     setLoading(true);
     setInitError(null);
     try {
+      // ── Cache-first: try to render from cached provider view data instantly ──
+      try {
+        const cached = await svc.getCachedViewData('provider');
+        if (cached) {
+          if (cached.rosterRoom) setRosterRoom(cached.rosterRoom);
+          if (cached.metricsRoom) setMetricsRoom(cached.metricsRoom);
+          if (cached.schemaRoom) setSchemaRoom(cached.schemaRoom);
+          if (cached.networkRoom) setNetworkRoom(cached.networkRoom);
+          if (cached.orgRoom) { setOrgRoom(cached.orgRoom); setOrgRole(cached.orgRole); }
+          if (cached.orgMeta) setOrgMeta(cached.orgMeta);
+          if (cached.staff) setStaff(cached.staff);
+          if (cached.allOrgs) setAllOrgs(cached.allOrgs);
+          if (cached.teams) setTeams(cached.teams);
+          if (cached.fieldDefs) setFieldDefs(cached.fieldDefs);
+          if (cached.providerProfile) setProviderProfile(cached.providerProfile);
+          if (cached.cases) { setCases(cached.cases); setLoading(false); }
+        }
+      } catch {}
+
       // Single-pass scan: fetch all Khora state across rooms in one request
       const scanned = await svc.scanRooms([EVT.ORG_METADATA, EVT.ORG_ROSTER, EVT.PROVIDER_PROFILE, EVT.ORG_OPACITY, EVT.ORG_MSG_ACCESS, EVT.ORG_MSG_CHANNEL, EVT.ORG_TERMINOLOGY, EVT.ORG_ROLES, EVT.TEAM_META, EVT.TEAM_MEMBERS, EVT.TEAM_SCHEMA, EVT.TEAM_SCHEMA_RULE, EVT.TEAM_HIERARCHY, EVT.TEAM_TABLE_DEF, EVT.FIELD_DEF, EVT.FIELD_CROSSWALK, EVT.DM_META]);
       let roster = null,
@@ -36760,21 +36905,20 @@ const ProviderApp = ({
             created: Date.now()
           }
         }]);
-        const allSeeds = [
-        // Forms — GIVEN data collection instruments
-        ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)), ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
-        // Interpretations — MEANT assessments (provider instruments)
-        ...DEFAULT_PROVIDER_PROMPTS.map(pp => () => svc.setState(schema, EVT.SCHEMA_ASSESSMENT, pp, pp.key)),
-        // Interpretations — classification rules and authorities
-        ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(schema, EVT.SCHEMA_DEF, d, d.key)), ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(schema, EVT.SCHEMA_AUTHORITY, a, a.id)), [() => svc.setState(schema, EVT.SCHEMA_TRANSFORM, {
-          id: 'transform_default',
-          transforms: DEFAULT_TRANSFORMS
-        }, 'default')]].flat();
-        // Seed in parallel batches of 2 to stay under rate limits
-        for (let i = 0; i < allSeeds.length; i += 2) {
-          const batch = allSeeds.slice(i, i + 2);
-          await Promise.all(batch.map(fn => fn()));
-          if (i + 2 < allSeeds.length) await new Promise(r => setTimeout(r, 500));
+        // Only seed if forms don't already exist (prevents re-seeding 429 floods on refresh)
+        if (!svc.hasSchemaForms(schema)) {
+          const allSeeds = [
+          ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)), ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
+          ...DEFAULT_PROVIDER_PROMPTS.map(pp => () => svc.setState(schema, EVT.SCHEMA_ASSESSMENT, pp, pp.key)),
+          ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(schema, EVT.SCHEMA_DEF, d, d.key)), ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(schema, EVT.SCHEMA_AUTHORITY, a, a.id)), [() => svc.setState(schema, EVT.SCHEMA_TRANSFORM, {
+            id: 'transform_default',
+            transforms: DEFAULT_TRANSFORMS
+          }, 'default')]].flat();
+          for (let i = 0; i < allSeeds.length; i += 2) {
+            const batch = allSeeds.slice(i, i + 2);
+            await Promise.all(batch.map(fn => fn()));
+            if (i + 2 < allSeeds.length) await new Promise(r => setTimeout(r, 500));
+          }
         }
       }
       // Fallback: if metrics/schema not found by owner, check org metadata for linked room IDs
@@ -36807,18 +36951,25 @@ const ProviderApp = ({
         const orgState = scanned[detectedOrg];
         if (orgState?.[EVT.ORG_METADATA]) setOrgMeta(orgState[EVT.ORG_METADATA]);
         if (orgState?.[EVT.ORG_ROSTER]?.staff) setStaff(orgState[EVT.ORG_ROSTER].staff);
-        // Load email verification config
+        // Bulk-load org-level state in a single pass (avoids N sequential getState calls)
         try {
-          const evConfig = await svc.getState(detectedOrg, EVT.ORG_EMAIL_CONFIG).catch(() => null);
+          const orgBulk = await svc.getStateBulk(detectedOrg, [
+            { type: EVT.ORG_EMAIL_CONFIG }, { type: EVT.ROSTER_ASSIGN },
+            { type: EVT.ORG_TRASH }
+          ]);
+          const evConfig = orgBulk[`${EVT.ORG_EMAIL_CONFIG}|`];
           if (evConfig) {
             setEmailVerifyConfig(evConfig);
             setEmailConfigDraft(evConfig);
           }
-          // Load my verification status from roster
           const myStaff = orgState?.[EVT.ORG_ROSTER]?.staff?.find(s => s.userId === svc.userId);
           if (myStaff?.email_verification) setMyVerification(myStaff.email_verification);
+          const assignments = orgBulk[`${EVT.ROSTER_ASSIGN}|`];
+          if (assignments?.assignments) setCaseAssignments(assignments.assignments);
+          const trashState = orgBulk[`${EVT.ORG_TRASH}|`];
+          if (trashState) setTrashedIndividuals(trashState);
         } catch (e) {
-          console.warn('Email verify config load:', e.message);
+          console.warn('Org bulk load:', e.message);
         }
         // Load opacity & message access settings
         if (orgState?.[EVT.ORG_OPACITY]) setOrgOpacity(orgState[EVT.ORG_OPACITY].level || 'translucent');
@@ -36838,18 +36989,6 @@ const ProviderApp = ({
         }
         // Load detected org messaging channels
         if (detectedOrgChannels.length > 0) setOrgChannels(detectedOrgChannels);
-        // Load case assignments from org room
-        try {
-          const assignments = await svc.getState(detectedOrg, EVT.ROSTER_ASSIGN);
-          if (assignments?.assignments) setCaseAssignments(assignments.assignments);
-        } catch (e) {
-          console.warn('Assignment load:', e.message);
-        }
-        // Load trash bin state from org room
-        try {
-          const trashState = await svc.getState(detectedOrg, EVT.ORG_TRASH);
-          if (trashState) setTrashedIndividuals(trashState);
-        } catch (e) { /* trash may be empty */ }
       }
       // Load teams detected during scan — apply per-user local color overrides
       if (detectedTeams.length > 0) setTeams(detectedTeams.map((t, i) => ({
@@ -36977,6 +37116,16 @@ const ProviderApp = ({
         }));
         await syncAssignments(detectedOrg, casesForSync, currentAssignments);
       }
+      // ── Persist provider view data to local cache for instant next load ──
+      try {
+        await svc.cacheViewData('provider', {
+          rosterRoom: roster, metricsRoom: metricsR, schemaRoom: schema,
+          networkRoom: network, orgRoom: detectedOrg, orgRole: detectedOrgRole,
+          orgMeta: selectedOrg?.meta, staff: selectedOrg?.roster?.staff,
+          allOrgs: detectedOrgs, teams: detectedTeams,
+          fieldDefs: detectedFieldDefs, providerProfile: scanned[roster]?.[EVT.PROVIDER_PROFILE]
+        });
+      } catch {}
     } catch (e) {
       console.error('Provider init failed:', e);
       setInitError(e.message || 'Failed to initialize provider workspace.');
@@ -38970,17 +39119,20 @@ const ProviderApp = ({
           created: Date.now()
         }
       }]);
-      // Forms — GIVEN data collection (propagated to clients through providers)
-      for (const f of DEFAULT_FORMS) await svc.setState(orgSchema, EVT.SCHEMA_FORM, f, f.id);
-      for (const p of DEFAULT_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_PROMPT, p, p.key);
-      // Interpretations — MEANT assessments, definitions, authorities
-      for (const pp of DEFAULT_PROVIDER_PROMPTS) await svc.setState(orgSchema, EVT.SCHEMA_ASSESSMENT, pp, pp.key);
-      for (const d of DEFAULT_DEFINITIONS) await svc.setState(orgSchema, EVT.SCHEMA_DEF, d, d.key);
-      for (const a of DEFAULT_AUTHORITIES) await svc.setState(orgSchema, EVT.SCHEMA_AUTHORITY, a, a.id);
-      await svc.setState(orgSchema, EVT.SCHEMA_TRANSFORM, {
-        id: 'transform_default',
-        transforms: DEFAULT_TRANSFORMS
-      }, 'default');
+      // Forms & schema seeding — batched in pairs with delay to avoid 429 storms
+      const orgSeeds = [
+        ...DEFAULT_FORMS.map(f => () => svc.setState(orgSchema, EVT.SCHEMA_FORM, f, f.id)),
+        ...DEFAULT_PROMPTS.map(p => () => svc.setState(orgSchema, EVT.SCHEMA_PROMPT, p, p.key)),
+        ...DEFAULT_PROVIDER_PROMPTS.map(pp => () => svc.setState(orgSchema, EVT.SCHEMA_ASSESSMENT, pp, pp.key)),
+        ...DEFAULT_DEFINITIONS.map(d => () => svc.setState(orgSchema, EVT.SCHEMA_DEF, d, d.key)),
+        ...DEFAULT_AUTHORITIES.map(a => () => svc.setState(orgSchema, EVT.SCHEMA_AUTHORITY, a, a.id)),
+        () => svc.setState(orgSchema, EVT.SCHEMA_TRANSFORM, { id: 'transform_default', transforms: DEFAULT_TRANSFORMS }, 'default')
+      ];
+      for (let i = 0; i < orgSeeds.length; i += 2) {
+        const batch = orgSeeds.slice(i, i + 2);
+        await Promise.all(batch.map(fn => fn()));
+        if (i + 2 < orgSeeds.length) await new Promise(r => setTimeout(r, 500));
+      }
       // Link supporting room IDs back to the org so other members can discover them
       try {
         await svc.setState(org, EVT.ORG_METADATA, {
@@ -49337,10 +49489,11 @@ const App = () => {
       setWelcomed(true);
       try { localStorage.setItem('khora_welcomed', '1'); } catch {}
       // Use cached room data for instant rendering while sync completes in background
+      // Extended TTL: cache is always refreshed via background sync, so allow up to 2 hours
       let usedCache = false;
       try {
         const cached = await KhoraEncryptedCache.get('rooms', 'scan_result');
-        if (cached?.data && (Date.now() - cached.ts) < 30 * 60 * 1000) {
+        if (cached?.data && (Date.now() - cached.ts) < 2 * 60 * 60 * 1000) {
           applyScannedData(cached.data);
           usedCache = true;
         }

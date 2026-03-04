@@ -1246,6 +1246,20 @@ const ClientApp = ({
     setLoading(true);
     setInitError(null);
     try {
+      // ── Cache-first: render from cached client view data while live data loads ──
+      try {
+        const cached = await svc.getCachedViewData('client');
+        if (cached) {
+          if (cached.vaultRoom) setVaultRoom(cached.vaultRoom);
+          if (cached.schemaRoom) setSchemaRoom(cached.schemaRoom);
+          if (cached.vaultData) setVaultData(cached.vaultData);
+          if (cached.observations) setObservations(cached.observations);
+          if (cached.providers) setProviders(cached.providers);
+          if (cached.myTeams) setMyTeams(cached.myTeams);
+          if (cached.vaultData || cached.providers) setLoading(false);
+        }
+      } catch {}
+
       // Phase 1: Auto-join any invited client_record rooms so they appear in scanRooms.
       // Safety: only join rooms that were explicitly created for this user (client_matrix_id match)
       // AND have a valid owner set. Rooms are shown as "pending" until the client manually claims them.
@@ -1374,7 +1388,9 @@ const ClientApp = ({
       }
       if (roomCreations.length > 0) await Promise.all(roomCreations);
       if (createdVault) showToast('Vault created — encrypted room ready', 'success');
-      if (needsSchemaSeeding) {
+      // Only seed schema if room was just created AND doesn't already have forms
+      // (prevents re-seeding on refresh which causes 429 floods)
+      if (needsSchemaSeeding && !svc.hasSchemaForms(schema)) {
         const allSeeds = [
         // Forms — GIVEN data collection instruments
         ...DEFAULT_FORMS.map(f => () => svc.setState(schema, EVT.SCHEMA_FORM, f, f.id)), ...DEFAULT_PROMPTS.map(p => () => svc.setState(schema, EVT.SCHEMA_PROMPT, p, p.key)),
@@ -1416,6 +1432,19 @@ const ClientApp = ({
         }
       }
       if (detectedClientDMs.length > 0) setClientTeamDMs(detectedClientDMs);
+
+      // ── Persist client view data to local cache for instant next load ──
+      try {
+        const snap = await svc.getState(vault, EVT.VAULT_SNAPSHOT);
+        const provIdx = await svc.getState(vault, EVT.VAULT_PROVIDERS);
+        await svc.cacheViewData('client', {
+          vaultRoom: vault, schemaRoom: schema,
+          vaultData: snap?.fields || {},
+          observations: snap?.observations || [],
+          providers: provIdx?.providers || [],
+          myTeams: detectedTeams
+        });
+      } catch {}
     } catch (e) {
       console.error('Vault init failed:', e);
       setInitError(e.message || 'Failed to initialize vault.');

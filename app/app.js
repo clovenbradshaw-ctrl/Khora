@@ -96,10 +96,11 @@ const App = () => {
       setWelcomed(true);
       try { localStorage.setItem('khora_welcomed', '1'); } catch {}
       // Use cached room data for instant rendering while sync completes in background
+      // Extended TTL: cache is always refreshed via background sync, so allow up to 2 hours
       let usedCache = false;
       try {
         const cached = await KhoraEncryptedCache.get('rooms', 'scan_result');
-        if (cached?.data && (Date.now() - cached.ts) < 30 * 60 * 1000) {
+        if (cached?.data && (Date.now() - cached.ts) < 2 * 60 * 60 * 1000) {
           applyScannedData(cached.data);
           usedCache = true;
         }
