@@ -1075,6 +1075,509 @@ const RecordProvenance = ({
   })));
 };
 
+/* ═══════════════════ EO CANVAS — GRAPH VISUALIZATION ═══════════════════
+ * Canvas-based graph view of EO events.
+ * Nodes = events grouped by (room, operator). Edges = sequence / helix / cross-room.
+ * Adapts the standalone EO Canvas reference into a React component.
+ * ═══════════════════════════════════════════════════════════════ */
+const EO_CANVAS_OPS = {
+  NUL: { symbol:'\u2205', color:'#e05050', desc:'absence / destruction' },
+  DES: { symbol:'\u22A1', color:'#c0a030', desc:'designation / naming' },
+  INS: { symbol:'\u25B3', color:'#40a860', desc:'instantiation / creation' },
+  SEG: { symbol:'|',      color:'#40a0a0', desc:'segmentation / boundary' },
+  CON: { symbol:'\u22C8', color:'#5080c0', desc:'connection / joining' },
+  SYN: { symbol:'\u2228', color:'#9060c0', desc:'synthesis / merging' },
+  ALT: { symbol:'\u223F', color:'#5090d0', desc:'alternation / mutation' },
+  SUP: { symbol:'\u2225', color:'#c0a030', desc:'superposition / layering' },
+  REC: { symbol:'\u27F3', color:'#d08030', desc:'reconfiguration' },
+};
+const HELIX_ORDER = ['NUL','DES','INS','SEG','CON','SYN','ALT','SUP','REC'];
+
+function _buildEOGraph(events) {
+  const NODE_W = 180, NODE_H = 48, COL_GAP = 280, ROW_GAP = 72;
+  // Group events by (roomId, op)
+  const groupMap = {};
+  const roomSet = {};
+  events.forEach(ev => {
+    if (!ev.op || !HELIX_ORDER.includes(ev.op)) return;
+    const rKey = ev.roomId || 'unknown';
+    const gKey = rKey + '::' + ev.op;
+    if (!groupMap[gKey]) {
+      groupMap[gKey] = { key:gKey, roomId:rKey, op:ev.op, events:[], labels:[], senders:new Set(), latestTs:0, earliestTs:Infinity };
+    }
+    const g = groupMap[gKey];
+    g.events.push(ev);
+    if (ev.label) g.labels.push(ev.label);
+    if (ev.sender) g.senders.add(ev.sender);
+    if (ev.ts > g.latestTs) g.latestTs = ev.ts;
+    if (ev.ts < g.earliestTs) g.earliestTs = ev.ts;
+    if (!roomSet[rKey]) roomSet[rKey] = { id:rKey, type:ev.roomInfo?.type||'unknown', label:ev.roomInfo?.label||rKey, color:ev.roomInfo?.color||'blue' };
+  });
+  const rooms = Object.values(roomSet);
+  const roomIdx = {};
+  rooms.forEach((r,i) => roomIdx[r.id] = i);
+  // Build nodes
+  const nodes = [];
+  const cellCount = {};
+  Object.values(groupMap).forEach(g => {
+    const ri = roomIdx[g.roomId] || 0;
+    const hi = HELIX_ORDER.indexOf(g.op);
+    const cellKey = ri + '_' + hi;
+    if (!cellCount[cellKey]) cellCount[cellKey] = 0;
+    const stack = cellCount[cellKey]++;
+    nodes.push({
+      id: g.key, op: g.op, roomId: g.roomId, room: roomSet[g.roomId],
+      count: g.events.length, labels: g.labels.slice(0,5), senders: [...g.senders],
+      latestTs: g.latestTs, earliestTs: g.earliestTs, events: g.events,
+      x: 120 + ri * COL_GAP + stack * (NODE_W + 16),
+      y: 60 + hi * ROW_GAP,
+      w: NODE_W, h: NODE_H,
+    });
+  });
+  // Build edges
+  const edges = [];
+  const edgeSet = new Set();
+  const addEdge = (a, b, type, color) => {
+    const k = [a,b,type].sort().join('|');
+    if (edgeSet.has(k)) return;
+    edgeSet.add(k);
+    edges.push({ a, b, type, color });
+  };
+  // 1. Sequence: consecutive ops in same room (by time)
+  rooms.forEach(r => {
+    const rNodes = nodes.filter(n => n.roomId === r.id).sort((a,b) => a.earliestTs - b.earliestTs);
+    for (let i = 0; i < rNodes.length - 1; i++) {
+      addEdge(rNodes[i].id, rNodes[i+1].id, 'sequence', '#3a3a6a');
+    }
+  });
+  // 2. Helix: adjacent operators in same room
+  rooms.forEach(r => {
+    const rNodes = nodes.filter(n => n.roomId === r.id);
+    rNodes.forEach(na => {
+      const ai = HELIX_ORDER.indexOf(na.op);
+      rNodes.forEach(nb => {
+        if (na === nb) return;
+        const bi = HELIX_ORDER.indexOf(nb.op);
+        if (bi === ai + 1) addEdge(na.id, nb.id, 'helix', '#5a3030');
+      });
+    });
+  });
+  // 3. Cross-room: shared target prefix
+  const targetMap = {};
+  nodes.forEach(n => {
+    n.events.forEach(ev => {
+      const t = typeof ev.content?.target === 'string' ? ev.content.target : '';
+      if (!t) return;
+      const prefix = t.split('.').slice(0,2).join('.');
+      if (!targetMap[prefix]) targetMap[prefix] = new Set();
+      targetMap[prefix].add(n.id);
+    });
+  });
+  Object.values(targetMap).forEach(ids => {
+    const arr = [...ids];
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i+1; j < arr.length; j++) {
+        const na = nodes.find(n=>n.id===arr[i]), nb = nodes.find(n=>n.id===arr[j]);
+        if (na && nb && na.roomId !== nb.roomId) addEdge(na.id, nb.id, 'crossroom', '#2a5a4a');
+      }
+    }
+  });
+  // Overlap resolution
+  const MIN_X = NODE_W + 24, MIN_Y = NODE_H + 12;
+  for (let iter = 0; iter < 80; iter++) {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i+1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const ox = MIN_X - Math.abs(dx), oy = MIN_Y - Math.abs(dy);
+        if (ox > 0 && oy > 0) {
+          if (ox < oy) { const p = ox * 0.55 * (dx < 0 ? -1 : 1); a.x -= p*0.5; b.x += p*0.5; }
+          else { const p = oy * 0.3 * (dy < 0 ? -1 : 1); a.y -= p*0.5; b.y += p*0.5; }
+        }
+      }
+    }
+    nodes.forEach(n => {
+      const targetY = 60 + HELIX_ORDER.indexOf(n.op) * ROW_GAP;
+      n.y += (targetY - n.y) * 0.25;
+    });
+  }
+  return { nodes, edges, rooms };
+}
+
+const EOCanvas = ({ events }) => {
+  const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
+  const camRef = useRef({ x:0, y:0, zoom:1 });
+  const panRef = useRef({ active:false, sx:0, sy:0, cx:0, cy:0 });
+  const graphRef = useRef({ nodes:[], edges:[], rooms:[] });
+  const hoveredRef = useRef(null);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [edgeVis, setEdgeVis] = useState({ sequence:true, helix:false, crossroom:true });
+
+  // Build graph when events change
+  useEffect(() => {
+    graphRef.current = _buildEOGraph(events);
+    // Auto-fit
+    const { nodes } = graphRef.current;
+    if (nodes.length > 0) {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+        nodes.forEach(n => { minX=Math.min(minX,n.x); minY=Math.min(minY,n.y); maxX=Math.max(maxX,n.x+n.w); maxY=Math.max(maxY,n.y+n.h); });
+        const pw = canvas.width - 120, ph = canvas.height - 80;
+        const gz = Math.min(pw/Math.max(maxX-minX,1), ph/Math.max(maxY-minY,1), 1.8) * 0.85;
+        camRef.current = { x: -((minX+maxX)/2), y: -((minY+maxY)/2), zoom: gz };
+      }
+    }
+    _drawCanvas();
+  }, [events]);
+
+  // Resize observer
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const canvas = canvasRef.current;
+    if (!wrap || !canvas) return;
+    const resize = () => { canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; _drawCanvas(); };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+
+  const _w2s = (wx, wy) => {
+    const c = canvasRef.current;
+    if (!c) return { x:0, y:0 };
+    const cam = camRef.current;
+    return { x: (wx + cam.x)*cam.zoom + c.width/2, y: (wy + cam.y)*cam.zoom + c.height/2 };
+  };
+  const _s2w = (sx, sy) => {
+    const c = canvasRef.current;
+    if (!c) return { x:0, y:0 };
+    const cam = camRef.current;
+    return { x: (sx - c.width/2)/cam.zoom - cam.x, y: (sy - c.height/2)/cam.zoom - cam.y };
+  };
+  const _hitTest = (sx, sy) => {
+    const w = _s2w(sx, sy);
+    return graphRef.current.nodes.find(n => w.x >= n.x && w.x <= n.x+n.w && w.y >= n.y && w.y <= n.y+n.h) || null;
+  };
+
+  const _roundRect = (ctx, x, y, w, h, r) => {
+    ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+    ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+    ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+    ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+  };
+
+  const _drawCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const cam = camRef.current;
+    const W = canvas.width, H = canvas.height;
+    const { nodes, edges, rooms } = graphRef.current;
+    ctx.clearRect(0, 0, W, H);
+    // Grid
+    const step = 40 * cam.zoom;
+    if (step > 4) {
+      const ox = (cam.x * cam.zoom + W/2) % step;
+      const oy = (cam.y * cam.zoom + H/2) % step;
+      ctx.strokeStyle = '#1a1a2a';
+      ctx.lineWidth = 1;
+      for (let x = ox; x < W; x += step) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+      for (let y = oy; y < H; y += step) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    }
+    // Helix row labels
+    if (nodes.length) {
+      HELIX_ORDER.forEach((k, i) => {
+        const wy = 60 + i * 72 + 24;
+        const s = _w2s(-60, wy);
+        if (s.y < 0 || s.y > H) return;
+        ctx.save(); ctx.globalAlpha = 0.4;
+        ctx.font = Math.max(9, 11*cam.zoom) + 'px monospace';
+        ctx.fillStyle = EO_CANVAS_OPS[k].color;
+        ctx.textAlign = 'right';
+        ctx.fillText(EO_CANVAS_OPS[k].symbol + ' ' + k, s.x, s.y);
+        ctx.restore();
+      });
+    }
+    // Room column headers
+    rooms.forEach((r, ri) => {
+      const wx = 120 + ri * 280 + 90;
+      const s = _w2s(wx, 20);
+      if (s.x < 0 || s.x > W) return;
+      ctx.save(); ctx.globalAlpha = 0.55;
+      ctx.font = Math.max(8, 10*cam.zoom) + 'px monospace';
+      ctx.fillStyle = '#606090';
+      ctx.textAlign = 'center';
+      ctx.fillText(r.label || r.type, s.x, s.y);
+      ctx.restore();
+    });
+    // Edges
+    edges.forEach(e => {
+      if (e.type === 'sequence' && !edgeVis.sequence) return;
+      if (e.type === 'helix' && !edgeVis.helix) return;
+      if (e.type === 'crossroom' && !edgeVis.crossroom) return;
+      const na = nodes.find(n=>n.id===e.a), nb = nodes.find(n=>n.id===e.b);
+      if (!na || !nb) return;
+      const ax = _w2s(na.x+na.w/2, na.y+na.h/2);
+      const bx = _w2s(nb.x+nb.w/2, nb.y+nb.h/2);
+      ctx.save();
+      ctx.strokeStyle = e.color;
+      ctx.lineWidth = e.type === 'crossroom' ? 1.5 : 1;
+      if (e.type === 'crossroom') {
+        ctx.setLineDash([4*cam.zoom, 4*cam.zoom]);
+        ctx.shadowColor = '#2a6a5a'; ctx.shadowBlur = 6;
+      } else if (e.type === 'helix') {
+        ctx.setLineDash([2*cam.zoom, 3*cam.zoom]);
+      } else { ctx.setLineDash([]); }
+      const cpx = ax.x + (bx.x-ax.x)*0.5;
+      ctx.beginPath();
+      ctx.moveTo(ax.x, ax.y);
+      ctx.bezierCurveTo(cpx, ax.y, cpx, bx.y, bx.x, bx.y);
+      ctx.stroke();
+      // Arrow for sequence
+      if (e.type === 'sequence') {
+        const dist = Math.sqrt((bx.x-ax.x)**2 + (bx.y-ax.y)**2);
+        if (dist > 20) {
+          ctx.setLineDash([]);
+          const angle = Math.atan2(bx.y-bx.y, bx.x-cpx) || Math.atan2(bx.y-ax.y, bx.x-ax.x);
+          const as = 5*cam.zoom;
+          ctx.fillStyle = e.color;
+          ctx.beginPath();
+          ctx.moveTo(bx.x, bx.y);
+          ctx.lineTo(bx.x - as*Math.cos(angle-0.4), bx.y - as*Math.sin(angle-0.4));
+          ctx.lineTo(bx.x - as*Math.cos(angle+0.4), bx.y - as*Math.sin(angle+0.4));
+          ctx.closePath(); ctx.fill();
+        }
+      }
+      ctx.restore();
+    });
+    // Nodes
+    nodes.forEach(n => {
+      const op = EO_CANVAS_OPS[n.op];
+      const s = _w2s(n.x, n.y);
+      const sw = n.w * cam.zoom, sh = n.h * cam.zoom;
+      if (s.x+sw < 0 || s.x > W || s.y+sh < 0 || s.y > H) return;
+      const isSel = selectedNode?.id === n.id;
+      const isHov = hoveredRef.current?.id === n.id;
+      ctx.save();
+      if (isSel || isHov) { ctx.shadowColor = op.color; ctx.shadowBlur = isSel ? 18 : 8; }
+      // BG
+      ctx.fillStyle = isSel ? '#1e1e3a' : '#12122a';
+      ctx.beginPath(); _roundRect(ctx, s.x, s.y, sw, sh, 3*cam.zoom); ctx.fill();
+      // Left accent
+      ctx.fillStyle = op.color;
+      ctx.fillRect(s.x, s.y+2*cam.zoom, 3*cam.zoom, sh-4*cam.zoom);
+      // Border
+      ctx.strokeStyle = isSel ? op.color : isHov ? op.color+'88' : '#2a2a4a';
+      ctx.lineWidth = isSel ? 1.5 : 1;
+      ctx.shadowBlur = 0;
+      ctx.beginPath(); _roundRect(ctx, s.x, s.y, sw, sh, 3*cam.zoom); ctx.stroke();
+      // Symbol
+      ctx.fillStyle = op.color;
+      ctx.font = Math.max(11, 15*cam.zoom) + 'px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(op.symbol, s.x + 8*cam.zoom, s.y + sh*0.52);
+      if (cam.zoom > 0.4) {
+        ctx.font = Math.max(6, 8*cam.zoom) + 'px monospace';
+        ctx.fillStyle = op.color + 'aa';
+        ctx.fillText(n.op, s.x + 8*cam.zoom, s.y + sh*0.82);
+      }
+      // Name + count
+      if (cam.zoom > 0.25) {
+        ctx.fillStyle = isSel ? '#e8e8f8' : '#b0b0d0';
+        const ns = Math.max(8, 10*cam.zoom);
+        ctx.font = ns + 'px monospace';
+        ctx.textAlign = 'left';
+        const maxW = sw - 50*cam.zoom;
+        let name = (n.room?.type || 'room');
+        while (name.length > 3 && ctx.measureText(name).width > maxW) name = name.slice(0,-1);
+        ctx.fillText(name, s.x + 25*cam.zoom, s.y + sh*0.42);
+        // Count badge
+        ctx.fillStyle = op.color + '44';
+        const badge = 'x' + n.count;
+        const bw = ctx.measureText(badge).width + 6*cam.zoom;
+        ctx.fillRect(s.x + sw - bw - 4*cam.zoom, s.y + 3*cam.zoom, bw, sh*0.45);
+        ctx.fillStyle = op.color;
+        ctx.font = Math.max(7, 9*cam.zoom) + 'px monospace';
+        ctx.fillText(badge, s.x + sw - bw - 1*cam.zoom, s.y + sh*0.38);
+      }
+      ctx.restore();
+    });
+    // Status
+    ctx.save();
+    ctx.fillStyle = '#0a0a14cc';
+    ctx.fillRect(0, H-22, W, 22);
+    ctx.font = '10px monospace'; ctx.fillStyle = '#404060';
+    ctx.textAlign = 'left';
+    ctx.fillText('Nodes: ' + nodes.length + '   Edges: ' + edges.length + '   Rooms: ' + rooms.length +
+      '   Gaps: ' + HELIX_ORDER.filter(k => !nodes.find(n=>n.op===k)).length +
+      '   Zoom: ' + Math.round(cam.zoom*100) + '%', 10, H-7);
+    ctx.restore();
+  };
+
+  // Mouse handlers
+  const onMouseDown = useCallback(e => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const ox = e.clientX - rect.left, oy = e.clientY - rect.top;
+    const hit = _hitTest(ox, oy);
+    if (hit) { setSelectedNode(prev => prev?.id === hit.id ? null : hit); }
+    else {
+      panRef.current = { active:true, sx:e.clientX, sy:e.clientY, cx:camRef.current.x, cy:camRef.current.y };
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+    }
+  }, []);
+  const onMouseMove = useCallback(e => {
+    const p = panRef.current;
+    if (p.active) {
+      camRef.current.x = p.cx + (e.clientX - p.sx) / camRef.current.zoom;
+      camRef.current.y = p.cy + (e.clientY - p.sy) / camRef.current.zoom;
+      _drawCanvas(); return;
+    }
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const ox = e.clientX - rect.left, oy = e.clientY - rect.top;
+    const hit = _hitTest(ox, oy);
+    if (hit !== hoveredRef.current) {
+      hoveredRef.current = hit;
+      if (canvasRef.current) canvasRef.current.style.cursor = hit ? 'pointer' : 'default';
+      _drawCanvas();
+    }
+  }, []);
+  const onMouseUp = useCallback(() => { panRef.current.active = false; if (canvasRef.current) canvasRef.current.style.cursor = hoveredRef.current ? 'pointer' : 'default'; }, []);
+  const onWheel = useCallback(e => {
+    e.preventDefault();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const ox = e.clientX - rect.left, oy = e.clientY - rect.top;
+    const cam = camRef.current;
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const wx = (ox - canvasRef.current.width/2)/cam.zoom - cam.x;
+    const wy = (oy - canvasRef.current.height/2)/cam.zoom - cam.y;
+    cam.zoom = Math.max(0.12, Math.min(4, cam.zoom * factor));
+    cam.x = (ox - canvasRef.current.width/2)/cam.zoom - wx;
+    cam.y = (oy - canvasRef.current.height/2)/cam.zoom - wy;
+    _drawCanvas();
+  }, []);
+
+  // Redraw when selectedNode or edgeVis changes
+  useEffect(() => { _drawCanvas(); }, [selectedNode, edgeVis]);
+
+  // Touch support
+  const touchRef = useRef(null);
+  const onTouchStart = useCallback(e => { touchRef.current = { x:e.touches[0].clientX, y:e.touches[0].clientY, cx:camRef.current.x, cy:camRef.current.y }; }, []);
+  const onTouchMove = useCallback(e => {
+    e.preventDefault();
+    const t = touchRef.current;
+    if (!t) return;
+    camRef.current.x = t.cx + (e.touches[0].clientX - t.x) / camRef.current.zoom;
+    camRef.current.y = t.cy + (e.touches[0].clientY - t.y) / camRef.current.zoom;
+    _drawCanvas();
+  }, []);
+
+  const opC = selectedNode ? EO_CANVAS_OPS[selectedNode.op] : null;
+
+  return React.createElement('div', { style: { position:'relative', width:'100%', height:'min(70vh, 600px)', background:'#0c0c18', borderRadius:'var(--r)', border:'1px solid var(--border-0)', overflow:'hidden' } },
+    // Canvas
+    React.createElement('div', { ref: wrapRef, style: { width:'100%', height:'100%' } },
+      React.createElement('canvas', {
+        ref: canvasRef, style: { display:'block', width:'100%', height:'100%' },
+        onMouseDown, onMouseMove, onMouseUp, onMouseLeave: onMouseUp,
+        onWheel, onTouchStart, onTouchMove
+      })
+    ),
+    // Edge toggles overlay
+    React.createElement('div', { style: { position:'absolute', top:8, right: selectedNode ? 268 : 8, display:'flex', gap:4, zIndex:2 } },
+      [['sequence','\u2014 seq','#3a3a6a'], ['helix','-- helix','#5a3030'], ['crossroom','\u2934 xroom','#2a5a4a']].map(([key, label, col]) =>
+        React.createElement('button', {
+          key, className: 'b-gho b-xs',
+          style: { fontSize:10, fontFamily:'var(--mono)', opacity: edgeVis[key] ? 1 : 0.35, borderColor: edgeVis[key] ? col : undefined },
+          onClick: () => setEdgeVis(prev => ({ ...prev, [key]: !prev[key] }))
+        }, label)
+      )
+    ),
+    // Legend overlay
+    React.createElement('div', { style: { position:'absolute', top:8, left:8, zIndex:2, opacity:0.6, pointerEvents:'none' } },
+      [['#3a3a6a','sequence (same room)'], ['#2a5a4a','cross-room'], ['#5a3030','helix dependency']].map(([c, l]) =>
+        React.createElement('div', { key:l, style:{ display:'flex', alignItems:'center', gap:6, marginBottom:2 } },
+          React.createElement('div', { style:{ width:18, height:2, background:c, borderRadius:1 } }),
+          React.createElement('span', { style:{ fontSize:9, color:'#404060', fontFamily:'var(--mono)' } }, l)
+        )
+      )
+    ),
+    // Sidebar
+    selectedNode && React.createElement('div', {
+      style: {
+        position:'absolute', right:0, top:0, bottom:0, width:260,
+        background:'#0d0d1a', borderLeft:'1px solid #1e1e3a', overflowY:'auto',
+        padding:0, zIndex:3, animation:'fadeIn .15s ease'
+      }
+    },
+      React.createElement('div', { style: { padding:'10px 12px', borderBottom:'1px solid #1e1e3a', display:'flex', alignItems:'center', gap:8 } },
+        React.createElement('span', { style: { fontSize:20, color: opC.color } }, opC.symbol),
+        React.createElement('div', null,
+          React.createElement('div', { style: { fontSize:12, color:'#e0e0f0', fontWeight:600 } }, selectedNode.op),
+          React.createElement('div', { style: { fontSize:9, color: opC.color + 'aa' } }, opC.desc)
+        ),
+        React.createElement('button', {
+          onClick: () => setSelectedNode(null),
+          style: { marginLeft:'auto', background:'none', border:'none', color:'#404060', cursor:'pointer', fontSize:16 }
+        }, '\u00D7')
+      ),
+      React.createElement('div', { style: { padding:'8px 12px', display:'flex', flexDirection:'column', gap:6 } },
+        // Room
+        React.createElement('div', { style: { background:'#10102a', border:'1px solid #1e1e3a', borderRadius:3, padding:'6px 8px' } },
+          React.createElement('div', { style: { fontSize:8, letterSpacing:'0.15em', color:'#303058', textTransform:'uppercase', marginBottom:2 } }, 'Room'),
+          React.createElement('span', { style: { fontSize:11, color:'#9090b8' } }, selectedNode.room?.label || selectedNode.room?.type || 'Unknown')
+        ),
+        // Count + Time
+        React.createElement('div', { style: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 } },
+          React.createElement('div', { style: { background:'#10102a', border:'1px solid #1e1e3a', borderRadius:3, padding:'6px 8px' } },
+            React.createElement('div', { style: { fontSize:8, letterSpacing:'0.15em', color:'#303058', textTransform:'uppercase', marginBottom:2 } }, 'Events'),
+            React.createElement('span', { style: { fontSize:11, color:'#9090b8' } }, selectedNode.count)
+          ),
+          React.createElement('div', { style: { background:'#10102a', border:'1px solid #1e1e3a', borderRadius:3, padding:'6px 8px' } },
+            React.createElement('div', { style: { fontSize:8, letterSpacing:'0.15em', color:'#303058', textTransform:'uppercase', marginBottom:2 } }, 'Latest'),
+            React.createElement('span', { style: { fontSize:10, color:'#9090b8', fontFamily:'var(--mono)' } },
+              selectedNode.latestTs ? new Date(selectedNode.latestTs).toLocaleTimeString() : '\u2014')
+          )
+        ),
+        // Senders
+        selectedNode.senders.length > 0 && React.createElement('div', { style: { background:'#10102a', border:'1px solid #1e1e3a', borderRadius:3, padding:'6px 8px' } },
+          React.createElement('div', { style: { fontSize:8, letterSpacing:'0.15em', color:'#303058', textTransform:'uppercase', marginBottom:2 } }, 'Senders'),
+          React.createElement('div', { style: { display:'flex', flexWrap:'wrap', gap:3 } },
+            selectedNode.senders.map(s => React.createElement('span', {
+              key: s, style: { fontSize:9, color:'#606090', background:'#0c0c1c', padding:'2px 6px', borderRadius:2, fontFamily:'var(--mono)' }
+            }, (s || '').split(':')[0]?.replace('@','') || s))
+          )
+        ),
+        // Labels
+        selectedNode.labels.length > 0 && React.createElement('div', { style: { background:'#10102a', border:'1px solid #1e1e3a', borderRadius:3, padding:'6px 8px' } },
+          React.createElement('div', { style: { fontSize:8, letterSpacing:'0.15em', color:'#303058', textTransform:'uppercase', marginBottom:2 } }, 'Recent Actions'),
+          selectedNode.labels.slice(0,6).map((l, i) => React.createElement('div', {
+            key: i, style: { fontSize:10, color:'#7070a0', padding:'2px 0', borderBottom: i < selectedNode.labels.length-1 ? '1px solid #14142a' : 'none' }
+          }, l))
+        ),
+        // Helix position
+        React.createElement('div', { style: { background:'#10102a', border:'1px solid #1e1e3a', borderRadius:3, padding:'6px 8px' } },
+          React.createElement('div', { style: { fontSize:8, letterSpacing:'0.15em', color:'#303058', textTransform:'uppercase', marginBottom:4 } }, 'Helix Position'),
+          React.createElement('div', { style: { display:'flex', gap:3, flexWrap:'wrap' } },
+            HELIX_ORDER.map(k => React.createElement('span', {
+              key: k, style: {
+                fontSize:9, padding:'2px 5px', borderRadius:2, fontFamily:'var(--mono)',
+                background: k === selectedNode.op ? EO_CANVAS_OPS[k].color + '22' : '#0c0c1c',
+                color: k === selectedNode.op ? EO_CANVAS_OPS[k].color : '#252540',
+                border: k === selectedNode.op ? '1px solid ' + EO_CANVAS_OPS[k].color + '44' : '1px solid transparent'
+              }
+            }, EO_CANVAS_OPS[k].symbol))
+          )
+        )
+      )
+    )
+  );
+};
+
 /* ═══════════════════ ACTION LOG ═══════════════════════════
  * Records state changes to any given room, or across all rooms.
  * Uses classifyEvent() for human-readable labels.
@@ -1136,6 +1639,7 @@ const ActionLog = ({
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [targetFilter, setTargetFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('list');
   const loadEvents = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -1311,7 +1815,22 @@ const ActionLog = ({
   /*#__PURE__*/React.createElement("button", {
     onClick: loadEvents, className: "b-gho b-xs",
     style: { display: 'flex', alignItems: 'center', gap: 4 }
-  }, /*#__PURE__*/React.createElement(I, { n: "refresh-cw", s: 10 }), "Refresh")),
+  }, /*#__PURE__*/React.createElement(I, { n: "refresh-cw", s: 10 }), "Refresh"),
+  /*#__PURE__*/React.createElement("div", {
+    style: { marginLeft: 'auto', display: 'flex', gap: 2, background: 'var(--bg-1)', borderRadius: 'var(--r)', padding: 2, border: '1px solid var(--border-0)' }
+  },
+    /*#__PURE__*/React.createElement("button", {
+      className: viewMode === 'list' ? 'b-pri b-xs' : 'b-gho b-xs',
+      onClick: () => setViewMode('list'),
+      style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }
+    }, /*#__PURE__*/React.createElement(I, { n: "list", s: 10 }), "List"),
+    /*#__PURE__*/React.createElement("button", {
+      className: viewMode === 'graph' ? 'b-pri b-xs' : 'b-gho b-xs',
+      onClick: () => setViewMode('graph'),
+      style: { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }
+    }, /*#__PURE__*/React.createElement(I, { n: "git-branch", s: 10 }), "Graph")
+  )),
+  viewMode === 'graph' ? /*#__PURE__*/React.createElement(EOCanvas, { events: filtered }) :
   filtered.length === 0 && !error ? /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: { textAlign: 'center', padding: '40px 20px', borderStyle: 'dashed' }
