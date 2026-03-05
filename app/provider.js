@@ -1030,17 +1030,8 @@ const ProviderApp = ({
       meta,
       refs
     } of bridgeData) {
-      const decrypted = {};
-      if (refs?.fields) {
-        for (const [key, ref] of Object.entries(refs.fields)) {
-          try {
-            if (ref.key && ref.ciphertext && ref.iv) {
-              const plain = await FieldCrypto.decrypt(ref.ciphertext, ref.iv, ref.key);
-              if (plain !== null) decrypted[key] = plain;
-            }
-          } catch {/* skip undecryptable field */}
-        }
-      }
+      // Decrypt via BridgeKeyManager — handles both legacy (inline keys) and new (separated keys) format
+      const decrypted = await BridgeKeyManager.decryptRefs(refs, rid);
       // Backfill org_id on bridge meta if provider has an org and bridge doesn't have one yet
       if (orgRoom && !meta.org_id && meta.provider === svc.userId) {
         try {

@@ -1343,22 +1343,26 @@ const ClientApp = ({
             created_by: svc.userId,
             origin_server: extractHomeserver(svc.userId)
           }
-        }, {
+        },
+        // New partitioned vault fields (empty initial state per category)
+        { type: EVT.VAULT_FIELDS, state_key: 'identity', content: { fields: {}, last_modified_by: svc.userId, last_modified_at: Date.now() } },
+        { type: EVT.VAULT_FIELDS, state_key: 'contact', content: { fields: {}, last_modified_by: svc.userId, last_modified_at: Date.now() } },
+        { type: EVT.VAULT_FIELDS, state_key: 'ids', content: { fields: {}, last_modified_by: svc.userId, last_modified_at: Date.now() } },
+        { type: EVT.VAULT_FIELDS, state_key: 'settings', content: {
+          metrics_consent: { enabled: false, categories: [] },
+          matching_consent: { enabled: false, layers: [], network_id: null, last_token_ts: null },
+          custom_field_defs: [], enabled_frameworks: [],
+          last_modified_by: svc.userId, last_modified_at: Date.now()
+        } },
+        // Legacy snapshot for backward compat with older clients
+        {
           type: EVT.VAULT_SNAPSHOT,
           state_key: '',
           content: {
             fields: {},
             observations: [],
-            metrics_consent: {
-              enabled: false,
-              categories: []
-            },
-            matching_consent: {
-              enabled: false,
-              layers: [],
-              network_id: null,
-              last_token_ts: null
-            },
+            metrics_consent: { enabled: false, categories: [] },
+            matching_consent: { enabled: false, layers: [], network_id: null, last_token_ts: null },
             custom_field_defs: [],
             enabled_frameworks: [],
             created_by: svc.userId,
@@ -1452,15 +1456,41 @@ const ClientApp = ({
     setLoading(false);
   };
   const loadVault = async (rid, bridgeProfiles) => {
-    const snap = await svc.getState(rid, EVT.VAULT_SNAPSHOT);
-    setVaultData(snap?.fields || {});
-    setObservations(snap?.observations || []);
-    setMetricsConsent(snap?.metrics_consent || {
-      enabled: false,
-      categories: []
-    });
-    setCustomFieldDefs(snap?.custom_field_defs || []);
-    setEnabledFrameworks(snap?.enabled_frameworks || []);
+    // Try partitioned format first (VAULT_FIELDS with state_key categories)
+    const categories = ['identity', 'contact', 'ids'];
+    const [catResults, settings] = await Promise.all([
+      Promise.all(categories.map(cat => svc.getState(rid, EVT.VAULT_FIELDS, cat))),
+      svc.getState(rid, EVT.VAULT_FIELDS, 'settings')
+    ]);
+
+    let allFields = {};
+    let usedNewFormat = false;
+    for (let i = 0; i < categories.length; i++) {
+      if (catResults[i]?.fields) {
+        Object.assign(allFields, catResults[i].fields);
+        usedNewFormat = true;
+      }
+    }
+
+    if (usedNewFormat) {
+      setVaultData(allFields);
+      setMetricsConsent(settings?.metrics_consent || { enabled: false, categories: [] });
+      setCustomFieldDefs(settings?.custom_field_defs || []);
+      setEnabledFrameworks(settings?.enabled_frameworks || []);
+      // Load observations from timeline events
+      try {
+        const obsEvents = await svc.getTimeline(rid, EVT.VAULT_OBSERVATION);
+        setObservations(obsEvents.map(e => e.content));
+      } catch { setObservations([]); }
+    } else {
+      // Fallback: legacy monolithic snapshot
+      const snap = await svc.getState(rid, EVT.VAULT_SNAPSHOT);
+      setVaultData(snap?.fields || {});
+      setObservations(snap?.observations || []);
+      setMetricsConsent(snap?.metrics_consent || { enabled: false, categories: [] });
+      setCustomFieldDefs(snap?.custom_field_defs || []);
+      setEnabledFrameworks(snap?.enabled_frameworks || []);
+    }
     const idx = await svc.getState(rid, EVT.VAULT_PROVIDERS);
     // Enrich providers with profile data and bridge meta from bridge rooms
     const enrichedProviders = (idx?.providers || []).map(p => {
@@ -1528,24 +1558,48 @@ const ClientApp = ({
     setMyResources(resources);
   };
 
-  // ALT(vault.snapshot, {updated_fields}) — atomic_persistence — single state write for all vault data
+  // ALT(vault.fields+settings, {partitioned_writes}) — category_persistence — partitioned state writes for vault data
+  // Also writes legacy VAULT_SNAPSHOT for backward compatibility with older clients.
   const saveSnapshot = async (fields, obs, mc, cfd, ef) => {
-    const snapshot = {
-      fields: fields ?? vaultData,
-      observations: obs ?? observations,
-      metrics_consent: mc ?? metricsConsent,
-      custom_field_defs: cfd ?? customFieldDefs,
-      enabled_frameworks: ef ?? enabledFrameworks,
-      last_modified_by: svc.userId,
-      last_modified_at: Date.now(),
-      origin_server: extractHomeserver(svc.userId)
-    };
-    await svc.setState(vaultRoom, EVT.VAULT_SNAPSHOT, snapshot);
-    setVaultData(snapshot.fields);
-    setObservations(snapshot.observations);
-    setMetricsConsent(snapshot.metrics_consent);
-    setCustomFieldDefs(snapshot.custom_field_defs);
-    setEnabledFrameworks(snapshot.enabled_frameworks);
+    const f = fields ?? vaultData;
+    const o = obs ?? observations;
+    const m = mc ?? metricsConsent;
+    const c = cfd ?? customFieldDefs;
+    const e = ef ?? enabledFrameworks;
+    const meta = { last_modified_by: svc.userId, last_modified_at: Date.now(), origin_server: extractHomeserver(svc.userId) };
+
+    // 1. Partition fields by category
+    const buckets = {};
+    for (const [key, val] of Object.entries(f)) {
+      const cat = fieldCategory(key);
+      if (!buckets[cat]) buckets[cat] = {};
+      buckets[cat][key] = val;
+    }
+
+    // 2. Write each category as separate state event (state_key = category)
+    const writes = Object.entries(buckets)
+      .filter(([, v]) => Object.keys(v).length > 0)
+      .map(([cat, data]) => svc.setState(vaultRoom, EVT.VAULT_FIELDS, { fields: data, ...meta }, cat));
+
+    // 3. Write settings as separate state event
+    writes.push(svc.setState(vaultRoom, EVT.VAULT_FIELDS, {
+      metrics_consent: m, custom_field_defs: c, enabled_frameworks: e, ...meta
+    }, 'settings'));
+
+    // 4. Legacy snapshot for backward compat (older clients read this)
+    writes.push(svc.setState(vaultRoom, EVT.VAULT_SNAPSHOT, {
+      fields: f, observations: o, metrics_consent: m,
+      custom_field_defs: c, enabled_frameworks: e, ...meta
+    }));
+
+    await Promise.all(writes);
+
+    // 5. Update local React state
+    setVaultData(f);
+    setObservations(o);
+    setMetricsConsent(m);
+    setCustomFieldDefs(c);
+    setEnabledFrameworks(e);
   };
   const saveProviderIndex = async provs => {
     await svc.setState(vaultRoom, EVT.VAULT_PROVIDERS, {
@@ -1621,7 +1675,10 @@ const ClientApp = ({
       prompt: obsModal.question,
       free_text: obsFreeText || undefined
     }, vaultFrame());
+    // Store observation as timeline event (not in snapshot — avoids 65KB state event bloat)
+    await svc.sendEvent(vaultRoom, EVT.VAULT_OBSERVATION, obs);
     const newObs = [...observations, obs];
+    // Still write to legacy snapshot for backward compat
     await saveSnapshot(undefined, newObs);
     setObsModal(null);
     setObsValue('');
@@ -1676,6 +1733,12 @@ const ClientApp = ({
         content: {
           fields: {}
         }
+      }, {
+        type: EVT.BRIDGE_KEYS,
+        state_key: '',
+        content: {
+          keys: {}
+        }
       }]);
       await svc.invite(bridgeId, newProviderId);
       await emitOp(vaultRoom, 'CON', dot('vault', 'providers', newProviderId), {
@@ -1699,23 +1762,23 @@ const ClientApp = ({
     }
   };
 
-  // ALT(bridge.refs, {re_encrypted_fields}) — selective_sync — encrypts shared fields with fresh keys
+  // ALT(bridge.refs+keys, {re_encrypted_fields}) — selective_sync — encrypts shared fields, stores keys separately
   const syncFieldsToBridge = async (bridgeRoomId, sharedFields, data) => {
     const refs = {};
+    const keys = {};
     for (const [fk, shared] of Object.entries(sharedFields)) {
       if (shared && data[fk]) {
         const keyB64 = await FieldCrypto.generateKey();
         const enc = await FieldCrypto.encrypt(data[fk], keyB64);
-        refs[fk] = {
-          ...enc,
-          key: keyB64
-        };
+        refs[fk] = { ...enc };   // { ciphertext, iv } — NO key in refs
+        keys[fk] = keyB64;       // key stored separately in BRIDGE_KEYS
       }
     }
-    await svc.setState(bridgeRoomId, EVT.BRIDGE_REFS, {
-      fields: refs,
-      updated: Date.now()
-    });
+    // Two parallel writes: ciphertext in BRIDGE_REFS, keys in BRIDGE_KEYS
+    await Promise.all([
+      svc.setState(bridgeRoomId, EVT.BRIDGE_REFS, { fields: refs, updated: Date.now() }),
+      BridgeKeyManager.storeKeys(bridgeRoomId, keys)
+    ]);
   };
 
   // SEG(bridge.field_visibility, {state: shared|revoked}) — access_partitioning — key rotation on each toggle
@@ -1777,7 +1840,8 @@ const ClientApp = ({
   const handleHardRevoke = async pi => {
     const prov = providers[pi];
     try {
-      // Step 1: Seal old bridge — emit NUL, tombstone, and kick provider BEFORE creating new bridge
+      // Step 1: Seal old bridge — revoke keys, emit NUL, tombstone, and kick provider BEFORE creating new bridge
+      await BridgeKeyManager.revokeKeys(prov.bridgeRoomId);
       await emitOp(prov.bridgeRoomId, 'NUL', dot('bridge', 'relationship'), {
         reason: 'hard_revoke'
       }, bridgeFrame(prov.bridgeRoomId));
@@ -1803,6 +1867,12 @@ const ClientApp = ({
         state_key: '',
         content: {
           fields: {}
+        }
+      }, {
+        type: EVT.BRIDGE_KEYS,
+        state_key: '',
+        content: {
+          keys: {}
         }
       }]);
       // Step 3: Tombstone old bridge (points to new) and kick provider from old
@@ -1840,11 +1910,11 @@ const ClientApp = ({
       try {
         await svc.kick(prov.bridgeRoomId, prov.providerUserId);
       } catch {}
-      await svc.setState(prov.bridgeRoomId, EVT.BRIDGE_REFS, {
-        fields: {},
-        revoked: true,
-        updated: Date.now()
-      });
+      // Clear both refs and keys in parallel
+      await Promise.all([
+        svc.setState(prov.bridgeRoomId, EVT.BRIDGE_REFS, { fields: {}, revoked: true, updated: Date.now() }),
+        BridgeKeyManager.revokeKeys(prov.bridgeRoomId)
+      ]);
       await emitOp(vaultRoom, 'NUL', dot('vault', 'relationships', prov.providerUserId), {
         reason: 'full_severance',
         bridge: prov.bridgeRoomId

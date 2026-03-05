@@ -5,9 +5,13 @@ const EVT = {
   // Vault
   VAULT_SNAPSHOT: `${NS}.vault.snapshot`,
   VAULT_PROVIDERS: `${NS}.vault.providers`,
+  // Vault — partitioned fields + observations
+  VAULT_FIELDS: `${NS}.vault.fields`,             // state_key partitioned by category (identity, contact, ids, settings)
+  VAULT_OBSERVATION: `${NS}.vault.observation`,    // timeline event per observation
   // Bridge
   BRIDGE_META: `${NS}.bridge.meta`,
   BRIDGE_REFS: `${NS}.bridge.refs`,
+  BRIDGE_KEYS: `${NS}.bridge.keys`,               // encryption keys, separate from ciphertext
   // Roster
   ROSTER_INDEX: `${NS}.roster.index`,
   ROSTER_ASSIGN: `${NS}.roster.assignment`,
@@ -121,6 +125,21 @@ const EVT = {
   // Filen backup credentials (encrypted email + password, stored in user's owned room)
   BACKUP_CREDS: `${NS}.backup.credentials`
 };
+
+/* ═══════════════════ VAULT FIELD CATEGORIES ═══════════════════ */
+// Maps field keys to vault partition categories for state_key-partitioned storage.
+// Fields not listed here default to 'identity'.
+const VAULT_CATEGORIES = {
+  identity: ['first_name', 'last_name', 'dob', 'gender', 'race_ethnicity', 'veteran_status', 'disability_status'],
+  contact: ['phone', 'email', 'address'],
+  ids: ['ssn_last4', 'hmis_id'],
+};
+const _fieldCatMap = {};
+for (const [cat, keys] of Object.entries(VAULT_CATEGORIES)) {
+  for (const k of keys) _fieldCatMap[k] = cat;
+}
+/** Return the vault partition category for a given field key */
+function fieldCategory(key) { return _fieldCatMap[key] || 'identity'; }
 
 /* ═══════════════════ MATURITY LEVELS (MVP §Screen 4) ═══════════════════ */
 // DES(schema.lifecycle_states, {values: [draft, trial, normative, de_facto, deprecated]}) — schema_governance

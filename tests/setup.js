@@ -147,7 +147,25 @@ export class MockMatrixClient {
       },
       hasEncryptionStateEvent() {
         return self._getInternal(roomId, 'm.room.encryption', '') !== null;
-      }
+      },
+      getTimelineSets() { return []; },
+      getLiveTimeline() {
+        return {
+          getEvents() {
+            return self._timeline
+              .filter(e => e.room_id === roomId)
+              .map(e => ({
+                getType: () => e.type,
+                getContent: () => structuredClone(e.content),
+                getTs: () => e.ts,
+                getId: () => e.event_id,
+                getSender: () => e.sender || '@test:test.local'
+              }));
+          },
+          getPaginationToken() { return null; }
+        };
+      },
+      getJoinedMembers() { return []; }
     };
   }
 
@@ -248,3 +266,6 @@ loadModule('config.js');
 
 // Provide a global svc instance for emitOp and other code that expects it
 globalThis.svc = new KhoraService();
+
+// 8. Bridge Key Manager (depends on svc being initialized)
+loadModule('bridge-keys.js');

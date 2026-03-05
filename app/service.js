@@ -179,6 +179,7 @@ class KhoraService {
             // Prevents provider from overwriting bridge metadata or field references
             [EVT.BRIDGE_META]: 100,
             [EVT.BRIDGE_REFS]: 100,
+            [EVT.BRIDGE_KEYS]: 100,
             [EVT.IDENTITY]: 100
           },
           kick: 50,
@@ -400,6 +401,45 @@ class KhoraService {
       KhoraE2EE.requireEncryptedSend('send message');
     }
   }
+  // DES(matrix.timeline, {filter: event_type}) — timeline_read — fetch timeline events by type from a room
+  async getTimeline(roomId, eventType, limit = 100) {
+    if (this.client) {
+      const room = this.client.getRoom(roomId);
+      if (!room) return [];
+      const events = [];
+      const timelineSets = room.getTimelineSets ? room.getTimelineSets() : [];
+      if (timelineSets.length > 0) {
+        for (const ts of timelineSets) {
+          for (const tl of ts.getTimelines()) {
+            for (const ev of tl.getEvents()) {
+              if (ev.getType() === eventType) {
+                events.push({ content: ev.getContent(), ts: ev.getTs() });
+              }
+            }
+          }
+        }
+      } else {
+        for (const ev of room.getLiveTimeline().getEvents()) {
+          if (ev.getType() === eventType) {
+            events.push({ content: ev.getContent(), ts: ev.getTs() });
+          }
+        }
+      }
+      return events.sort((a, b) => a.ts - b.ts).slice(-limit);
+    }
+    // API fallback: /messages with filter
+    try {
+      const filter = encodeURIComponent(JSON.stringify({ types: [eventType] }));
+      const data = await this._api('GET',
+        `/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=${limit}&filter=${filter}`);
+      return (data?.chunk || [])
+        .map(e => ({ content: e.content, ts: e.origin_server_ts }))
+        .reverse();
+    } catch {
+      return [];
+    }
+  }
+
   async getMessages(roomId, limit = 40) {
     if (this.client) {
       const room = this.client.getRoom(roomId);
@@ -524,7 +564,7 @@ class KhoraService {
   }
 
   async _doScanRooms(extraTypes = []) {
-    const types = [EVT.IDENTITY, EVT.BRIDGE_META, EVT.BRIDGE_REFS, ...extraTypes];
+    const types = [EVT.IDENTITY, EVT.BRIDGE_META, EVT.BRIDGE_REFS, EVT.BRIDGE_KEYS, ...extraTypes];
     if (this.client) {
       const result = {};
       for (const room of this.client.getRooms()) {
