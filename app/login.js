@@ -739,7 +739,7 @@ mode === 'login' && /*#__PURE__*/React.createElement("form", {
       width: 6,
       height: 6,
       borderRadius: '50%',
-      background: typeof matrixcs !== 'undefined' ? 'var(--green)' : 'var(--gold)'
+      background: (typeof matrixcs !== 'undefined' && crypto?.subtle) ? 'var(--green)' : 'var(--gold)'
     }
   }), /*#__PURE__*/React.createElement("span", {
     style: {
@@ -747,7 +747,7 @@ mode === 'login' && /*#__PURE__*/React.createElement("form", {
       fontSize: 11.5,
       color: 'var(--tx-3)'
     }
-  }, typeof matrixcs !== 'undefined' ? 'Secure connection ready' : 'Connecting\u2026'))),
+  }, (typeof matrixcs !== 'undefined' && crypto?.subtle) ? 'Secure connection ready' : (typeof matrixcs !== 'undefined' ? 'HTTPS required for encryption' : 'Connecting\u2026')))),
 
   /* Scroll hint arrow */
   /*#__PURE__*/React.createElement("div", {

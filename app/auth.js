@@ -39,6 +39,9 @@ const LocalVaultCrypto = {
   _userId: null,
   // INS(crypto.vault_key, {via: hkdf, inputs: token+userId+deviceId}) — at_rest_encryption
   async deriveKey(userId, accessToken, deviceId) {
+    if (!crypto?.subtle) {
+      throw new Error('Secure context required — please access Khora over HTTPS.');
+    }
     const enc = new TextEncoder();
     const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(accessToken), 'HKDF', false, ['deriveKey']);
     this._key = await crypto.subtle.deriveKey({
