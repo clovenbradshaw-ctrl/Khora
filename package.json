@@ -6,12 +6,14 @@
   "private": true,
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke:matrix": "node scripts/smoke-test-matrix.mjs"
   },
   "devDependencies": {
     "vitest": "^2.1.9"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "matrix-js-sdk": "^41.9.0-rc.0"
   }
 }
