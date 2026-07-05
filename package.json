@@ -1,0 +1,17 @@
+{
+  "name": "eo-substrate",
+  "version": "0.1.0",
+  "description": "EO Substrate: a kernel + Matrix-backed log + generated surfaces for building EO-addressed applications.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  }
+}
