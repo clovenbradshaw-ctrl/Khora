@@ -7,21 +7,24 @@ import { assertLogAdapter } from '../../src/kernel/log.js';
 // the duck-typed surface documented at the top of matrix-log.js: it
 // records sent events per room and replays them back through
 // getRoom(...).getLiveTimeline().getEvents().
-function makeFakeClient(sender = '@_site_bot:example.org') {
-  const timelines = new Map();
-  let nextId = 0;
+// sharedRoomState lets two fake clients (two different senders) write into
+// the same room state, the way two real users' sessions would both be
+// writing into the one room a homeserver holds — used below to show
+// concurrent multi-sender writes need no merge logic beyond plain ordering.
+function makeFakeClient(sender = '@_site_bot:example.org', sharedRoomState) {
+  const state = sharedRoomState ?? { timelines: new Map(), nextId: 0 };
   return {
     sentEvents: [],
     async sendEvent(roomId, type, content) {
-      const event_id = `$evt${nextId++}`;
-      const event = { event_id, sender, origin_server_ts: 1000 + nextId, type, content };
-      if (!timelines.has(roomId)) timelines.set(roomId, []);
-      timelines.get(roomId).push(event);
+      const event_id = `$evt${state.nextId++}`;
+      const event = { event_id, sender, origin_server_ts: 1000 + state.nextId, type, content };
+      if (!state.timelines.has(roomId)) state.timelines.set(roomId, []);
+      state.timelines.get(roomId).push(event);
       this.sentEvents.push(event);
       return { event_id };
     },
     getRoom(roomId) {
-      const events = timelines.get(roomId);
+      const events = state.timelines.get(roomId);
       if (!events) return null;
       return { getLiveTimeline: () => ({ getEvents: () => events }) };
     },
@@ -129,5 +132,31 @@ describe('MatrixLog', () => {
     const log = new MatrixLog({ client, roomId: '!empty:example.org' });
     const checkpoint = await log.checkpoint({ nodes: [] });
     expect(checkpoint.dagHead).toBeNull();
+  });
+
+  // Design doc: "collaborative editing is native rather than added ... two
+  // people editing at once are two streams of events the room merges by
+  // the rules it already has ... no CRDT is needed for the entry model."
+  // Two independent MatrixLog instances, standing in for two users' own
+  // sessions, append into the same room with no coordination between them
+  // — the only "merge" is the room's own event ordering, and each entry
+  // keeps its own sender.
+  it('two concurrent senders append into one room with no merge logic beyond plain ordering', async () => {
+    const sharedRoomState = { timelines: new Map(), nextId: 0 };
+    const aliceClient = makeFakeClient('@alice:example.org', sharedRoomState);
+    const bobClient = makeFakeClient('@bob:example.org', sharedRoomState);
+    const aliceLog = new MatrixLog({ client: aliceClient, roomId: ROOM_ID });
+    const bobLog = new MatrixLog({ client: bobClient, roomId: ROOM_ID });
+
+    await aliceLog.append(entryA);
+    await bobLog.append(entryB);
+
+    // A third reader (any session with room access) sees both, each with
+    // its own sender intact — no reconciliation step ran between them.
+    const readerLog = new MatrixLog({ client: makeFakeClient('@carol:example.org', sharedRoomState), roomId: ROOM_ID });
+    const all = await readerLog.slice(() => true);
+    expect(all).toHaveLength(2);
+    expect(all.map((e) => e.entry.agent)).toEqual(['@alice:example.org', '@bob:example.org']);
+    expect(all.map((e) => e.entry.op)).toEqual(['INS', 'DEF']);
   });
 });

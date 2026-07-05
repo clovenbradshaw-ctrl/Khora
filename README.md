@@ -13,7 +13,7 @@ npm install
 npm test
 ```
 
-204 tests across the whole tree as of this writing. `vitest.config.js` picks up everything under
+217 tests across the whole tree as of this writing. `vitest.config.js` picks up everything under
 `tests/**/*.test.js`.
 
 To check the Matrix substrate against a **real, live homeserver of your choosing** (any Synapse or
@@ -38,7 +38,10 @@ src/substrate/    Part 3 — the Matrix-backed log adapter, room templates, apps
                   provisioning, and the Layer 3 publishability predicate. client.js and
                   real-client-adapter.js wire a real matrix-js-sdk client to any homeserver
                   URL; appservice-client.js does the same over the raw AS HTTP API.
-src/projection/   Part 3 Layer 4 — the CQRS read-model consumer.
+src/projection/   Part 3 Layer 4 — the two materializations. consumer.js is the server-side
+                  CDN projection (publishable entries only, for anonymous readers).
+                  local-projection.js + opfs-store.js is the client-side, OPFS-backed
+                  materialization logged-in editors read from (full room access, unfiltered).
 src/generator/    Part 5 — AppSpec schema, validateAppSpec (the grounder's gate), generate().
 src/surfaces/     Part 4 Tier 1 — Table, Chart, Map, Feed, Form.
 src/surfaces/tier2/  Part 4 Tier 2 — Board, Social feed, CRM, Graph, News site, Calendar,
@@ -78,6 +81,16 @@ Carrying Part 9's distinction forward, applied to this specific codebase rather 
   matrix-js-sdk ones (verified against the installed SDK's actual `MatrixEvent`/`Room`/`EventTimeline`
   prototypes, not guessed). `appservice-client.js` implements `register`/`joinRoom`/`addCredentials`
   over the raw Application Service HTTP API via `fetch`, also homeserver-URL-parameterized.
+- Collaboration is native, not added: `tests/substrate/matrix-log.test.js` runs two independent
+  `MatrixLog` instances (different senders, no coordination between them) appending into one shared
+  room state, and a third reads both back with each entry's own sender intact — the "merge" is
+  nothing but the room's own event ordering, no CRDT needed for the entry-per-event model.
+- The two Layer 4 materializations: `createProjectionConsumer` (the server-side CDN projection,
+  publishable entries only) and `createLocalProjection` + `opfs-store.js` (the client-side
+  materialization a logged-in editor reads from — unfiltered, since a room member already has full
+  access, and stamped with a folded Meant-Graph on every sync). Both tested against real log adapters
+  with real entries, including a test that an entry lacking `grounding` (which the CDN projection
+  drops) still lands in the unfiltered local one.
 
 **Projection sketch — coded against a documented contract, not against the real thing:**
 
@@ -98,6 +111,12 @@ Carrying Part 9's distinction forward, applied to this specific codebase rather 
   seam but doesn't build that session-per-user wiring.
 - `createProjectionConsumer` (Layer 4) materializes a real read model from a real log adapter, but
   `publish()`'s CDN push is a callback stub — there is no CDN in this environment to push to.
+- `createOPFSStore` is a real implementation over `navigator.storage.getDirectory()`, but OPFS is a
+  browser-only API — there's no browser here to run it in, so it's exercised only for the one thing
+  that's true in any environment: that it refuses to run rather than silently no-op-ing when
+  `navigator.storage` doesn't exist. `createLocalProjection`'s actual sync/read logic is tested
+  against `createInMemoryOPFSStore` instead, the same reference-implementation pattern as
+  `InMemoryLog` for the kernel log adapter.
 - The talker (`src/generator/talker.js`) is an interface only. `proposeAppSpec` throws by design;
   wiring an actual in-browser LLM here is explicitly out of scope for this build (Part 7: "first
   with a hardcoded AppSpec, then wired to the talker" — this build stops at the first half).

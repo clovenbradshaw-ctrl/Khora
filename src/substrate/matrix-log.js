@@ -4,6 +4,15 @@
 // does the correspondence between kernel entries and
 // `social.hyphae.eo.entry` events, via event-mapping.js.
 //
+// Collaboration is native here, not added: two people appending
+// concurrently are two senders' events merged by the room's own state
+// resolution, which is exactly the log-primary reconciliation the kernel
+// already assumes (two conflicting DEFs are two entries with different
+// provenance, not one cell holding a contradiction). No CRDT is needed for
+// this entry-per-event model; something like Yjs would only ride on top of
+// a single surface field that wants character-level co-editing, which nothing
+// this class does requires.
+//
 // Client surface this class depends on. It is duck-typed, not
 // matrix-js-sdk — no such package is imported here — but it is shaped to
 // match the real MatrixClient so a production build can inject the genuine
