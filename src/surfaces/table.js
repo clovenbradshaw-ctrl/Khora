@@ -5,7 +5,7 @@
 
 import { validateBinding } from '../kernel/validate.js';
 
-function buildEntry(op, address, target, operand, provenance) {
+function buildEntry(op, address, target, operand, provenance, grounding) {
   return {
     op,
     address,
@@ -16,6 +16,7 @@ function buildEntry(op, address, target, operand, provenance) {
       context: provenance?.context,
     },
     agent: provenance?.agent,
+    grounding: grounding ?? [],
   };
 }
 
@@ -23,13 +24,13 @@ export function createTableSurface({ log }) {
   const cache = { rows: [], pendingDrafts: [] };
 
   async function write(op, payload, provenance) {
-    const { address, target, operand } = payload ?? {};
+    const { address, target, operand, grounding } = payload ?? {};
     const result = validateBinding({ emit: { op, address, target }, provenance });
     if (!result.valid) {
       cache.pendingDrafts.push({ op, address, target, operand, provenance, errors: result.errors });
       return { appended: false, errors: result.errors };
     }
-    const entry = buildEntry(op, address, target, operand, provenance);
+    const entry = buildEntry(op, address, target, operand, provenance, grounding);
     const { id } = await log.append(entry);
     const row = { id, ...entry };
     cache.rows.push(row);
