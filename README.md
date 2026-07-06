@@ -13,8 +13,22 @@ npm install
 npm test
 ```
 
-217 tests across the whole tree as of this writing. `vitest.config.js` picks up everything under
+228 tests across the whole tree as of this writing. `vitest.config.js` picks up everything under
 `tests/**/*.test.js`.
+
+To load `docs/data/public-api-catalog.json` (~34 public data sources) into the substrate as real,
+searchable Table rows — rather than leaving it as a reference file — run:
+
+```
+npm run load:catalog                 # dry run against an in-memory log, prints a summary
+EO_HOMESERVER_URL=https://matrix.example.org \
+EO_USERNAME=alice EO_PASSWORD=hunter2 \
+EO_ROOM_ID='!catalog:example.org' \
+  npm run load:catalog               # actually saves it into that Matrix room
+```
+
+Same homeserver-agnostic wiring as `smoke:matrix` below — it re-runs safely (already-loaded rows are
+skipped by id, not duplicated).
 
 To check the Matrix substrate against a **real, live homeserver of your choosing** (any Synapse or
 other implementation you have an account on — nothing here is pinned to one), run:
@@ -47,6 +61,11 @@ src/surfaces/     Part 4 Tier 1 — Table, Chart, Map, Feed, Form.
 src/surfaces/tier2/  Part 4 Tier 2 — Board, Social feed, CRM, Graph, News site, Calendar,
                      each gated by a feature flag (src/surfaces/tier2/flags.js).
 src/export/       Part 6 — exportSingleFile and exportBundle.
+src/data-sources/ Not part of the design doc's Parts. Turns docs/data/public-api-catalog.json
+                  into real Table rows (ingest.js) and adds the "search your catalog"
+                  matching logic (search.js) from docs/data/mini-site-builder-guide.md —
+                  a separate reference guide for an unrelated "any-data mini-site builder"
+                  feature, saved alongside its seed catalog under docs/data/.
 ```
 
 Every module follows the same shape: pure, framework-free logic that's fully testable under plain
@@ -91,6 +110,11 @@ Carrying Part 9's distinction forward, applied to this specific codebase rather 
   access, and stamped with a folded Meant-Graph on every sync). Both tested against real log adapters
   with real entries, including a test that an entry lacking `grounding` (which the CDN projection
   drops) still lands in the unfiltered local one.
+- `src/data-sources/ingest.js` + `search.js`: the data-source catalog is loaded and searched against
+  the real `docs/data/public-api-catalog.json` file in tests, not a fabricated fixture — every one of
+  its ~34 entries lands as a Table row with a legal, non-desert, grounded address, re-running the
+  loader skips already-present ids instead of duplicating, and `catalogFilter('weather')` is checked
+  to actually narrow to the right two rows out of the full set.
 
 **Projection sketch — coded against a documented contract, not against the real thing:**
 
@@ -133,6 +157,11 @@ Carrying Part 9's distinction forward, applied to this specific codebase rather 
   has to be proven under lighter surfaces first"), and `validateAppSpec` rejects an AppSpec naming
   it as an unknown surface type, same as a typo. `NewsSite`'s "reader per piece" uses a minimal
   single-document stand-in instead, noted inline where it's built.
+- Everything in `docs/data/mini-site-builder-guide.md` except the catalog-search piece: `classify()`,
+  `normalize()`, the three-lane fetch model, SSRF-hardened fetching, and the intake wizard are all
+  reference-only. Only the guide's "search your catalog" intake path got built (`src/data-sources/`),
+  because it's what the catalog is actually for; the rest describes a different, unimplemented
+  feature that happens to be documented in this repo.
 
 ## Build order followed
 
