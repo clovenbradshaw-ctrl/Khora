@@ -6,8 +6,8 @@
       "auth_tier": "matches the three-lane fetch model: none | instant_key | oauth",
       "shape": "matches the normalize() output shape: single | table | geo | series | feed"
     },
-    "last_verified": "2026-07-05",
-    "caution": "Auth tiers and rate limits drift. Three entries below already changed within the last two months of research for this file (rest-countries, balldontlie, courtlistener) — spot-check anything here against its live docs before shipping, don't treat this file as permanently accurate."
+    "last_verified": "2026-07-06",
+    "caution": "Auth tiers and rate limits drift. Three entries below already changed within the last two months of research for this file (rest-countries, balldontlie, courtlistener) — spot-check anything here against its live docs before shipping, don't treat this file as permanently accurate. Note: as of 2026-07-06 there is no 'balldontlie' entry in this file's sources array despite this caution naming it as one of the three changed entries — that's a pre-existing inconsistency in the source data, not fixed here since the intended entry's content is unknown. Also as of 2026-07-06: the 'census' entry's key requirement was corrected (now required on every query, not just for heavy use), and tigerweb-tracts-blocks, census-geocoder, cdc-svi, and epa-ejscreen were added for tract-level ACS/SVI/EJScreen work — epa-ejscreen in particular is the least stable entry in this file, see its own notes."
   },
   "sources": [
     {
@@ -239,7 +239,51 @@
       "auth_tier": "instant_key",
       "base_url": "https://api.census.gov/data/2023/acs/acs5",
       "key_url": "https://api.census.gov/data/key_signup.html",
-      "notes": "Light testing often works keyless; a free key is expected for anything sustained."
+      "notes": "Correction: a key is now required on every query per current API docs, not just for heavy use — get one, it's instant. Tract and block-group detail only exists in the 5-year ACS files (this base_url, acs5); the 1-year files only cover geographies above ~20,000 people, well short of a tract (~4,000). To pull every tract in the country in one request, use the `ucgid` predicate for a whole collection of geographies instead of looping over all 50 state FIPS codes."
+    },
+    {
+      "id": "tigerweb-tracts-blocks",
+      "name": "Census TIGERweb (Tracts_Blocks map service)",
+      "category": "civic-geo",
+      "source_kind": "arcgis",
+      "shape": "geo",
+      "auth_tier": "none",
+      "base_url": "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/Tracts_Blocks/MapServer",
+      "key_url": null,
+      "notes": "The geometry half of the ACS pair: ACS gives numbers per tract GEOID, TIGERweb gives the polygon to draw it. No auth, a live ArcGIS REST MapServer with dedicated tract/block-group/block layers (e.g. layer 2 for blocks, with TRACT/BLKGRP/BLOCK/GEOID fields). Query a layer like any ArcGIS FeatureServer: /2/query?where=1=1&outFields=*&f=geojson."
+    },
+    {
+      "id": "census-geocoder",
+      "name": "Census Geocoder",
+      "category": "reference",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "none",
+      "base_url": "https://geocoding.geo.census.gov/geocoder/geographies/onelineaddress",
+      "key_url": null,
+      "notes": "Address-to-tract lookup, no key. Turns a street address (an eviction filing, a permit) into a tract/block/county GEOID you can join against ACS or TIGERweb. Needs &benchmark= and &vintage= query params alongside &address=; returntype=geographies plus searchtype=onelineaddress is this exact base_url."
+    },
+    {
+      "id": "cdc-svi",
+      "name": "CDC/ATSDR Social Vulnerability Index",
+      "category": "life-sciences",
+      "source_kind": "arcgis",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://onemap.cdc.gov/onemapservices/rest/services/SVI/CDC_ATSDR_Social_Vulnerability_Index_2022_USA/FeatureServer",
+      "key_url": null,
+      "notes": "A composite score built from 16 ACS variables at tract level, across four themes (socioeconomic status, household composition/disability, minority status/language, housing type/transportation). ArcGIS-hosted directly on CDC's own OneMap server, no auth. This is the 2022 vintage (layer 8 is the US tract-level layer); check onemap.cdc.gov/OneMapServices/rest/services/SVI for newer years before assuming this stays current."
+    },
+    {
+      "id": "epa-ejscreen",
+      "name": "EPA EJScreen (community-maintained mirror)",
+      "category": "life-sciences",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://dataverse.harvard.edu/api/datasets/:persistentId/?persistentId=doi:10.7910/DVN/RLR5AX",
+      "key_url": null,
+      "notes": "EPA removed EJScreen from epa.gov in February 2025 while winding down its environmental-justice programs. A volunteer coalition, Public Environmental Data Partners, rebuilt the last version at screening-tools.com/epa-ejscreen — but as of this writing that site is a browsable UI, not yet a documented live API ('coming soon' per its own page). The base_url above is the actual queryable path today: Harvard Dataverse's REST API for the archived dataset, which returns JSON metadata plus a list of downloadable geodatabase/zip files (env-burden indicators per tract/block-group), not a live per-query lookup. This is the least stable entry in this file — re-check both links before building against it."
     },
     {
       "id": "gdelt",
