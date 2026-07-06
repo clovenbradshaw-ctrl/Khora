@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>EO Substrate — App Builder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; margin: 0; display: grid; grid-template-columns: 380px 1fr; min-height: 100vh; }
+  h1 { font-size: 1.1rem; margin: 0 0 1rem; }
+  h2 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; margin: 1.5rem 0 0.5rem; }
+  h3 { font-size: 0.95rem; margin: 0 0 0.5rem; }
+  #panel { padding: 1rem; border-right: 1px solid #8884; overflow-y: auto; }
+  #main { padding: 1rem; overflow-y: auto; }
+  fieldset { border: 1px solid #8884; border-radius: 6px; padding: 0.75rem; margin: 0 0 0.75rem; }
+  label { display: block; font-size: 0.8rem; margin: 0.4rem 0 0.15rem; }
+  input, select, textarea { width: 100%; box-sizing: border-box; padding: 0.3rem; font: inherit; }
+  button { padding: 0.4rem 0.8rem; font: inherit; cursor: pointer; margin-top: 0.5rem; }
+  ul.list { list-style: none; padding: 0; margin: 0.5rem 0; }
+  ul.list li { display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0.4rem; border: 1px solid #8884; border-radius: 4px; margin-bottom: 0.25rem; font-size: 0.85rem; }
+  ul.list li button { margin: 0; padding: 0.1rem 0.5rem; }
+  pre#spec-json { background: #8881; padding: 0.75rem; border-radius: 6px; max-height: 240px; overflow: auto; font-size: 0.8rem; }
+  .errors { color: #c0392b; font-size: 0.85rem; }
+  .ok { color: #27ae60; font-size: 0.85rem; }
+  .eo-preview-surface { border: 1px solid #8884; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem; }
+  .eo-preview-table { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
+  .eo-preview-table th, .eo-preview-table td { border: 1px solid #8884; padding: 0.3rem 0.5rem; text-align: left; font-size: 0.85rem; }
+  .eo-preview-form input { width: auto; display: inline-block; margin-right: 0.4rem; }
+  .eo-preview-status { font-size: 0.8rem; opacity: 0.8; margin-top: 0.3rem; }
+  .eo-preview-unsupported { opacity: 0.6; font-style: italic; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>EO Substrate — App Builder</h1>
+  <p style="font-size:0.8rem;opacity:0.75">
+    Build an AppSpec by hand — the same gate the talker will one day feed
+    (see <code>src/generator/talker.js</code>). Nothing here bypasses
+    <code>validateAppSpec</code>.
+  </p>
+
+  <h2>1. Site</h2>
+  <fieldset>
+    <label>Room / space id</label>
+    <input id="site-room" placeholder="space:my-app">
+    <label>Visibility</label>
+    <select id="site-visibility">
+      <option value="private">private</option>
+      <option value="public">public</option>
+    </select>
+    <label>Power template</label>
+    <input id="site-power-template" placeholder="contributor-write">
+    <button id="site-save">Save site</button>
+  </fieldset>
+
+  <h2>2. Surfaces</h2>
+  <fieldset>
+    <label>Type</label>
+    <select id="surface-type"></select>
+    <label>Room</label>
+    <input id="surface-room" placeholder="room:my-app-data">
+    <label>Class</label>
+    <input id="surface-class" placeholder="MyRecord">
+    <div id="surface-extra"></div>
+    <button id="surface-add">Add surface</button>
+  </fieldset>
+  <ul class="list" id="surface-list"></ul>
+
+  <h2>3. Bindings</h2>
+  <fieldset>
+    <label>Fires on (UI event name)</label>
+    <input id="binding-on" placeholder="table:addRow">
+    <label>Operator</label>
+    <select id="binding-op"></select>
+    <label>Address — mode, domain, object (0-2 each)</label>
+    <div style="display:flex;gap:0.4rem">
+      <input id="binding-mode" type="number" min="0" max="2" value="2">
+      <input id="binding-domain" type="number" min="0" max="2" value="0">
+      <input id="binding-object" type="number" min="0" max="2" value="1">
+    </div>
+    <label>Target (string, or JS payload -> string expression)</label>
+    <input id="binding-target" placeholder="record:1  (or)  payload => `record:${payload.id}`">
+    <label>Mode of givenness</label>
+    <input id="binding-mog" placeholder="direct-entry">
+    <label>Context</label>
+    <input id="binding-context" placeholder="my-app-table">
+    <button id="binding-add">Add binding</button>
+  </fieldset>
+  <ul class="list" id="binding-list"></ul>
+
+  <h2>4. Build</h2>
+  <button id="build-app">Validate &amp; build app</button>
+  <div id="build-status"></div>
+  <pre id="spec-json"></pre>
+</div>
+
+<div id="main">
+  <h2>Live preview</h2>
+  <p style="font-size:0.85rem;opacity:0.75">
+    Table and Form surfaces render live here, wired through the real
+    <code>generate()</code> bindings against an in-memory log — add a row or
+    submit the form and watch it actually append.
+  </p>
+  <div id="preview-root"></div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

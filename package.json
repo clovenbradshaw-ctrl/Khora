@@ -8,7 +8,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke:matrix": "node scripts/smoke-test-matrix.mjs",
-    "load:catalog": "node scripts/load-data-source-catalog.mjs"
+    "load:catalog": "node scripts/load-data-source-catalog.mjs",
+    "builder": "node scripts/serve-builder.mjs"
   },
   "devDependencies": {
     "vitest": "^2.1.9"
