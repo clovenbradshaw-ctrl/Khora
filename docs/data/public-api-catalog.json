@@ -1,0 +1,388 @@
+{
+  "_meta": {
+    "purpose": "Seed catalog for the 'search your catalog' intake path in the mini-site builder guide. Load this array, let users search by name/category, and hand the matched entry straight to classify()/the three-lane fetch model.",
+    "schema": {
+      "source_kind": "matches the classify() adapter types: arcgis | socrata | ckan | json | geojson | feed",
+      "auth_tier": "matches the three-lane fetch model: none | instant_key | oauth",
+      "shape": "matches the normalize() output shape: single | table | geo | series | feed"
+    },
+    "last_verified": "2026-07-05",
+    "caution": "Auth tiers and rate limits drift. Three entries below already changed within the last two months of research for this file (rest-countries, balldontlie, courtlistener) — spot-check anything here against its live docs before shipping, don't treat this file as permanently accurate."
+  },
+  "sources": [
+    {
+      "id": "nasa-open-apis",
+      "name": "NASA Open APIs (APOD, NeoWs, DONKI, Mars Rover Photos)",
+      "category": "space",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "instant_key",
+      "base_url": "https://api.nasa.gov/planetary/apod",
+      "key_url": "https://api.nasa.gov/#signUp",
+      "notes": "DEMO_KEY works immediately at 30 req/hr and 50/day per IP; a free key removes that ceiling."
+    },
+    {
+      "id": "usgs-earthquakes",
+      "name": "USGS Earthquake Feed",
+      "category": "earth",
+      "source_kind": "geojson",
+      "shape": "geo",
+      "auth_tier": "none",
+      "base_url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson",
+      "key_url": null,
+      "notes": "Real-time GeoJSON. Swap 'all_day' for other rolling windows and magnitude cuts at the same path."
+    },
+    {
+      "id": "nws-weather",
+      "name": "National Weather Service (api.weather.gov)",
+      "category": "earth",
+      "source_kind": "json",
+      "shape": "series",
+      "auth_tier": "none",
+      "base_url": "https://api.weather.gov/points/{lat},{lon}",
+      "key_url": null,
+      "notes": "No key — send an identifying User-Agent header instead. US coverage only."
+    },
+    {
+      "id": "open-meteo",
+      "name": "Open-Meteo",
+      "category": "earth",
+      "source_kind": "json",
+      "shape": "series",
+      "auth_tier": "none",
+      "base_url": "https://api.open-meteo.com/v1/forecast",
+      "key_url": null,
+      "notes": "Built specifically so weather data never needs a signup; free for non-commercial use."
+    },
+    {
+      "id": "gbif",
+      "name": "GBIF Species Occurrences",
+      "category": "life-sciences",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://api.gbif.org/v1/occurrence/search",
+      "key_url": null,
+      "notes": "Hundreds of millions of biodiversity occurrence records, free and open."
+    },
+    {
+      "id": "inaturalist",
+      "name": "iNaturalist Observations",
+      "category": "life-sciences",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://api.inaturalist.org/v1/observations",
+      "key_url": null,
+      "notes": "Citizen-science species observations; read endpoints are open."
+    },
+    {
+      "id": "open-food-facts",
+      "name": "Open Food Facts",
+      "category": "life-sciences",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "none",
+      "base_url": "https://world.openfoodfacts.org/api/v2/product/{barcode}.json",
+      "key_url": null,
+      "notes": "Crowdsourced barcode/nutrition database. Explicitly no key, no hard limit."
+    },
+    {
+      "id": "wikidata-sparql",
+      "name": "Wikidata SPARQL Endpoint",
+      "category": "culture",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://query.wikidata.org/sparql",
+      "key_url": null,
+      "notes": "A queryable graph of almost everything. Steepest learning curve on this list (SPARQL), highest ceiling."
+    },
+    {
+      "id": "wikipedia-rest",
+      "name": "Wikipedia / Wikimedia REST API",
+      "category": "culture",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "none",
+      "base_url": "https://en.wikipedia.org/api/rest_v1/page/summary/{title}",
+      "key_url": null,
+      "notes": "Summaries, page media, search — no key."
+    },
+    {
+      "id": "open-library",
+      "name": "Open Library",
+      "category": "culture",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://openlibrary.org/search.json",
+      "key_url": null,
+      "notes": "Book metadata and cover art, an Internet Archive project."
+    },
+    {
+      "id": "met-museum",
+      "name": "Metropolitan Museum of Art Open Access",
+      "category": "culture",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://collectionapi.metmuseum.org/public/collection/v1/objects",
+      "key_url": null,
+      "notes": "470,000+ artworks, public-domain images included where rights allow."
+    },
+    {
+      "id": "internet-archive",
+      "name": "Internet Archive Advanced Search",
+      "category": "culture",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://archive.org/advancedsearch.php",
+      "key_url": null,
+      "notes": "Also worth calling on every scheduled fetch elsewhere in the app for provenance snapshots, not just as its own source."
+    },
+    {
+      "id": "sec-edgar",
+      "name": "SEC EDGAR Full-Text & Filings",
+      "category": "finance",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://data.sec.gov/submissions/CIK{10-digit-cik}.json",
+      "key_url": null,
+      "notes": "No key, but the SEC requires a descriptive User-Agent identifying you and your contact info, or you'll get blocked."
+    },
+    {
+      "id": "fred",
+      "name": "FRED (Federal Reserve Economic Data)",
+      "category": "finance",
+      "source_kind": "json",
+      "shape": "series",
+      "auth_tier": "instant_key",
+      "base_url": "https://api.stlouisfed.org/fred/series/observations",
+      "key_url": "https://fred.stlouisfed.org/docs/api/api_key.html",
+      "notes": "Every major US economic time series. Instant free key, generous limits."
+    },
+    {
+      "id": "world-bank",
+      "name": "World Bank Indicators API",
+      "category": "finance",
+      "source_kind": "json",
+      "shape": "series",
+      "auth_tier": "none",
+      "base_url": "https://api.worldbank.org/v2/country/all/indicator/{code}?format=json",
+      "key_url": null,
+      "notes": "Global development and economic indicators, no key."
+    },
+    {
+      "id": "usaspending",
+      "name": "USAspending.gov",
+      "category": "finance",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://api.usaspending.gov/api/v2/search/spending_by_award/",
+      "key_url": null,
+      "notes": "Federal contracts, grants, and loans. No key, POST-based search."
+    },
+    {
+      "id": "opencorporates",
+      "name": "OpenCorporates",
+      "category": "finance",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "instant_key",
+      "base_url": "https://api.opencorporates.com/v0.4/companies/search",
+      "key_url": "https://opencorporates.com/api_accounts/new",
+      "notes": "The shell-company layer. Free tier is rate-limited and excludes some jurisdictions and fields."
+    },
+    {
+      "id": "courtlistener",
+      "name": "CourtListener / RECAP",
+      "category": "legal",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "instant_key",
+      "base_url": "https://www.courtlistener.com/api/rest/v4/search/",
+      "key_url": "https://www.courtlistener.com/api/",
+      "notes": "Free-account default dropped sharply on 2026-05-07 to roughly 5 req/min, 50/hr, 125/day (rolling window). Ignore older tutorials citing a 5,000/hr default — that's gone. Academic/EDU accounts get more."
+    },
+    {
+      "id": "fec-openfec",
+      "name": "OpenFEC (Federal Election Commission)",
+      "category": "legal",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "instant_key",
+      "base_url": "https://api.open.fec.gov/v1/candidates/",
+      "key_url": "https://api.data.gov/signup/",
+      "notes": "DEMO_KEY works immediately for light testing; register for anything sustained."
+    },
+    {
+      "id": "congress-gov",
+      "name": "Congress.gov API",
+      "category": "legal",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "instant_key",
+      "base_url": "https://api.congress.gov/v3/bill",
+      "key_url": "https://api.congress.gov/sign-up/",
+      "notes": "Bills, members, votes. Instant free key."
+    },
+    {
+      "id": "census",
+      "name": "US Census Bureau API",
+      "category": "legal",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "instant_key",
+      "base_url": "https://api.census.gov/data/2023/acs/acs5",
+      "key_url": "https://api.census.gov/data/key_signup.html",
+      "notes": "Light testing often works keyless; a free key is expected for anything sustained."
+    },
+    {
+      "id": "gdelt",
+      "name": "GDELT DOC 2.0 API",
+      "category": "news",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://api.gdeltproject.org/api/v2/doc/doc",
+      "key_url": null,
+      "notes": "Global news coded into structured events from worldwide coverage. Free, no key, rolling ~3-month full-text window."
+    },
+    {
+      "id": "generic-arcgis",
+      "name": "Generic ArcGIS REST Feature/MapServer layer",
+      "category": "civic-geo",
+      "source_kind": "arcgis",
+      "shape": "geo",
+      "auth_tier": "none",
+      "base_url": "https://{host}/arcgis/rest/services/{service}/FeatureServer/{layer}/query?where=1=1&outFields=*&f=geojson",
+      "key_url": null,
+      "notes": "A pattern, not one dataset — nearly every US city/county GIS office runs this stack (e.g. maps.nashville.gov). Hit the root with ?f=json first to enumerate what a given host offers."
+    },
+    {
+      "id": "generic-socrata",
+      "name": "Generic Socrata city/state portal",
+      "category": "civic-geo",
+      "source_kind": "socrata",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://{portal-domain}/resource/{dataset_id}.json",
+      "key_url": null,
+      "notes": "Pattern — e.g. data.nashville.gov, data.cityofchicago.org. The Discovery API can enumerate a whole portal's datasets before you pick one."
+    },
+    {
+      "id": "data-gov-ckan",
+      "name": "data.gov (CKAN Action API)",
+      "category": "civic-geo",
+      "source_kind": "ckan",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://catalog.data.gov/api/3/action/package_search",
+      "key_url": null,
+      "notes": "Federal plus a large share of state/local open-data catalogs run CKAN underneath this same action API."
+    },
+    {
+      "id": "zippopotam",
+      "name": "Zippopotam.us",
+      "category": "reference",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "none",
+      "base_url": "https://api.zippopotam.us/us/{zip}",
+      "key_url": null,
+      "notes": "Postal code to place lookup. Dead simple, no key."
+    },
+    {
+      "id": "nominatim",
+      "name": "OSM Nominatim Geocoding",
+      "category": "reference",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "none",
+      "base_url": "https://nominatim.openstreetmap.org/search?format=json&q={query}",
+      "key_url": null,
+      "notes": "No key, but requires an identifying User-Agent and is capped around 1 req/sec. Fine for a mini-site, not for bulk geocoding."
+    },
+    {
+      "id": "rest-countries",
+      "name": "REST Countries",
+      "category": "reference",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "instant_key",
+      "base_url": "https://api.restcountries.com/countries/v5/names.common/{country}",
+      "key_url": "https://restcountries.com/docs",
+      "notes": "Changed recently: the old keyless v3.1 is deprecated and returns errors. v5 requires a free key (500 req/mo, no card). Update any bookmarked v3.1 snippets."
+    },
+    {
+      "id": "dictionary-api",
+      "name": "Free Dictionary API",
+      "category": "language",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "none",
+      "base_url": "https://api.dictionaryapi.dev/api/v2/entries/en/{word}",
+      "key_url": null,
+      "notes": "Definitions, phonetics, audio links. No key."
+    },
+    {
+      "id": "datamuse",
+      "name": "Datamuse",
+      "category": "language",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://api.datamuse.com/words?rel_rhy={word}",
+      "key_url": null,
+      "notes": "Word-relationship queries: rhymes, means-like, sounds-like. No key."
+    },
+    {
+      "id": "open-trivia-db",
+      "name": "Open Trivia Database",
+      "category": "misc",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://opentdb.com/api.php?amount=10",
+      "key_url": null,
+      "notes": "Good stand-in dataset for testing the table-shape template end to end."
+    },
+    {
+      "id": "deck-of-cards",
+      "name": "Deck of Cards API",
+      "category": "misc",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "none",
+      "base_url": "https://deckofcardsapi.com/api/deck/new/shuffle/",
+      "key_url": null,
+      "notes": "Stateful-feeling but stateless underneath. Useful minimal test case for the 'single' shape."
+    },
+    {
+      "id": "jsonplaceholder",
+      "name": "JSONPlaceholder",
+      "category": "misc",
+      "source_kind": "json",
+      "shape": "table",
+      "auth_tier": "none",
+      "base_url": "https://jsonplaceholder.typicode.com/posts",
+      "key_url": null,
+      "notes": "Fake but stable REST data. Good for testing the ingestion pipeline before pointing it at anything real."
+    },
+    {
+      "id": "advice-slip",
+      "name": "Advice Slip API",
+      "category": "misc",
+      "source_kind": "json",
+      "shape": "single",
+      "auth_tier": "none",
+      "base_url": "https://api.adviceslip.com/advice",
+      "key_url": null,
+      "notes": "Tiny single-value payload. Good minimal test case for the 'single' shape template."
+    }
+  ]
+}
