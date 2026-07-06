@@ -1,8 +1,9 @@
 // App Builder bootstrap. No bundler, no framework: plain ES modules loaded
 // straight from the repo's own src/, same "no build" approach the rest of
-// this project uses (see README's Layout section). Open this page through a
-// static file server (e.g. `npx serve .` from the repo root) — the browser's
-// module loader needs http(s), not file://, to resolve these imports.
+// this project uses (see README's Layout section). Open this page (index.html
+// at the repo root) through a static file server (`npm run builder`) — the
+// browser's module loader needs http(s), not file://, to resolve these
+// imports.
 
 import {
   createBuilderState,
@@ -14,12 +15,12 @@ import {
   validateBuilderState,
   surfaceFieldRequirements,
   KNOWN_SURFACE_TYPES,
-} from '../../src/builder/appspec-builder.js';
-import { OPERATOR_CODES } from '../../src/kernel/operators.js';
-import { InMemoryLog } from '../../src/kernel/log.js';
-import { generate } from '../../src/generator/generate.js';
-import { instantiateSurfaces } from '../../src/builder/instantiate.js';
-import { mountPreview } from '../../src/builder/preview.js';
+} from './src/builder/appspec-builder.js';
+import { OPERATOR_CODES } from './src/kernel/operators.js';
+import { InMemoryLog } from './src/kernel/log.js';
+import { generate } from './src/generator/generate.js';
+import { instantiateSurfaces } from './src/builder/instantiate.js';
+import { mountPreview } from './src/builder/preview.js';
 
 let state = createBuilderState();
 

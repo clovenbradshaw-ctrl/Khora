@@ -72,13 +72,14 @@ src/builder/      A visual, human-driven stand-in for the talker (src/generator/
                   validateAppSpec every other spec goes through. instantiate.js turns a
                   generate() result into real Tier 1 surface instances. preview.js is a
                   real (not stubbed) DOM mount for Table and Form, so the browser page at
-                  public/builder/ lets someone assemble an AppSpec by hand and immediately
-                  drive a working add-row / form-submit loop against an in-memory log.
+                  the repo root (index.html) lets someone assemble an AppSpec by hand and
+                  immediately drive a working add-row / form-submit loop against an
+                  in-memory log.
 ```
 
 ## App Builder
 
-`public/builder/index.html` + `app.js` is a plain-ES-module page (no bundler, no framework —
+`index.html` + `app.js`, at the repo root, is a plain-ES-module page (no bundler, no framework —
 same "no build" approach as the rest of this repo) for assembling an AppSpec through a UI:
 add a site, add surfaces, add bindings, then "Validate & build app" runs the exact
 `validateAppSpec` / `generate()` gate every other AppSpec goes through. Table and Form
@@ -92,7 +93,7 @@ Since ES module imports need http(s), not `file://`, serve the repo root first:
 npm run builder
 ```
 
-then open `http://localhost:8420/public/builder/`.
+then open `http://localhost:8420/`.
 
 Every module follows the same shape: pure, framework-free logic that's fully testable under plain
 Node, plus (for surfaces) a documented but unexercised browser-render stub, since this environment

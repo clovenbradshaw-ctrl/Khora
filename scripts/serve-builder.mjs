@@ -1,6 +1,6 @@
 // Serves the repo root over plain HTTP so the App Builder's ES module
-// imports (public/builder/app.js -> ../../src/...) resolve — browsers won't
-// run cross-file module imports over file://. No new dependency: Node's
+// imports (index.html's app.js -> ./src/...) resolve — browsers won't run
+// cross-file module imports over file://. No new dependency: Node's
 // built-in http/fs cover a page-view static server; this is not a production
 // server and binds to localhost only.
 
@@ -23,7 +23,7 @@ const CONTENT_TYPES = {
 const server = http.createServer(async (req, res) => {
   try {
     const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
-    let filePath = path.join(ROOT, urlPath === '/' ? '/public/builder/index.html' : urlPath);
+    let filePath = path.join(ROOT, urlPath === '/' ? '/index.html' : urlPath);
     if (!filePath.startsWith(ROOT)) {
       res.writeHead(403).end('forbidden');
       return;
@@ -40,5 +40,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`App Builder: http://localhost:${PORT}/public/builder/`);
+  console.log(`App Builder: http://localhost:${PORT}/`);
 });
