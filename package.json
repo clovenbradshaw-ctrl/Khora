@@ -1,16 +1,19 @@
 {
-  "name": "khora",
-  "version": "1.0.0",
+  "name": "eo-substrate",
+  "version": "0.1.0",
+  "description": "EO Substrate: a kernel + Matrix-backed log + generated surfaces for building EO-addressed applications.",
+  "type": "module",
   "private": true,
-  "description": "Khora — Sovereign Case Management",
   "scripts": {
-    "build": "node build.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke:matrix": "node scripts/smoke-test-matrix.mjs"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.0",
-    "@babel/preset-react": "^7.26.0",
-    "vitest": "^4.0.18"
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "matrix-js-sdk": "^41.9.0-rc.0"
   }
 }

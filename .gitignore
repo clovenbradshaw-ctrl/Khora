@@ -1,15 +1,4 @@
 node_modules/
-
-# Security-sensitive files
-.env
-.env.*
-*.key
-*.pem
-*.p12
-*.pfx
-credentials.json
-khora-credentials.txt
-
-# OS artifacts
+dist/
+*.log
 .DS_Store
-Thumbs.db
